@@ -64,7 +64,9 @@ class ReadAloud(ctx: Context, private val onState: (playing: Boolean, index: Int
 
     fun nextRate(): Float {
         val rates = floatArrayOf(1.0f, 1.25f, 1.5f, 0.8f)
-        rate = rates[(rates.indexOf(rate) + 1) % rates.size]
+        var i = 0
+        while (i < rates.size && rates[i] != rate) i++
+        rate = rates[(i + 1) % rates.size]
         if (playing) { tts?.stop(); speakFrom(index) }
         return rate
     }
