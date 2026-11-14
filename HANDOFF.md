@@ -1,4 +1,4 @@
-# Ronin Browser 3 — HANDOFF 8 (14 Nov 2026, 3.8.0 published; 3.9.0 built, waiting for approval)
+# Ronin Browser 3 — HANDOFF 8 (14 Nov 2026, 3.9.0 published; 3.10.0 built + CI green, waiting for approval)
 
 Owner: Vishwas (Hindi; both hands injured: fewest taps/typing). Not a coder: explain in Hindi, technical words in English.
 Current version: **3.8.0** published (Windows + Android). Rollback: 3.7.1 / 3.7.0 / 3.6.1 releases on GitHub; Windows
@@ -97,6 +97,18 @@ Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + tes
 - Tests: tools/uitest/merge.js (fixtures in tools/uitest/fixtures, made-up), pdftools.js (fixtures from
   make_tool_fixtures.py), DeviceTest merge + tools self-test.
 - Owner's real Prerna file checked locally only (never committed): fake UDISE with 6 planted changes -> all 6 found.
+
+## 3.10.0 (built, CI green 43605132002, NOT published)
+- Safe Social: launcher ui/tools/social.html + social.js (apps chosen in PIN-locked settings, safety card);
+  page script ui/inject_social.js (Sponsored ads hidden, optional Reels/Shorts hide, link guard with NO open-anyway:
+  Telegram, WhatsApp group invites, UPI apps, .apk, short links, adult, money-word sites; orange scam marks;
+  blue rumour marks + "सच्चाई जाँचें" Google fact-check; #ronin-fact chip on Google search; ← ⊞ ✕ corner buttons).
+  Windows social_windows.go (tab isSocial, barH=0, YouTube-Restrict header); Android openSocial/socialScreen
+  (bars hidden, intent links stay in the tab, PREF f2=8000000). Data route ronin.data/social?do=open|home|close|cfg.
+- Android home-screen search widget: SearchWidget.kt (AppWidgetProvider + SearchActivity, hi-IN voice,
+  Omnibox.resolve -> MainActivity), Menu "Search widget home screen पर लगाएँ" (requestPinAppWidget).
+- Tests: tools/uitest/social.js, DeviceTest safeSocialOpensFullScreenAndCloses.
+- Review prompt for another AI given to owner (Ronin_review_prompt.txt); his answers will come back as suggestions.
 
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only
