@@ -393,11 +393,23 @@ class DeviceTest {
     }
 
     @Test
+    fun simNameIsKeptForRecentAndThreatTipShown() {
+        // CNAP: the network's KYC name of an unknown caller is kept for Recent (the fake "Daroga ji" case)
+        CallInfo.keepCnap(app, "+91 98765 43210", "RAMESH KUMAR")
+        assertEquals("RAMESH KUMAR", CallInfo.cnapOf(app, "9876543210"))
+        assertTrue(CallInfo.threatTip().contains("Digital arrest") || CallInfo.threatTip().contains("digital arrest", ignoreCase = true))
+    }
+
+    @Test
     fun roninCallsKeypadOpens() {
         if (!Parts.hasPhone(app)) return
         Parts.set(app, Parts.CALLS, true)
         ActivityScenario.launch(CallsActivity::class.java).use { sc ->
             assertTrue("calls keypad did not load", waitFor(20) { evalPage(sc, "document.querySelectorAll('.pad button').length") == "12" })
+            // Block / Delete ask "are you sure?": the page's questions must reach the screen (3.11 fix)
+            var chrome = false
+            sc.onActivity { a -> chrome = a.webForTest().webChromeClient != null }
+            assertTrue("phone pages cannot ask questions (no WebChromeClient)", chrome)
             evalPage(sc, "document.querySelector('[data-key=\"1\"]').click(),1")
             shot("17-ronin-calls")
         }

@@ -63,6 +63,22 @@ object CallInfo {
 
     fun prefs(ctx: Context) = ctx.getSharedPreferences("ronin_phone", Context.MODE_PRIVATE)
 
+    /** CNAP (DoT, from 1 Nov 2026 on 4G/5G): the caller's KYC name from the SIM, sent by the network. */
+    fun cnap(c: Call?): String {
+        val d = c?.details ?: return ""
+        val n = d.callerDisplayName?.toString()?.trim() ?: ""
+        return if (n.isNotEmpty() && d.callerDisplayNamePresentation == TelecomManager.PRESENTATION_ALLOWED) n.take(60) else ""
+    }
+    fun keepCnap(ctx: Context, number: String, name: String) {
+        val k = digits(number).takeLast(10)
+        if (k.length >= 6 && name.isNotEmpty()) prefs(ctx).edit().putString("cnap_$k", name).apply()
+    }
+    fun cnapOf(ctx: Context, number: String): String = prefs(ctx).getString("cnap_" + digits(number).takeLast(10), "") ?: ""
+
+    /** Under an unknown caller's warning: the "police / digital arrest" threat calls. */
+    fun threatTip() = L("पुलिस / CBI / बैंक कभी फ़ोन या WhatsApp पर धमकाकर पैसे या OTP नहीं माँगते। \"Digital arrest\" नकली है: डराएँ तो call काटें।",
+        "Police / CBI / banks never threaten you on a phone or WhatsApp call for money or an OTP. \"Digital arrest\" is fake: if they frighten you, cut the call.")
+
     fun recent(ctx: Context): JSONArray {
         val out = JSONArray()
         if (ctx.checkSelfPermission(Manifest.permission.READ_CALL_LOG) != android.content.pm.PackageManager.PERMISSION_GRANTED) return out
@@ -72,8 +88,9 @@ object CallInfo {
                 while (c.moveToNext()) {
                     val num = c.getString(0) ?: ""
                     val name = c.getString(1) ?: SmsStore.contactName(ctx, num) ?: ""
+                    val sim = if (name.isEmpty()) cnapOf(ctx, num) else ""
                     out.put(JSONObject().put("number", num).put("name", name).put("date", c.getLong(2)).put("type", c.getInt(3)).put("dur", c.getLong(4))
-                        .put("label", if (name.isEmpty()) label(ctx, num) else ""))
+                        .put("label", if (name.isEmpty()) (if (sim.isNotEmpty()) L("📛 SIM पर नाम: ", "📛 Name on the SIM: ") + sim + " · " else "") + label(ctx, num) else ""))
                 }
             }
         } catch (e: Exception) { }
@@ -177,6 +194,8 @@ class RoninInCallService : InCallService() {
         CallHub.calls.add(call)
         call.registerCallback(CallHub.cb)
         CallInfo.markEmergency(this, CallHub.number(call))
+        CallInfo.keepCnap(this, CallHub.number(call), CallInfo.cnap(call))
+        CallHub.incoming[call] = CallHub.ringing(call)
         if (CallHub.ringing(call)) CallHub.ringNotice(this, call)
         startActivity(Intent(this, InCallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         CallHub.changed()
@@ -184,6 +203,7 @@ class RoninInCallService : InCallService() {
     override fun onCallRemoved(call: Call) {
         call.unregisterCallback(CallHub.cb)
         CallHub.calls.remove(call)
+        if (CallHub.incoming.remove(call) == true) CallHub.afterUnknown(this, CallHub.number(call))
         if (CallHub.calls.none { it.state == Call.STATE_ACTIVE || it.state == Call.STATE_HOLDING }) RecordService.stop(this)
         getSystemService(NotificationManager::class.java).cancel(CallHub.NOTE)
         if (CallHub.calls.isEmpty()) getSystemService(NotificationManager::class.java).cancel(CallHub.NOTE + 1)
@@ -197,6 +217,26 @@ object CallHub {
     const val NOTE = 7101
     var service: InCallService? = null
     val calls = ArrayList<Call>()
+    val incoming = HashMap<Call, Boolean>()
+
+    /** After a call from a number that is not saved: "Spam? Block / Report" in one tap. */
+    fun afterUnknown(ctx: Context, num: String) {
+        if (num.isEmpty() || CallInfo.isEmergency(ctx, num) || SmsStore.contactName(ctx, num) != null) return
+        if (!SmsStore.canReadContacts(ctx)) return // without contacts everyone looks unknown
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(NotificationChannel("ronin_spam", L("स्पैम call के बाद", "After a spam call"), NotificationManager.IMPORTANCE_LOW))
+        val id = 7200 + (num.hashCode() and 0xff)
+        fun act(a: String, code: Int) = PendingIntent.getBroadcast(ctx, id * 4 + code, Intent(ctx, CallActionReceiver::class.java).setAction(a).putExtra("number", num).putExtra("id", id),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val sim = CallInfo.cnapOf(ctx, num)
+        val n = NotificationCompat.Builder(ctx, "ronin_spam").setSmallIcon(android.R.drawable.sym_call_missed)
+            .setContentTitle(L("अनजान call: ", "Unknown call: ") + num + (if (sim.isNotEmpty()) " ($sim)" else ""))
+            .setContentText(L("स्पैम / धमकी वाली थी? एक tap में block या शिकायत करें।", "Spam or a threat? Block or report in one tap."))
+            .setAutoCancel(true)
+            .addAction(0, L("🚫 Block", "🚫 Block"), act("block", 1))
+            .addAction(0, L("📵 चक्षु पर शिकायत", "📵 Report (Chakshu)"), act("report", 2)).build()
+        try { nm.notify(id, n) } catch (e: SecurityException) { }
+    }
     var screen: (() -> Unit)? = null
     val cb = object : Call.Callback() {
         override fun onStateChanged(call: Call, state: Int) {
@@ -235,7 +275,7 @@ object CallHub {
         // "Answer" opens the call screen itself (Android 12+ does not let a receiver open a screen)
         val answer = PendingIntent.getActivity(ctx, 3, Intent(ctx, InCallActivity::class.java).putExtra("answer", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n = NotificationCompat.Builder(ctx, "ronin_ring").setSmallIcon(android.R.drawable.sym_call_incoming)
-            .setContentTitle("📞 $who").setContentText(CallInfo.label(ctx, num).ifEmpty { "Incoming call" })
+            .setContentTitle("📞 $who").setContentText((CallInfo.cnap(c).let { if (it.isNotEmpty() && SmsStore.contactName(ctx, num) == null) L("📛 SIM पर नाम: ", "📛 Name on the SIM: ") + it + " · " else "" }) + CallInfo.label(ctx, num).ifEmpty { "Incoming call" })
             .setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_MAX).setOngoing(true)
             .setFullScreenIntent(screen, true).setContentIntent(screen)
             .addAction(0, L("❌ काटें", "❌ Decline"), act("decline", 2)).addAction(0, L("✅ उठाएँ", "✅ Answer"), answer).build()
@@ -245,7 +285,19 @@ object CallHub {
 
 class CallActionReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, i: Intent) {
+        val num = i.getStringExtra("number") ?: ""
+        val id = i.getIntExtra("id", 0)
         when (i.action) {
+            "block" -> if (num.isNotEmpty()) {
+                val ok = try { ctx.contentResolver.insert(android.provider.BlockedNumberContract.BlockedNumbers.CONTENT_URI,
+                    android.content.ContentValues().apply { put(android.provider.BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER, num) }) != null } catch (e: Exception) { false }
+                android.widget.Toast.makeText(ctx, if (ok) L("🚫 Block कर दिया: ", "🚫 Blocked: ") + num else L("Block नहीं हो पाया", "Could not block"), android.widget.Toast.LENGTH_LONG).show()
+                if (id != 0) ctx.getSystemService(NotificationManager::class.java).cancel(id)
+            }
+            "report" -> {
+                try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://sancharsaathi.gov.in/sfc/"), ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: Exception) { }
+                if (id != 0) ctx.getSystemService(NotificationManager::class.java).cancel(id)
+            }
             "decline" -> CallHub.calls.lastOrNull { CallHub.ringing(it) }?.reject(false, null)
             "hangup" -> (CallHub.calls.firstOrNull { it.state == Call.STATE_ACTIVE } ?: CallHub.calls.firstOrNull { it.state != Call.STATE_DISCONNECTED })?.disconnect()
         }
@@ -257,6 +309,7 @@ class InCallActivity : AppCompatActivity() {
     private lateinit var who: TextView; private lateinit var warn: TextView; private lateinit var state: TextView
     private lateinit var ringRow: LinearLayout; private lateinit var talkRow: LinearLayout; private lateinit var keypad: GridLayout
     private lateinit var second: TextView
+    private lateinit var simName: TextView
     private lateinit var simRow: LinearLayout
     private var prox: PowerManager.WakeLock? = null
     private val tick = Runnable { refresh() }
@@ -279,6 +332,9 @@ class InCallActivity : AppCompatActivity() {
         warn = TextView(this).apply { textSize = 18f; setTextColor(Color.parseColor("#fde68a")); gravity = Gravity.CENTER; setPadding((10 * d).toInt(), (10 * d).toInt(), (10 * d).toInt(), (10 * d).toInt())
             background = GradientDrawable().apply { setColor(Color.parseColor("#3a2a0a")); cornerRadius = 14 * d } }
         second = TextView(this).apply { textSize = 17f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(0, (10 * d).toInt(), 0, 0) }
+        // CNAP: the name on the caller's SIM (government KYC) - a fake "Daroga ji" shows someone else's name
+        simName = TextView(this).apply { textSize = 22f; setTextColor(Color.parseColor("#bfdbfe")); gravity = Gravity.CENTER; setPadding((10 * d).toInt(), (8 * d).toInt(), (10 * d).toInt(), (8 * d).toInt())
+            background = GradientDrawable().apply { setColor(Color.parseColor("#1e3a8a")); cornerRadius = 14 * d }; visibility = android.view.View.GONE }
         ringRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL
             addView(btn(L("❌ काटें", "❌ Decline"), "#dc2626") { top()?.reject(false, null) }); addView(btn(L("✅ उठाएँ", "✅ Answer"), "#16a34a") { top()?.answer(VideoProfile.STATE_AUDIO_ONLY) }) }
         talkRow = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -292,7 +348,7 @@ class InCallActivity : AppCompatActivity() {
             for (k in listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#")) addView(Button(this@InCallActivity).apply { text = k; textSize = 24f
                 setOnClickListener { top()?.let { c -> c.playDtmfTone(k[0]); c.stopDtmfTone() } } }) }
         simRow = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(who); root.addView(state); root.addView(warn); root.addView(second); root.addView(simRow); root.addView(keypad); root.addView(ringRow); root.addView(talkRow)
+        root.addView(who); root.addView(state); root.addView(simName); root.addView(warn); root.addView(second); root.addView(simRow); root.addView(keypad); root.addView(ringRow); root.addView(talkRow)
         setContentView(root)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { v, ins ->
             val b = ins.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
@@ -342,7 +398,13 @@ class InCallActivity : AppCompatActivity() {
         if (c == null) { prox?.let { if (it.isHeld) it.release() }; finish(); return }
         val num = CallHub.number(c)
         who.text = SmsStore.contactName(this, num) ?: num.ifEmpty { "Private number" }
-        val label = CallInfo.label(this, num)
+        val saved = SmsStore.contactName(this, num) != null
+        val sim = if (saved) "" else CallInfo.cnap(c).ifEmpty { CallInfo.cnapOf(this, num) }
+        simName.text = L("📛 SIM पर असली नाम: ", "📛 Real name on the SIM: ") + sim
+        simName.visibility = if (sim.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+        val base = CallInfo.label(this, num)
+        // unknown / foreign / private callers also get the "police threat" line
+        val label = if (base.isNotEmpty() && !base.startsWith("📢")) base + "\n\n" + CallInfo.threatTip() else base
         warn.text = label; warn.visibility = if (label.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
         val ringing = CallHub.ringing(c)
         val choosing = c.state == Call.STATE_SELECT_PHONE_ACCOUNT

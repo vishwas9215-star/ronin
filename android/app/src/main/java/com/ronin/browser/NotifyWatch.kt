@@ -25,6 +25,8 @@ class NotifyWatch : NotificationListenerService() {
         val ex = n.extras ?: return
         val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
         val text = (ex.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: ex.getCharSequence(Notification.EXTRA_TEXT))?.toString() ?: ""
+        // a WhatsApp / chat call from a number that is not saved (the fake "Daroga ji" calls come this way)
+        if (n.category == Notification.CATEGORY_CALL && sbn.packageName in CHATS) { strangerCall(app, title, text); return }
         if (sbn.packageName in CHATS) io.execute { keep(sbn, n, app, title, text) }
         if (text.length < 12) return
         val key = (sbn.packageName + title + text).hashCode()
@@ -38,6 +40,20 @@ class NotifyWatch : NotificationListenerService() {
             (if (friend) L("पैसे भेजने से पहले उन्हें सीधे फ़ोन करके पक्का करें: उनका WhatsApp hack हो सकता है।", "Before paying, phone them yourself to check: their WhatsApp may be hacked.") else L("पैसे, OTP, PIN, फ़ोटो न दें, link न खोलें।", "Never give money, OTP, PIN or photos; do not open the link."))
         val open = Intent(this, MainActivity::class.java).setAction(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        SmsStore.notify(this, key, SmsStore.CH_WARN, head, body, open)
+    }
+
+    private fun strangerCall(app: String, title: String, text: String) {
+        val num = title.filter { it.isDigit() || it == '+' }
+        if (num.count { it.isDigit() } < 8) return // a saved contact shows a name, not a number
+        val key = ("call" + num).hashCode()
+        if (key in recent) return
+        recent.addLast(key); if (recent.size > 50) recent.removeFirst()
+        val foreign = num.startsWith("+") && !num.startsWith("+91")
+        val head = L("⚠ $app call अनजान नंबर से: $title", "⚠ $app call from an unknown number: $title")
+        val body = (if (foreign) L("🌍 विदेश का नंबर। ", "🌍 A foreign number. ") else "") + CallInfo.threatTip() +
+            L("\nफ़ोटो में वर्दी या \"पुलिस / दरोगा\" नाम लिखा हो तो भी भरोसा न करें: कोई भी ऐसी photo लगा सकता है।", "\nDo not trust a uniform photo or a \"police\" name: anyone can put those on a profile.")
+        val open = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         SmsStore.notify(this, key, SmsStore.CH_WARN, head, body, open)
     }
 

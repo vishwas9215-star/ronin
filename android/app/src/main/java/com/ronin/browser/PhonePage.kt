@@ -60,6 +60,22 @@ abstract class PhonePage : AppCompatActivity() {
                 } catch (t: Throwable) { proxy.postMessage(JSONObject().put("id", id).put("data", JSONObject.NULL).toString()) }
             }
         }
+        // the page's own questions ("Delete this conversation?", "Block ...?"): without this Android answers
+        // "no" silently and Block / Delete / Remove never happened on a real phone
+        web.webChromeClient = object : android.webkit.WebChromeClient() {
+            override fun onJsAlert(view: WebView, url: String, message: String, result: android.webkit.JsResult): Boolean {
+                android.app.AlertDialog.Builder(this@PhonePage).setMessage(message).setCancelable(false)
+                    .setPositiveButton("OK") { _, _ -> result.confirm() }.show()
+                return true
+            }
+            override fun onJsConfirm(view: WebView, url: String, message: String, result: android.webkit.JsResult): Boolean {
+                android.app.AlertDialog.Builder(this@PhonePage).setMessage(message)
+                    .setPositiveButton(L("हाँ", "Yes")) { _, _ -> result.confirm() }
+                    .setNegativeButton(L("नहीं", "No")) { _, _ -> result.cancel() }
+                    .setOnCancelListener { result.cancel() }.show()
+                return true
+            }
+        }
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? {
                 val u = req.url
