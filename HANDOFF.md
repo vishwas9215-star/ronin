@@ -1,7 +1,7 @@
-# Ronin Browser 3 — HANDOFF 7 (14 Nov 2026, 3.7.0 published)
+# Ronin Browser 3 — HANDOFF 8 (14 Nov 2026, 3.7.1 published, 3.8.0 built and tested, waiting for approval)
 
 Owner: Vishwas (Hindi; both hands injured: fewest taps/typing). Not a coder: explain in Hindi, technical words in English.
-Current version: **3.7.0** (Windows + Android, one release). Rollback: 3.6.1 release on GitHub; Windows
+Current version: **3.7.1** published; **3.8.0** on main, CI green, NOT published. Rollback: 3.7.0 / 3.6.1 releases on GitHub; Windows
 RoninSetup-3.5.1 / 3.4.0 in Downloads\Ronin Browser 3 Handoff.
 Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + test history: FEATURES.md.
 
@@ -19,7 +19,7 @@ Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + tes
 
 ## Build / release
 - Linux: `./build.sh` = Go tests + JS tests + Playwright UI tests (passwords, voice, listen, extras, newtab, popguard,
-  tableexport, tableexport2, darkcsp) -> Ronin.exe + RoninSetup.exe. Android builds only on GitHub (SDK blocked here).
+  tableexport, tableexport2, darkcsp, merge_rules, toolsbutton, merge, pdftools) -> Ronin.exe + RoninSetup.exe. Android builds only on GitHub (SDK blocked here).
 - Push to main -> build.yml: windows, android (unit tests + signed APK), android-device matrix phone (API 35) and
   tablet (pixel_tablet API 36): DeviceTest (blocking) then SiteTourTest (14 real sites, report only - the emulator
   can die on heavy sites). Screenshots -> prerelease "qa" (download: github.com/.../releases/download/qa/<name>.png).
