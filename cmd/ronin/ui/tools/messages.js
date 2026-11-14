@@ -1,7 +1,8 @@
 // Ronin Messages: the phone's SMS app with the scam check built in. Every SMS is sorted into
 // ✅ Important (banks, OTP, school, saved contacts), 👤 Unknown, 📢 Ads and ⛔ Scam; only Important rings.
 // One row per company: all of "VM-HDFCBK-S", "AD-HDFCBK-S"... together. English or Hindi as the phone.
-// The phone side (MessagesActivity.kt) answers through window.roninPhone; nothing goes to the internet.
+// The phone side (MessagesActivity.kt) answers through window.roninPhone; no SMS ever goes to the internet
+// (only a company's website is asked once for its small icon).
 (function () {
   'use strict';
   const app = document.getElementById('app');
@@ -38,15 +39,22 @@
   const brand = a => {
     if (!isName(a)) return null;
     const c = core(a), e = SND.exact[c];
-    if (e) return { name: e[0], color: e[1], short: e[2] };
+    if (e) return { name: e[0], color: e[1], short: e[2], site: e[3] || '' };
     const p = SND.prefix.find(x => c.indexOf(x[0]) === 0);
-    return p ? { name: p[1], color: p[2], short: p[3] } : null;
+    return p ? { name: p[1], color: p[2], short: p[3], site: p[4] || '' } : null;
   };
   const who = t => t.name || (brand(t.address) || {}).name || (isName(t.address) ? core(t.address) : t.address);
+  // the company's own website icon (fetched once by the phone from that site, then kept)
+  const icons = {};
+  const icon = site => icons[site] || (icons[site] = ask('icon', { domain: site }).then(x => (typeof x === 'string' && x.indexOf('data:image/') === 0) ? x : null));
   const badge = t => {
     const b = !t.name && brand(t.address);
     if (t.cat === 'scam') return h('div', { cls: 'av', style: 'background:#7f1d1d' }, (who(t)[0] || '?').toUpperCase());
-    if (b) return h('div', { cls: 'av brand', style: 'background:' + b.color + (b.short.length > 2 ? ';font-size:' + (b.short.length > 3 ? 12 : 14) + 'px' : '') }, b.short);
+    if (b) {
+      const el = h('div', { cls: 'av brand', style: 'background:' + b.color + (b.short.length > 2 ? ';font-size:' + (b.short.length > 3 ? 12 : 14) + 'px' : '') }, b.short);
+      if (b.site) icon(b.site).then(src => { if (src) { el.classList.add('pic'); el.style.background = '#fff'; el.replaceChildren(h('img', { src, alt: '' })); } });
+      return el;
+    }
     return h('div', { cls: 'av' }, (who(t)[0] || '?').toUpperCase());
   };
   // the OTP / code in a message (same rule as Otp.kt): shown big and blue, one tap copies only the digits

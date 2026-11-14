@@ -139,6 +139,7 @@ abstract class PhonePage : AppCompatActivity() {
             "watcher" -> done(NotifyWatch.enabled(this))
             "copy" -> { val c = a.optString("text").filter { it.isDigit() }.take(8); if (c.length >= 4) Otp.copy(this, c); done(c.length >= 4) }
             "close" -> { done(true); runOnUiThread { finish() } }
+            "icon" -> bg { done(SenderIcons.get(this, a.optString("domain"))) }
             "lang" -> done(Lang.choice(this))
             "setLang" -> { Lang.set(this, a.optString("value")); done(true); runOnUiThread { recreate() } }
             "check" -> { val r = RoninApp.instance.rules.scam.text(a.optString("text")); done(JSONObject().put("level", r.level).put("reasons", org.json.JSONArray(r.reasons))) }
