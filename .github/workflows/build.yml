@@ -145,14 +145,15 @@ jobs:
             timeout 30m ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notClass=com.ronin.browser.SiteTourTest || echo failed > ../device-tests-failed
             timeout 120 adb pull /data/local/tmp/qa ../qa || true
             timeout 15m ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ronin.browser.SiteTourTest || echo "site tour did not finish (the test emulator is weak with heavy real sites; see screenshots)" > ../site-tour-note
-            timeout 120 adb pull /data/local/tmp/qa ../qa || true
+            timeout 120 adb pull /data/local/tmp/qa ../qa2 || true
             timeout 60 adb logcat -d -b crash > ../crash.txt || true
       - name: Screenshots for checking (release "qa")
         if: always() && github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ls qa 2>/dev/null || exit 0
+          mkdir -p qa; cp qa2/*.png qa/ 2>/dev/null || true
+          ls qa/*.png >/dev/null 2>&1 || exit 0
           gh release view qa >/dev/null 2>&1 || gh release create qa --title "QA screenshots" --notes "Emulator screenshots from the last build (not a Ronin release)." --prerelease || true
           sleep 3
           for f in qa/*.png; do cp "$f" "${{ matrix.device }}-$(basename "$f")"; gh release upload qa "${{ matrix.device }}-$(basename "$f")" --clobber; done
