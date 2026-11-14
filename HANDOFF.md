@@ -1,7 +1,7 @@
-# Ronin Browser 3 — HANDOFF 8 (14 Nov 2026, 3.7.1 published, 3.8.0 built and tested, waiting for approval)
+# Ronin Browser 3 — HANDOFF 8 (14 Nov 2026, 3.8.0 published)
 
 Owner: Vishwas (Hindi; both hands injured: fewest taps/typing). Not a coder: explain in Hindi, technical words in English.
-Current version: **3.7.1** published; **3.8.0** on main, CI green, NOT published. Rollback: 3.7.0 / 3.6.1 releases on GitHub; Windows
+Current version: **3.8.0** published (Windows + Android). Rollback: 3.7.1 / 3.7.0 / 3.6.1 releases on GitHub; Windows
 RoninSetup-3.5.1 / 3.4.0 in Downloads\Ronin Browser 3 Handoff.
 Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + test history: FEATURES.md.
 
@@ -61,7 +61,7 @@ Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + tes
 - Android UA: "wv" removed (Google sign-in); desktop UA for docs.google.com and web.whatsapp.com; accounts.google.com
   keeps the current one. targetSdk/compileSdk 36, AGP 8.11.1.
 
-## 3.7.1 (published) / 3.8.0 (built, waiting for "हाँ, V3.8.0 publish करो")
+## 3.7.1 / 3.8.0 (both published)
 - 3.7.1: Data export marks: no lowercase mark; child repeated only by name + father/DOB; reason in the first
   column "जाँच" (colour-prefixed); PDF drops constant columns (owner's Prerna list 29 -> 3 pages).
 - 3.8.0 Ronin Tools = a 🧰 Tools button (NOT a tab: hidden from the tab strip, "✕ Back to browser" ->
@@ -89,3 +89,4 @@ Android: VPN, own password vault (tablet now uses Google Password Manager via An
 school sites), video download, Kids, study time, sync laptop <-> tablet. TV app (YouTube only, TCL 65").
 Windows code signing ("Unknown publisher"): Microsoft Artifact Signing $9.99/month, India individual eligibility not
 confirmed - owner's decision. Android developer verification: not in India yet (global 2027) - needs his identity.
+- Publish note: the background-song notification device test can flake once on the phone emulator; `gh run rerun <id> --failed` re-runs it and then the release.
