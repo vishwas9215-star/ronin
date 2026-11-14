@@ -197,7 +197,18 @@ top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped p
     numbers. Told him: WhatsApp -> Settings -> Privacy -> Calls -> Silence unknown callers.
   * BUG found on the real phone: PhonePage had no WebChromeClient, so every confirm() returned false (Block /
     Delete / Remove never worked on phones since 3.10). Fixed + device test.
-- Still to do before publish: tablet check, CI green, independent QA review (running), then he names the version.
+- Independent QA review (15 Nov ~01:00) found and I fixed: ads auto-delete now ONLY for "-P" senders, never
+  locked / scam-looking (isPromoSender); offer rule narrowed (sanctioned loans, PF claims, selections stay
+  important; pre-approved offers stay offers); Ronin Social Back loop on the app list; OTP 'pin' word only (not
+  pincode); brand name / icon / one row only for exact codes (prefix = own code, no icon); links off in a
+  scam-looking SMS; Saved = AtomicFile + key sender|time|length; CNAP only from SIM accounts, worded as network KYC
+  name; app mode no longer wipes the browser's private tabs; calls 'play' uses rid; English default strings.xml +
+  values-hi. NOT done (next): Windows Go side still Hindi-first while shared pages follow navigator.language
+  (his laptop = English); offer / transaction / OTP regexes duplicated in Kotlin + JS (move to scamrules.json).
+- CI green on bb9d106 (windows, android, phone + tablet emulators). Final APK installed on his phone 01:18 and
+  checked: Messages (company badges + site icons, Mark all read, Saved, Latest OTP), Social Back fixed.
+- Still to do before publish: tablet (OnePlus Pad) check when he connects it; he turns on recording Accessibility
+  himself if wanted; then he names the version ("हाँ, V3.11.0 publish करो").
 
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only
