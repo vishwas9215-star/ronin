@@ -21,10 +21,13 @@ class LogicTest {
 
     @Test fun scamCheckLikeThePage() {
         // the same corpus as tools/uitest/scamcheck.js: every scam warns, no normal message does
-        val c = org.json.JSONObject(File("../../tools/uitest/scam_corpus.json").readText())
-        val scam = c.getJSONArray("scam"); val normal = c.getJSONArray("normal")
-        val missed = (0 until scam.length()).map { scam.getString(it) }.filter { rules.scam.text(it).level.isEmpty() }
-        val alarms = (0 until normal.length()).map { normal.getString(it) }.filter { rules.scam.text(it).level.isNotEmpty() }
+        val missed = ArrayList<String>(); val alarms = ArrayList<String>()
+        for (f in listOf("scam_corpus.json", "scam_heldout.json")) {
+            val c = org.json.JSONObject(File("../../tools/uitest/$f").readText())
+            val scam = c.getJSONArray("scam"); val normal = c.getJSONArray("normal")
+            missed += (0 until scam.length()).map { scam.getString(it) }.filter { rules.scam.text(it).level.isEmpty() }
+            alarms += (0 until normal.length()).map { normal.getString(it) }.filter { rules.scam.text(it).level.isNotEmpty() }
+        }
         assertTrue("missed: $missed", missed.isEmpty())
         assertTrue("false alarms: $alarms", alarms.isEmpty())
         assertEquals("stop", rules.scam.text("Mujhe urgent 10000 rupaye ki zarurat hai, hospital me hoon, is QR par bhej do").level)

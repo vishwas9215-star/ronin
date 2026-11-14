@@ -430,8 +430,12 @@ class MainActivity : AppCompatActivity() {
         "scam" to "सावधान! यह संदेश ठगी का हो सकता है। पैसे, ओटीपी या पिन किसी को न दें।",
         "mail" to "सावधान! यह ईमेल ठगी का हो सकता है। इसे डिलीट कर दें, और कोई पैसा न भेजें।",
         "call" to "अनजान व्यक्ति से वीडियो कॉल न करें।")
+    private val spoke = HashMap<String, Long>()
     private fun speakWarning(id: String) {
         val text = warnings[id] ?: return
+        val now = System.currentTimeMillis()
+        if (now - (spoke[id] ?: 0L) < 15_000) return // a page cannot make the phone talk again and again
+        spoke[id] = now
         val t = tts
         if (t == null) {
             tts = android.speech.tts.TextToSpeech(applicationContext) { st ->
@@ -1369,6 +1373,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         items["🛡️ Safe Social (Facebook, Instagram, YouTube...)"] = { openSocial() }
         items["📧 Safe Mail (Gmail...)"] = { openMail() }
         items["📱 Ronin के हिस्से (Mail / Messages / Calls)"] = { Parts.choose(this, first = false) }
+        items["💬 Delete हुए WhatsApp संदेश"] = { ChatLogActivity.open(this) }
         if (Parts.isOn(this, Parts.MESSAGES)) items["📩 Ronin Messages"] = { startActivity(Intent(this, MessagesActivity::class.java)) }
         if (Parts.isOn(this, Parts.CALLS)) items["📞 Ronin Calls"] = { startActivity(Intent(this, CallsActivity::class.java)) }
         items["🔎 क्या यह ठगी है? (Scam Check)"] = { openTools("scamcheck") }

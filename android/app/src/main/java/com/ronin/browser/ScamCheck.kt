@@ -22,6 +22,7 @@ class ScamCheck(o: JSONObject?, private val links: SafeLinks) {
     private val normal: Pattern?
     private val pincode: Pattern?
     private val rumour: List<Pattern>
+    private val requests: Set<String>
 
     init {
         val g = o?.optJSONArray("groups") ?: JSONArray()
@@ -33,6 +34,9 @@ class ScamCheck(o: JSONObject?, private val links: SafeLinks) {
         advice = rx(o?.optString("advice")); done = rx(o?.optString("done")); normal = rx(o?.optString("normal")); pincode = rx(o?.optString("pincode"))
         val r = o?.optJSONArray("rumour") ?: JSONArray()
         rumour = (0 until r.length()).mapNotNull { rx(r.optString(it)) }
+        val q = o?.optJSONArray("requests") ?: JSONArray()
+        requests = (0 until q.length()).map { q.optString(it) }.toSet()
+        require(groups.isNotEmpty() || o == null) { "scam rules did not load" }
     }
 
     private fun rx(src: String?): Pattern? {
@@ -68,7 +72,10 @@ class ScamCheck(o: JSONObject?, private val links: SafeLinks) {
         }
         if ("auth" !in ids && caps?.matcher(raw)?.find() == true) { score += 2; ids.add("auth"); reasons.add("खुद को पुलिस / CBI / कोर्ट बताना") }
         if (ids.none { it != "link" && it != "urgent" }) score = 0
-        if (advice?.matcher(t)?.find() == true) score -= 2
+        // advice / news about scams with nothing asked of the reader is information, not a scam
+        val isAdvice = advice?.matcher(t)?.find() == true
+        if (isAdvice && ids.none { it in requests }) score = minOf(score, 2)
+        if (isAdvice) score -= 2
         if (done?.matcher(t)?.find() == true && !heavy) score -= 1
         if (normal?.matcher(t)?.find() == true) score -= 1
         val level = when { score >= 5 || (heavy && score >= 4) -> "stop"; score >= 3 -> "warn"; else -> "" }

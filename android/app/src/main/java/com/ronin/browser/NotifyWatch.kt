@@ -16,6 +16,7 @@ import androidx.core.app.NotificationManagerCompat
  */
 class NotifyWatch : NotificationListenerService() {
     private val recent = ArrayDeque<Int>()
+    private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val app = APPS[sbn.packageName] ?: return
@@ -24,6 +25,7 @@ class NotifyWatch : NotificationListenerService() {
         val ex = n.extras ?: return
         val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
         val text = (ex.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: ex.getCharSequence(Notification.EXTRA_TEXT))?.toString() ?: ""
+        if (sbn.packageName in CHATS) io.execute { keep(sbn, n, app, title, text) }
         if (text.length < 12) return
         val key = (sbn.packageName + title + text).hashCode()
         if (key in recent) return
@@ -39,7 +41,33 @@ class NotifyWatch : NotificationListenerService() {
         SmsStore.notify(this, key, SmsStore.CH_WARN, head, body, open)
     }
 
+    /** Every chat message of the notification goes to the 7-day log (deleted ones can be read later). */
+    private fun keep(sbn: StatusBarNotification, n: Notification, app: String, title: String, text: String) {
+        try {
+            val style = androidx.core.app.NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(n)
+            val chat = style?.conversationTitle?.toString() ?: title
+            val msgs = style?.messages ?: emptyList()
+            if (msgs.isEmpty()) {
+                if (DELETED.containsMatchIn(text)) ChatLog.markDeleted(this, chat, "") else ChatLog.add(this, app, chat, title, text, sbn.postTime, sbn.key)
+                return
+            }
+            for (m in msgs) {
+                val body = m.text?.toString() ?: continue
+                val who = m.person?.name?.toString() ?: title
+                if (DELETED.containsMatchIn(body)) ChatLog.markDeleted(this, chat, who)
+                else ChatLog.add(this, app, chat, who, body, m.timestamp, sbn.key)
+            }
+        } catch (e: Exception) { }
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification, rankingMap: RankingMap, reason: Int) {
+        // the app removed it itself (not the user tapping or swiping): maybe the message was deleted
+        if (sbn.packageName in CHATS && reason == REASON_APP_CANCEL) io.execute { try { ChatLog.markGone(this, sbn.key) } catch (e: Exception) { } }
+    }
+
     companion object {
+        val CHATS = setOf("com.whatsapp", "com.whatsapp.w4b", "org.telegram.messenger", "com.instagram.android", "com.facebook.orca", "org.thoughtcrime.securesms")
+        val DELETED = Regex("(this message was deleted|you deleted this message|यह संदेश हटा दिया गया|यह मैसेज डिलीट|संदेश हटा दिया)", RegexOption.IGNORE_CASE)
         /** apps whose messages are checked, with the name shown in the warning */
         val APPS = mapOf(
             "com.whatsapp" to "WhatsApp", "com.whatsapp.w4b" to "WhatsApp Business", "com.google.android.apps.messaging" to "Messages",

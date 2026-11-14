@@ -55,7 +55,9 @@ abstract class PhonePage : AppCompatActivity() {
                 reply = proxy
                 val m = try { JSONObject(msg.data ?: "{}") } catch (e: Exception) { return@addWebMessageListener }
                 val id = m.optInt("id")
-                handle(m.optString("op"), m) { data -> runOnUiThread { proxy.postMessage(JSONObject().put("id", id).put("data", data ?: JSONObject.NULL).toString()) } }
+                        try {
+                    handle(m.optString("op"), m) { data -> runOnUiThread { try { proxy.postMessage(JSONObject().put("id", id).put("data", data ?: JSONObject.NULL).toString()) } catch (e: Exception) { } } }
+                } catch (t: Throwable) { proxy.postMessage(JSONObject().put("id", id).put("data", JSONObject.NULL).toString()) }
             }
         }
         web.webViewClient = object : WebViewClient() {
@@ -76,10 +78,16 @@ abstract class PhonePage : AppCompatActivity() {
             }
         }
         setContentView(web)
+        // Android 15+ draws under the bars: keep the page (and its send box) above them and the keyboard
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(web) { v, ins ->
+            val b = ins.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or androidx.core.view.WindowInsetsCompat.Type.ime())
+            v.setPadding(b.left, b.top, b.right, b.bottom); androidx.core.view.WindowInsetsCompat.CONSUMED
+        }
         web.loadUrl("https://ronin.home/tools/$page" + startQuery(intent))
     }
 
     open fun startQuery(i: Intent?): String = ""
+    override fun onDestroy() { try { web.destroy() } catch (e: Exception) { }; super.onDestroy() }
     fun webForTest(): WebView = web
 
     /** The page is told something happened (a new SMS, a call ended). */
@@ -126,5 +134,6 @@ abstract class PhonePage : AppCompatActivity() {
         return true
     }
 
-    protected fun bg(f: () -> Unit) = thread(name = "ronin-phone") { f() }
+    /** Phone work off the screen thread; an error never ends the app (it may be the phone app). */
+    protected fun bg(f: () -> Unit) = thread(name = "ronin-phone") { try { f() } catch (t: Throwable) { android.util.Log.w("Ronin", "phone page: $t") } }
 }

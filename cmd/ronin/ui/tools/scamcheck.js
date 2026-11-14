@@ -58,7 +58,11 @@
     // "link" and "urgent" only add to real signs, never make a warning on their own
     const real = res.ids.filter(i => i !== 'link' && i !== 'urgent').length;
     if (!real) score = 0;
-    if (ADVICE.test(t)) score -= 2;
+    // advice / news about scams with nothing asked of the reader is information, not a scam
+    const REQ = RULES.requests || [];
+    const advice = ADVICE.test(t);
+    if (advice && !res.ids.some(i => REQ.includes(i))) { res.ids.push('advice'); score = Math.min(score, 2); }
+    if (advice) score -= 2;
     if (DONE.test(t) && !heavy) score -= 1;
     if (NORMAL.test(t)) score -= 1;
     res.score = score;

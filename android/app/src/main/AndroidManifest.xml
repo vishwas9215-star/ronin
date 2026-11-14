@@ -22,6 +22,7 @@
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <queries>
@@ -202,7 +203,6 @@
             android:label="Ronin Call"
             android:launchMode="singleInstance"
             android:taskAffinity="com.ronin.browser.incall"
-            android:excludeFromRecents="true"
             android:showWhenLocked="true"
             android:turnScreenOn="true" />
         <service
@@ -225,6 +225,29 @@
             </intent-filter>
         </service>
         <receiver android:name=".CallActionReceiver" android:enabled="false" android:exported="false" />
+        <service
+            android:name=".RecordService"
+            android:enabled="false"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+        <service
+            android:name=".RecordAccess"
+            android:enabled="false"
+            android:exported="true"
+            android:label="Ronin Calls: call recording"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/record_access" />
+        </service>
+
+        <activity
+            android:name=".ChatLogActivity"
+            android:exported="false"
+            android:label="Ronin: Chat संदेश"
+            android:taskAffinity="com.ronin.browser.chatlog"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
 
         <!-- WhatsApp / chat / Gmail notifications checked for scams (the family allows it in Settings) -->
         <service

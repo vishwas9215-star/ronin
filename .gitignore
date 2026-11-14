@@ -1,3 +1,4 @@
 build/
 cmd/setup/payload/
 release-key/
+android/app/src/androidTest/assets/scam_*.json

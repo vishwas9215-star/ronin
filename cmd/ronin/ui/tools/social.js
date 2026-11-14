@@ -49,21 +49,29 @@
     const mine = ALL().filter(a => cfg.apps.includes(a[0]) || a[0][0] === 'c');
     app.append(
       h('div', { cls: 'top' }, h('h1', {}, '🛡️ Safe Social'),
-        h('div', {}, h('button', { cls: 'pill', on: { click: askPin } }, '⚙ Settings'), ' ', h('button', { cls: 'pill', on: { click: () => go('close') } }, '✕ बंद'))),
+        h('div', {}, h('button', { cls: 'pill', id: 'sosBtn', on: { click: sos } }, '🆘'), ' ', h('button', { cls: 'pill', on: { click: askPin } }, '⚙ Settings'), ' ', h('button', { cls: 'pill', on: { click: () => go('close') } }, '✕ बंद'))),
+      h('div', { id: 'sos' }),
       h('p', { cls: 'note' }, 'यहाँ से खोलने पर गंदे ads हटते हैं, अनजान Telegram/WhatsApp group, पैसे और ठगी वाले link पूरी तरह रुकते हैं, ठगी / अफवाह वाले messages पर चेतावनी आती है, और ठगी / धमकी वाले email पर Delete का बटन आता है।'),
-      h('div', { cls: 'sos' }, h('b', {}, '🆘 पैसा चला गया / ठगी हुई?'),
-        h('div', { cls: 'row2' }, h('a', { cls: 'pill red', href: 'tel:1930' }, '📞 1930 पर call'), h('a', { cls: 'pill', href: 'https://cybercrime.gov.in/' }, '🌐 cybercrime.gov.in'),
-          h('a', { cls: 'pill', href: 'https://sancharsaathi.gov.in/sfc/' }, '📵 ठगी वाला नंबर / SMS (चक्षु)')),
-        h('small', {}, 'जितनी जल्दी 1930 पर बताएँगे, पैसा रुकने की उतनी उम्मीद। अपने बैंक को भी तुरंत बताएँ।')),
+
       h('div', { cls: 'apps' }, mine.length ? mine.map(([id, name, icon, color, url]) =>
         h('button', { cls: 'app', style: 'background:' + color, 'data-app': id, on: { click: () => go('open', '&url=' + encodeURIComponent(url)) } }, h('span', {}, icon), name))
         : h('p', { cls: 'note' }, 'कोई app नहीं चुना: ⚙ Settings में चुनें।')),
-      h('div', { cls: 'card' }, h('h2', {}, '🧠 याद रखें'), h('ul', {},
+      h('details', { cls: 'card' }, h('summary', {}, '🧠 याद रखें (ठगी से बचने के 5 नियम)'), h('ul', {},
         h('li', {}, 'अनजान video call न उठाएँ। उठा लिया और कोई धमकाए ("video viral कर देंगे", "police case"): पैसे न दें, call काटें, 1930 पर शिकायत करें।'),
         h('li', {}, 'पैसा लेने के लिए कभी QR scan या UPI PIN नहीं डालना पड़ता।'),
         h('li', {}, '"पक्का मुनाफ़ा", "शेयर tips group", "task job", "लॉटरी जीती": ये सब ठगी के तरीके हैं।'),
         h('li', {}, 'OTP, PIN, password किसी को न बताएँ, चाहे वह बैंक / पुलिस / रिश्तेदार बनकर बोले।'),
         h('li', {}, 'साइबर ठगी हो जाए तो तुरंत 1930 पर call करें या cybercrime.gov.in पर शिकायत करें।'))));
+  }
+
+  // help after a fraud: only when asked for (the 🆘 button), not always on the screen
+  function sos() {
+    const box = document.getElementById('sos');
+    if (box.firstChild) { box.replaceChildren(); return; }
+    box.append(h('div', { cls: 'sos' }, h('b', {}, '🆘 पैसा चला गया / ठगी हुई?'),
+      h('div', { cls: 'row2' }, h('a', { cls: 'pill red', href: 'tel:1930' }, '📞 1930 पर call'), h('a', { cls: 'pill', href: 'https://cybercrime.gov.in/' }, '🌐 cybercrime.gov.in'),
+        h('a', { cls: 'pill', href: 'https://sancharsaathi.gov.in/sfc/' }, '📵 ठगी वाला नंबर / SMS (चक्षु)')),
+      h('small', {}, 'जितनी जल्दी 1930 पर बताएँगे, पैसा रुकने की उतनी उम्मीद। अपने बैंक को भी तुरंत बताएँ।')));
   }
 
   function askPin() {

@@ -20,7 +20,7 @@ object Parts {
     private val parts = mapOf(
         MAIL to listOf("MailLauncher"),
         MESSAGES to listOf("MessagesActivity", "MessagesLauncher", "SmsDeliverReceiver", "MmsReceiver", "HeadlessSmsSendService"),
-        CALLS to listOf("CallsActivity", "CallsLauncher", "InCallActivity", "RoninInCallService", "RoninCallScreen", "CallActionReceiver"),
+        CALLS to listOf("CallsActivity", "CallsLauncher", "InCallActivity", "RoninInCallService", "RoninCallScreen", "CallActionReceiver", "RecordService", "RecordAccess"),
     )
     private fun cn(ctx: Context, c: String) = ComponentName(ctx.packageName, "com.ronin.browser.$c")
     fun prefs(ctx: Context) = ctx.getSharedPreferences("ronin_parts", Context.MODE_PRIVATE)

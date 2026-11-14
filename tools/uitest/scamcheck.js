@@ -10,6 +10,10 @@ let fail = 0;
 for (const t of C.scam) { const r = S.text(t); if (!r.level) { console.log('MISSED', r.score, r.ids.join(','), '|', t); fail++; } }
 for (const t of C.normal) { const r = S.text(t); if (r.level) { console.log('FALSE ALARM', r.score, r.ids.join(','), '|', t); fail++; } }
 for (const m of C.mail) { const r = S.mail(m); const lv = r.level === 'stop' ? 'stop' : r.level ? 'warn' : ''; if ((m.expect === 'stop' && !lv) || (!m.expect && lv)) { console.log('MAIL', lv, r.score, r.ids.join(','), '|', m.subject); fail++; } }
+// a second set written by an independent reviewer (made-up texts)
+const H = JSON.parse(fs.readFileSync(path.join(__dirname, 'scam_heldout.json'), 'utf8'));
+for (const t of H.scam) { const r = S.text(t); if (!r.level) { console.log('MISSED (reviewer set)', r.score, r.ids.join(','), '|', t); fail++; } }
+for (const t of H.normal) { const r = S.text(t); if (r.level) { console.log('FALSE ALARM (reviewer set)', r.score, r.ids.join(','), '|', t); fail++; } }
 const cases = JSON.parse(fs.readFileSync(path.join(root, 'internal/safelinks/cases.json'), 'utf8'));
 for (const [u, want] of cases) { const got = S.check(u); if (got !== want) { console.log('LINK', u, 'got', got, 'want', want); fail++; } }
 // the sites' "you are leaving" wrappers are unwrapped first

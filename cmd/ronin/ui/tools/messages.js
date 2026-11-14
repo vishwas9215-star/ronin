@@ -79,7 +79,10 @@
     const body = h('div', { cls: 'msgs', id: 'msgs' }, msgs.map(m => h('div', {},
       m.type === 1 && m.level ? warnBox(m.level, m.reasons) : '',
       h('div', { cls: 'b ' + (m.type === 1 ? 'in' : 'out'), 'data-level': m.level || '' }, m.body, h('small', {}, when(m.date) + (m.type === 5 ? ' • ✖ नहीं गया' : m.type === 4 ? ' • भेज रहा...' : ''))))));
+    // a new SMS arriving while you type must not wipe what you are writing
+    const old = again && document.getElementById('text');
     const box = h('textarea', { placeholder: st.isDefault ? 'संदेश लिखें...' : 'भेजने के लिए Ronin Messages चालू करें', id: 'text' });
+    if (old) box.value = old.value;
     if (!st.isDefault) box.disabled = true;
     const isNumber = /^\+?\d{7,}$/.test(t.address.replace(/[\s-]/g, ''));
     app.replaceChildren(
@@ -92,10 +95,11 @@
       h('div', { cls: 'compose' }, box, h('button', { cls: 'pill blue', id: 'send', on: { click: async () => {
         const text = box.value.trim(); if (!text || !st.isDefault) return;
         box.value = '';
-        await ask('send', { to: t.address, body: text });
+        await ask('send', { to: t.address, body: text, sub: t.sub || -1 });
         setTimeout(() => { if (view === 'thread' && cur === t) thread(t, true); }, 600);
       } } }, 'भेजें')));
     if (!again) window.scrollTo(0, document.body.scrollHeight);
+    if (old && document.activeElement !== box && old === document.activeElement) box.focus();
   }
 
   async function block(t) {
@@ -156,7 +160,9 @@
   window.__roninOpen = async q => {
     const p = new URLSearchParams(q), to = p.get('to') || '', body = p.get('body') || '';
     await list();
-    const t = threads.find(x => x.address.replace(/\D/g, '').slice(-10) === to.replace(/\D/g, '').slice(-10) && to);
+    // sender names ("JD-SBIOTP") compare as names, phone numbers by their last 10 digits
+    const core = a => a.toUpperCase().replace(/^[A-Z]{2}-/, '').replace(/-[PSTG]$/, '');
+    const t = to && threads.find(x => /[a-z]/i.test(to) ? core(x.address) === core(to) : x.address.replace(/\D/g, '').slice(-10) === to.replace(/\D/g, '').slice(-10));
     if (t && !body) thread(t); else compose(to, body);
   };
   window.__roninMessages = { list: () => threads, view: () => view }; // for the tests

@@ -118,7 +118,10 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   await p4.goto('https://ronin.home/tools/social.html?k=K2');
   if ((await p4.$$('.app')).length !== 5) bad('default apps: ' + (await p4.$$('.app')).length);
   if (!await p4.$('.app[data-app=gmail]')) bad('Gmail not on the launcher');
-  if (!await p4.$('.sos a[href="tel:1930"]')) bad('no 1930 help');
+  if (await p4.$('.sos')) bad('fraud help shown all the time');
+  await p4.click('#sosBtn');
+  if (!await p4.$('.sos a[href="tel:1930"]')) bad('no 1930 help behind 🆘');
+  await p4.click('#sosBtn');
   await p4.screenshot({ path: path.join(out, 'social-home.png') });
   await p4.click('button:has-text("⚙ Settings")');
   await p4.click('.row:has-text("Threads") .sw'); await p4.click('.row:has-text("Reels") .sw');

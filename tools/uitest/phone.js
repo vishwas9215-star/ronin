@@ -21,6 +21,9 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
       case 'send':d=true;break;case 'block':d=true;break;case 'blocked':d=['+91999'];break;case 'watcher':d=false;break;case 'thread':d=9;break;
       case 'recent':d=[{number:'+923001234567',name:'',date:Date.now(),type:3,label:'🌍 विदेश का नंबर'},{number:'+919800000000',name:'माँ',date:Date.now(),type:1,label:''}];break;
       case 'contacts':d=[{name:'माँ',number:'+919800000000'},{name:'Ramesh',number:'+919811111111'}];break;case 'label':d='👤 अनजान नंबर';break;
+      case 'rec':d={auto:false,access:false,skip:window.__skip||[],mic:true};break;case 'skip':window.__skip=(window.__skip||[]).filter(x=>x!==m.number);if(m.on)window.__skip.push(m.number);d=window.__skip;break;
+      case 'list':d=[{app:'WhatsApp',chat:'Family',who:'Mama',text:'Kal aa rahe ho?',t:Date.now()-9000},{app:'WhatsApp',chat:'Rahul',who:'Rahul',text:'Sorry, galat message',t:Date.now()-5000,gone:true}];break;
+      case 'recordings':d=[{id:1,name:'Call_Ramesh_919811111111_20261114_2110.m4a',date:Date.now(),size:204800}];break;
       default:d=true}
       setTimeout(()=>this.onmessage&&this.onmessage({data:JSON.stringify({id:m.id,data:d})}),5);}};`;
   // 1. not yet the SMS app, Android refuses (restricted settings): the steps are shown
@@ -60,11 +63,29 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   await p3.click('#call'); await p3.waitForTimeout(100);
   if (!(await p3.evaluate(() => window.__log.some(m => m.op === 'call' && m.number === '9811111111')))) bad('call not placed');
   await p3.screenshot({ path: path.join(out, 'calls-pad.png') });
+  if (await p3.$('a:has-text("112"), a:has-text("1930")')) bad('emergency / fraud numbers shown all the time');
   await p3.click('[data-tab=recent]'); await p3.waitForSelector('.th');
   if (!await p3.$('.lbl:has-text("विदेश")')) bad('foreign caller not marked');
   await p3.screenshot({ path: path.join(out, 'calls-recent.png') });
   await p3.click('[data-tab=contacts]'); await p3.waitForSelector('.th[data-number="+919811111111"]'); await p3.fill('#search', 'ram');
   if ((await p3.$$('.th')).length !== 1) bad('contact search');
+  // 🎙 recording settings: on, and "do not record" a chosen person
+  await p3.click('text=⚙'); await p3.waitForSelector('#recCard');
+  await p3.click('#recAuto'); await p3.waitForTimeout(100);
+  if (!(await p3.evaluate(() => window.__log.some(m => m.op === 'set' && m.key === 'recAuto' && m.on === true)))) bad('recording not switched on');
+  await p3.fill('#skipSearch', 'मा'); await p3.click('[data-skip="+919800000000"]'); await p3.waitForTimeout(100);
+  if (!await p3.$('#skipList:has-text("माँ")')) bad('do-not-record person not added');
+  await p3.click('#showRecs'); await p3.waitForTimeout(100);
+  if (!await p3.$('#recs:has-text("Call_Ramesh")')) bad('recordings not listed');
+  await p3.screenshot({ path: path.join(out, 'calls-settings.png'), fullPage: true });
+  // 4. deleted WhatsApp messages: kept text, deleted ones first
+  const p4 = await b.newPage({ viewport: { width: 412, height: 860 } });
+  await serve(p4); await p4.addInitScript(phone({ watcher: true, on: true }));
+  await p4.goto('https://ronin.home/tools/chatlog.html'); await p4.waitForSelector('#list');
+  if ((await p4.$$('[data-gone="1"]')).length !== 1 || (await p4.$$('#list .b')).length !== 1) bad('deleted messages view');
+  await p4.click('#allMsgs'); await p4.waitForTimeout(100);
+  if ((await p4.$$('#list .b')).length !== 2) bad('all messages view');
+  await p4.screenshot({ path: path.join(out, 'chatlog.png') });
   console.log(fail ? fail + ' FAILED' : 'phone pages OK');
   await b.close(); process.exit(fail ? 1 : 0);
 })();

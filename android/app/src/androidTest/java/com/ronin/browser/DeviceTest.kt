@@ -352,9 +352,10 @@ class DeviceTest {
     fun roninMessagesSortsScamAndWorkSms() {
         if (!Parts.hasPhone(app)) return // a tablet without SIM never gets Ronin Messages
         Parts.set(app, Parts.MESSAGES, true)
-        val before = shell("cmd role get-role-holders android.app.role.SMS").trim()
+        // (the role stays with Ronin afterwards: taking it away revokes the SMS permissions,
+        // and Android then ends Ronin's process, which would end this test run too)
         shell("cmd role add-role-holder android.app.role.SMS ${app.packageName} 0")
-        try {
+        run {
             assertTrue("Ronin did not become the SMS app", waitFor(10) { SmsStore.isDefault(app) })
             val now = System.currentTimeMillis()
             fun inbox(from: String, body: String) = app.contentResolver.insert(android.provider.Telephony.Sms.Inbox.CONTENT_URI, android.content.ContentValues().apply {
@@ -371,9 +372,21 @@ class DeviceTest {
                 evalPage(sc, "document.querySelector('[data-tab=scam]').click(),1")
                 shot("16-ronin-messages")
             }
-        } finally {
-            if (before.isNotEmpty() && !before.contains(app.packageName)) shell("cmd role add-role-holder android.app.role.SMS $before 0")
         }
+    }
+
+    @Test
+    fun scamCheckOnThePhoneMatchesThePage() {
+        // Android's own regex engine (ICU) must judge the texts exactly like the tests on the computer
+        val rules = (app.applicationContext as RoninApp).rules
+        val bad = ArrayList<String>()
+        for (f in listOf("scam_corpus.json", "scam_heldout.json")) {
+            val c = org.json.JSONObject(inst.context.assets.open(f).bufferedReader().readText())
+            val scam = c.getJSONArray("scam"); val normal = c.getJSONArray("normal")
+            for (i in 0 until scam.length()) if (rules.scam.text(scam.getString(i)).level.isEmpty()) bad.add("missed: " + scam.getString(i))
+            for (i in 0 until normal.length()) if (rules.scam.text(normal.getString(i)).level.isNotEmpty()) bad.add("false alarm: " + normal.getString(i))
+        }
+        assertTrue(bad.joinToString("\n"), bad.isEmpty())
     }
 
     @Test

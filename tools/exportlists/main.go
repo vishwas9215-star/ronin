@@ -95,7 +95,7 @@ func writeAssets(dir string) error {
 		}
 	}
 	// the PDF / Photo tools page with its libraries
-	for _, f := range []string{"index.html", "tools.js", "merge.js", "datecalc.js", "social.html", "social.js", "scamcheck.js", "messages.html", "messages.js", "calls.html", "calls.js", "lib/pdf-lib.min.js", "lib/pdf.min.mjs", "lib/pdf.worker.min.mjs", "lib/LICENSE-pdf-lib.md", "lib/LICENSE-pdfjs.txt"} {
+	for _, f := range []string{"index.html", "tools.js", "merge.js", "datecalc.js", "social.html", "social.js", "scamcheck.js", "messages.html", "messages.js", "calls.html", "calls.js", "chatlog.html", "chatlog.js", "lib/pdf-lib.min.js", "lib/pdf.min.mjs", "lib/pdf.worker.min.mjs", "lib/LICENSE-pdf-lib.md", "lib/LICENSE-pdfjs.txt"} {
 		src, err := os.ReadFile(filepath.Join("cmd", "ronin", "ui", "tools", f))
 		if err != nil {
 			return err
@@ -108,9 +108,19 @@ func writeAssets(dir string) error {
 			return err
 		}
 	}
+	// the scam test texts for the device test (same check on a real phone's regex engine)
+	if t := filepath.Join(dir, "..", "..", "..", "androidTest", "assets"); dirExists(t) {
+		for _, f := range []string{"scam_corpus.json", "scam_heldout.json"} {
+			if b, err := os.ReadFile(filepath.Join("tools", "uitest", f)); err == nil {
+				_ = os.WriteFile(filepath.Join(t, f), b, 0o644)
+			}
+		}
+	}
 	fmt.Printf("assets: %d ad domains, %d bank sites\n", len(block), len(safemoney.Export()["bank"]))
 	return nil
 }
+
+func dirExists(p string) bool { st, err := os.Stat(p); return err == nil && st.IsDir() }
 
 func writeLists(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
