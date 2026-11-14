@@ -1,4 +1,4 @@
-# Ronin Browser 3 — HANDOFF 8 (14 Nov 2026, 3.10.0 published, 3.11.0 built + on his phone, not published)
+# Ronin Browser 3 — HANDOFF 8 (15 Nov 2026, 3.11.0 published 03:38 IST)
 
 Owner: Vishwas (Hindi; both hands injured: fewest taps/typing). Not a coder: explain in Hindi, technical words in English.
 Current version: **3.10.0** published 14 Nov 23:15 IST (run 43618950937). Rollback: 3.9.0 / 3.8.0 releases on GitHub; Windows
@@ -142,7 +142,7 @@ Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + tes
 - Remaining review items not done: Windows-side nothing; M6 BT audio route, M12 labels; homograph on Android uses
   rawAuthority (I6) - check.
 
-## 3.11.0 (built 14 Nov night, installed on his phone for checking, NOT published yet)
+## 3.11.0 (published 15 Nov 2026 03:38 IST on his words "हाँ, V3.11.0 publish करो")
 Owner asked (after 3.10 on phone): Instagram chip on home opened "Edit links"; Safe Social bar and Calls / Messages
 top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped per bank; app in English (phone is English).
 - Chip bug: `ronin.newtab/social` was caught by the generic `ronin.newtab/` (edit links) rule. Fixed + device test
