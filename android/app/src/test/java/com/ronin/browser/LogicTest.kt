@@ -52,11 +52,16 @@ class LogicTest {
         assertEquals("work", SmsSort.category("VD-HDFCBK-S", "IMPS INR 6,900.00 sent from HDFC Bank A/c XX6490 on 13-11-26", false, ""))
         assertEquals("work", SmsSort.category("JX-KOTAKD-S", "Dear customer, your Kotak A/C XXXX747132 is blocked. To unblock, visit https://kotk.in/x", false, ""))
         assertEquals("work", SmsSort.category("JK-lichfl-S", "Dear Sir/Madam, The NACH for Rs. 19296 will be presented on 15-11-2026", false, ""))
+        assertEquals("work", SmsSort.category("AD-HDFCBK-S", "Congratulations! Your Personal Loan of Rs 2 lakh is sanctioned and disbursed to A/c XX12", false, ""))
+        assertEquals("work", SmsSort.category("AD-EPFOHO-G", "Your PF claim is settled", false, ""))
+        // only registered promotional senders are ever auto-deleted
+        assertTrue(SmsSort.isPromoSender("VM-SHOPPR-P")); assertFalse(SmsSort.isPromoSender("VD-HDFCBK-S")); assertFalse(SmsSort.isPromoSender("+919812345678"))
         // the OTP alone, for the big blue copy button and the notification's Copy OTP
         assertEquals("554581", Otp.find("554581 is your OTP for Dhan. Please do not share it with anyone"))
         assertEquals("6038", Otp.find("Your OTP for Login is 6038This OTP is valid ony for 20 minutes"))
         assertEquals("630753", Otp.find("Enter the code 630753 to sign in to your FYERS account"))
         assertEquals(null, Otp.find("IMPS INR 6,900.00 sent from HDFC Bank A/c XX6490 on 13-11-26"))
+        assertEquals(null, Otp.find("Your shopping order to pincode 228001 is shipped"))
         assertEquals("scam", SmsSort.category("+919812345678", "x", false, "stop"))
         assertEquals("scam", SmsSort.category("+919812345678", "x", true, "warn"))
         assertEquals("ads", SmsSort.category("+919812345678", "Limited offer! Get 50% cashback, shop now", false, ""))
