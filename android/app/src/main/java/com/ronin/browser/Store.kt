@@ -49,6 +49,13 @@ class Store(ctx: Context) {
 
     fun clearHistory() = write("history", emptyList())
 
+    /** Deletes every visit whose address matches (adult / gambling sites). */
+    fun removeHistory(match: (String) -> Boolean) {
+        val all = read("history")
+        val keep = all.filter { !match(it.url) }
+        if (keep.size != all.size) write("history", keep)
+    }
+
     var keepHistory: Boolean
         get() = p.getBoolean("keepHistory", true)
         set(v) { p.edit().putBoolean("keepHistory", v).apply(); if (!v) clearHistory() }

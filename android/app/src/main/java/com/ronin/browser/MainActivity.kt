@@ -81,6 +81,7 @@ class MainActivity : AppCompatActivity() {
         @Volatile var url = ""
         @Volatile var topHost = ""
         @Volatile var isTools = false // Ronin's own PDF / Photo tools page is open in this tab
+        var isPrivate = false // adult / gambling site: own cookies, no history, wiped when closed
     }
 
     private val app get() = application as RoninApp
@@ -143,6 +144,8 @@ class MainActivity : AppCompatActivity() {
         )
         super.onCreate(savedInstanceState)
         buildUi()
+        app.store.removeHistory { Sensitive.site(it) } // old visits of adult / gambling sites go away
+        wipePrivate() // left over if Ronin was closed with a private tab open
         PlayerBridge.control = { a -> ui.post { mediaControl(a) } }
 
         val restore = savedInstanceState?.getStringArrayList("tabs")
@@ -179,7 +182,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(out: Bundle) {
         super.onSaveInstanceState(out)
-        val list = browsingTabs() // Ronin Tools is not kept as a tab
+        val list = browsingTabs().filter { !it.isPrivate } // Ronin Tools and private tabs are not kept
         out.putStringArrayList("tabs", ArrayList(list.map { it.url.ifEmpty { HOME } }))
         out.putInt("active", list.indexOf(current).coerceAtLeast(0))
     }
@@ -329,8 +332,12 @@ class MainActivity : AppCompatActivity() {
     // ---- tabs -----------------------------------------------------------------------
 
     @SuppressLint("SetJavaScriptEnabled")
-    private fun makeWebView(t: () -> Tab): RoninWebView {
+    private fun makeWebView(t: () -> Tab, private: Boolean = false): RoninWebView {
         val w = RoninWebView(this)
+        // a private tab keeps its cookies and storage apart from everything else
+        if (private && WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
+            try { androidx.webkit.ProfileStore.getInstance().getOrCreateProfile(PRIVATE_PROFILE); androidx.webkit.WebViewCompat.setProfile(w, PRIVATE_PROFILE) } catch (e: Exception) { }
+        }
         w.setBackgroundColor(homeBg()) // a new tab opens dark, like its page (no white flash)
         w.settings.userAgentString = phoneUa
         w.settings.apply {
@@ -366,10 +373,11 @@ class MainActivity : AppCompatActivity() {
 
     private val adblockJs: String by lazy { assets.open("ronin/inject_adblock.js").bufferedReader().readText() }
 
-    fun newTab(url: String, select: Boolean = true): Tab {
+    fun newTab(url: String, select: Boolean = true, private: Boolean = false): Tab {
         lateinit var tab: Tab
-        val w = makeWebView { tab }
+        val w = makeWebView({ tab }, private)
         tab = Tab(w)
+        tab.isPrivate = private
         tabs.add(tab)
         holder.addView(w)
         w.visibility = View.GONE
@@ -392,7 +400,9 @@ class MainActivity : AppCompatActivity() {
         tabs.remove(t)
         holder.removeView(t.web)
         if (t == mediaTab) { mediaTab = null; mediaPlaying = false }
+        if (t.isPrivate) { t.web.clearCache(true); t.web.clearHistory() }
         t.web.destroy()
+        if (t.isPrivate && tabs.none { it.isPrivate }) wipePrivate()
         if (exporting) { exporting = false; readBar.visibility = View.GONE }
         val rest = browsingTabs()
         if (rest.isEmpty()) newTab(HOME) else if (current == t) select(rest[(minOf(i, rest.size) - 1).coerceAtLeast(0)])
@@ -426,7 +436,7 @@ class MainActivity : AppCompatActivity() {
                 setOnClickListener { select(t) }
             }
             val name = TextView(this).apply {
-                text = t.title.ifBlank { if (t.url == HOME || t.url.isEmpty()) "New tab" else display(t.url) }
+                text = (if (t.isPrivate) "🕶 " else "") + t.title.ifBlank { if (t.url == HOME || t.url.isEmpty()) "New tab" else display(t.url) }
                 setTextColor(Color.parseColor(if (on) "#FFFFFF" else "#9AA3B2"))
                 textSize = 14f
                 setSingleLine(true)
@@ -476,7 +486,16 @@ class MainActivity : AppCompatActivity() {
         load(t, Omnibox.resolve(text) ?: return)
     }
 
+    /** An adult / gambling site opens in a private tab (the empty tab it was typed in goes away). */
+    private fun openPrivate(url: String, from: Tab?) {
+        val blank = from != null && !from.isPrivate && (from.url.isEmpty() || from.url == HOME)
+        newTab(url, select = true, private = true)
+        if (blank && from != null && from in tabs) closeTab(from)
+        Toast.makeText(this, "🕶 Private tab: इसकी history और cookies save नहीं होंगी", Toast.LENGTH_SHORT).show()
+    }
+
     fun load(t: Tab, url: String) {
+        if (!t.isPrivate && Sensitive.site(url)) { openPrivate(url, t); return }
         if (url.startsWith(TOOLS)) {
             t.isTools = true
             t.url = TOOLS
@@ -549,6 +568,7 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
             if (url == BACK_TO_SAFETY) { leaveDangerPage(tab()); return true }
+            if (req.isForMainFrame && !tab().isPrivate && Sensitive.site(url)) { openPrivate(url, tab()); return true }
             if (url.startsWith("https://ronin.newtab/")) { quickLinkChange(tab(), req.url); return true }
             if (url.startsWith("https://ronin.data/save")) {
                 val t = tab()
@@ -629,7 +649,7 @@ class MainActivity : AppCompatActivity() {
             t.title = view.title ?: ""
             updateTabsButton()
             showDataButton(t)
-            if (url.startsWith("http") && !url.startsWith("https://ronin.home") && !t.title.startsWith("⛔")) app.store.addHistory(t.title, url)
+            if (url.startsWith("http") && !url.startsWith("https://ronin.home") && !t.title.startsWith("⛔") && !t.isPrivate && !Sensitive.site(url)) app.store.addHistory(t.title, url)
         }
 
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
@@ -814,6 +834,17 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     private var beforeTools: Tab? = null
     private fun browsingTabs() = tabs.filter { !it.isTools }
 
+    /** Nothing of the private tabs stays: cookies and site storage of their own profile are deleted. */
+    private fun wipePrivate() {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) return
+        try {
+            androidx.webkit.ProfileStore.getInstance().getProfile(PRIVATE_PROFILE)?.let { p ->
+                p.cookieManager.removeAllCookies(null)
+                p.webStorage.deleteAllData()
+            }
+        } catch (e: Exception) { }
+    }
+
     fun openTools() {
         val t = tabs.firstOrNull { it.isTools }
         if (t == current) return
@@ -829,6 +860,8 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     }
 
     fun openToolsForTest() = openTools()
+    fun currentIsPrivateForTest() = current?.isPrivate == true
+    fun historyHasForTest(part: String) = app.store.history.any { it.url.contains(part) }
 
     /** A file of the tools page, from inside the app (only for a tab Ronin opened the tools in). */
     private fun toolsFile(t: Tab, path: String): WebResourceResponse {
@@ -884,6 +917,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         savedDialog?.dismiss()
         savedDialog = AlertDialog.Builder(this).setMessage("✔ Downloads → Ronin में save:\n$name")
             .setPositiveButton("खोलें") { _, _ -> openFile(uri, mime) }
+            .setNeutralButton("Share / WhatsApp") { _, _ -> shareFile(uri, mime) }
             .setNegativeButton("ठीक है", null).show()
     }
 
@@ -953,8 +987,10 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         kotlin.concurrent.thread(name = "ronin-export") {
             try {
                 val te = TableExport(json)
-                val base = (te.title.ifBlank { te.site }).replace(Regex("[\\\\/:*?\"<>|]+"), " ").trim().take(60).ifEmpty { "Table" } +
-                    " " + java.text.SimpleDateFormat("yyyy-MM-dd HH.mm", java.util.Locale.US).format(java.util.Date())
+                // short, plain names every portal accepts: Teacher_Level_20261114_1530.xlsx
+                fun clean(x: String) = java.text.Normalizer.normalize(x, java.text.Normalizer.Form.NFKD).replace(Regex("[^A-Za-z0-9]+"), "_").trim('_').take(24).trimEnd('_')
+                val base = clean(te.title).ifEmpty { clean(te.site.removePrefix("www.")) }.ifEmpty { "data" } +
+                    "_" + java.text.SimpleDateFormat("yyyyMMdd_HHmm", java.util.Locale.US).format(java.util.Date())
                 val x = saveToDownloads("$base.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", te.xlsx())
                 val p = saveToDownloads("$base.pdf", "application/pdf", te.pdf())
                 runOnUiThread {
@@ -966,7 +1002,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                             else (if (te.partial.isNotEmpty()) "⚠ अधूरा / NOT complete: ${te.partial}\n\n" else "") + "${te.rows.size} पंक्तियाँ\nदोहराए: ${(c["dupRows"] ?: 0) + (c["dupNames"] ?: 0)} · मिलते-जुलते नाम: ${c["similar"] ?: 0} · संभावित ग़लतियाँ: ${c["spell"] ?: 0}\n\nDownloads → Ronin में save है।")
                         .setPositiveButton("PDF खोलें") { _, _ -> openFile(p, "application/pdf") }
                         .setNeutralButton("Excel खोलें") { _, _ -> openFile(x, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") }
-                        .setNegativeButton("ठीक है", null).show()
+                        .setNegativeButton("PDF Share") { _, _ -> shareFile(p, "application/pdf") }.show()
                 }
             } catch (e: Exception) {
                 runOnUiThread { exporting = false; Toast.makeText(this, "📊 File नहीं बन सकी: ${e.message}", Toast.LENGTH_LONG).show() }
@@ -991,6 +1027,17 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         val f = java.io.File(getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS), name)
         f.writeBytes(bytes)
         return androidx.core.content.FileProvider.getUriForFile(this, "$packageName.files", f)
+    }
+
+    /** Sends a saved file to WhatsApp, Gmail... (Android's share list). */
+    private fun shareFile(uri: Uri?, mime: String) {
+        uri ?: return
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = mime
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try { startActivity(Intent.createChooser(send, "भेजें / Share")) } catch (e: Exception) { Toast.makeText(this, "Share नहीं हो सका", Toast.LENGTH_SHORT).show() }
     }
 
     private fun openFile(uri: Uri?, mime: String) {
@@ -1245,6 +1292,7 @@ h1{margin:0 0 4px;font-size:24px}p.sub{margin:0 0 6px;opacity:.7}p.note{margin-t
         const val BACK_TO_SAFETY = "https://ronin.home/back"
         const val TRUST_PREFIX = "https://ronin.home/trust"
         const val TOOLS = "https://ronin.home/tools/"
+        const val PRIVATE_PROFILE = "ronin-private"
         const val GOOGLE = "https://www.google.com/"
         /** Proves "save this file" came from the tools page. */
         val toolsKey: String = java.util.UUID.randomUUID().toString().replace("-", "")

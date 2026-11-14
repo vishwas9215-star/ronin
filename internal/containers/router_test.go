@@ -1,6 +1,7 @@
 package containers
 
 import (
+	"strings"
 	"testing"
 
 	"roninbrowser/internal/safemoney"
@@ -66,5 +67,21 @@ func TestRoute(t *testing.T) {
 func TestValid(t *testing.T) {
 	if !Banking.Valid() || Container("X").Valid() {
 		t.Fatal("Valid() wrong")
+	}
+}
+
+func TestSensitiveSitesOpenPrivate(t *testing.T) {
+	Sensitive = func(u string) bool { return strings.Contains(u, "xvideos") }
+	defer func() { Sensitive = nil }()
+	for _, c := range []Container{Personal, Trading, Calls, Banking} {
+		if d := Route(c, Nav{URL: "https://www.xvideos.com/", UserInitiated: true}, safemoney.Lists{}); d.Action != Move || d.Target != Private {
+			t.Fatalf("%s: %+v", c, d)
+		}
+	}
+	if d := Route(Private, Nav{URL: "https://www.xvideos.com/", UserInitiated: true}, safemoney.Lists{}); d.Action == Move {
+		t.Fatal("private window moves again")
+	}
+	if d := Route(Personal, Nav{URL: "https://www.wikipedia.org/", UserInitiated: true}, safemoney.Lists{}); d.Action == Move {
+		t.Fatal("normal site moved")
 	}
 }

@@ -2,6 +2,7 @@ package history
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -56,5 +57,22 @@ func TestHistory(t *testing.T) {
 	}
 	if err := s2.Clear(time.Time{}); err != nil || Open(dir).Len() != 0 {
 		t.Error("clear all not saved")
+	}
+}
+
+func TestSkipAndRemoveWhere(t *testing.T) {
+	s := Open(t.TempDir())
+	s.Add("Wiki", "https://www.wikipedia.org/")
+	s.Add("Old", "https://www.pornhub.com/x")
+	Skip = func(u string) bool { return strings.Contains(u, "porn") }
+	defer func() { Skip = nil }()
+	s.Add("New", "https://www.pornhub.com/y")
+	if n := s.RemoveWhere(Skip); n != 1 {
+		t.Fatalf("removed %d", n)
+	}
+	for _, e := range s.Search("", 10) {
+		if strings.Contains(e.URL, "porn") {
+			t.Fatal("still in history: " + e.URL)
+		}
 	}
 }

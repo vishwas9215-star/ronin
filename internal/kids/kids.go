@@ -59,6 +59,10 @@ var adultWords = []string{
 	"nude", "nudes", "hentai", "erotic", "escort", "escorts", "camgirl", "onlyfans", "brazzers", "milf",
 	"casino", "casinos", "betting", "bet365", "1xbet", "dafabet", "parimatch", "satta", "matka",
 	"rummy", "teenpatti", "poker", "lottery", "gambling", "slots", "dream11", "mpl",
+	// well-known adult sites whose names have none of the words above
+	"chaturbate", "stripchat", "spankbang", "eporner", "beeg", "motherless", "rule34", "fapello", "bangbros",
+	"livejasmin", "bongacams", "camsoda", "myfreecams", "antarvasna", "desitales", "kamukta", "nhentai",
+	"tnaflix", "youjizz", "thumbzilla", "porntrex", "hqporner", "fapster", "xtube", "cam4", "camsex",
 }
 
 // LooksAdult reports whether a host name itself shows an adult or gambling site.

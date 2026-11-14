@@ -118,6 +118,52 @@ func (t *Tab) exportData() {
 	})
 }
 
+// shortFileName makes a short, plain name every portal accepts: letters, digits and _
+// ("Teacher_Level", "Prerna_UDISE_Match"), then the date and time, without an extension.
+func shortFileName(title, site string) string {
+	clean := func(s string) string {
+		var b strings.Builder
+		under := false
+		for _, r := range s {
+			if r < 128 && (r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+				b.WriteRune(r)
+				under = false
+			} else if !under && b.Len() > 0 {
+				b.WriteByte('_')
+				under = true
+			}
+		}
+		out := strings.Trim(b.String(), "_")
+		if len(out) > 24 {
+			out = strings.Trim(out[:24], "_")
+		}
+		return out
+	}
+	name := clean(title)
+	if name == "" {
+		name = clean(strings.TrimPrefix(site, "www."))
+	}
+	if name == "" {
+		name = "data"
+	}
+	p := filepath.Join(downloadsDir(), name+"_"+time.Now().Format("20060102_1504"))
+	return filepath.Base(uniqueBase(p))
+}
+
+// uniqueBase adds _2, _3... when name.xlsx is already there.
+func uniqueBase(p string) string {
+	if _, err := os.Stat(p + ".xlsx"); err != nil {
+		return p
+	}
+	for i := 2; i < 1000; i++ {
+		c := fmt.Sprintf("%s_%d", p, i)
+		if _, err := os.Stat(c + ".xlsx"); err != nil {
+			return c
+		}
+	}
+	return p
+}
+
 // keepAwake stops Windows from sleeping (and the screen from going off) while data is read.
 func keepAwake(on bool) {
 	const esContinuous, esSystem, esDisplay = 0x80000000, 0x00000001, 0x00000002
@@ -147,7 +193,7 @@ func (t *Tab) saveData(body string) {
 	if t.isTools {
 		t.title = d.Title // the file is named after what was merged
 	}
-	base := strings.TrimSuffix(pageFileName(t, ".xlsx"), ".xlsx")
+	base := filepath.Join(downloadsDir(), shortFileName(d.Title, d.Site))
 	xlsx := base + ".xlsx"
 	if err := os.WriteFile(xlsx, x, 0o644); err != nil {
 		w.bar(t, "error", "📊 Excel file save नहीं हुई: "+err.Error(), nil)

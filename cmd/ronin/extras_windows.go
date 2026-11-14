@@ -13,14 +13,34 @@ import (
 	"roninbrowser/internal/containers"
 	"roninbrowser/internal/focus"
 	"roninbrowser/internal/history"
+	"roninbrowser/internal/kids"
 )
 
 // ---- History -------------------------------------------------------------------
 
 var hist *history.Store
 
+// sensitiveSite: adult and gambling sites. They open in a Private window and are never
+// written to the history (old entries are removed when Ronin starts).
+func sensitiveSite(u string) bool {
+	if !strings.HasPrefix(u, "http") {
+		return false
+	}
+	if kids.LooksAdult(u) {
+		return true
+	}
+	kb := kidsBlocker.Load()
+	return kb != nil && kb.Blocked(u)
+}
+
 func initHistory() {
+	history.Skip = sensitiveSite
+	containers.Sensitive = sensitiveSite
 	hist = history.Open(dataDir)
+	if n := hist.RemoveWhere(sensitiveSite); n > 0 {
+		_ = hist.Save()
+		logf("history: removed %d visits of sensitive sites", n)
+	}
 	go func() {
 		for range time.Tick(time.Minute) {
 			_ = hist.Save()

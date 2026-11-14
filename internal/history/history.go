@@ -49,9 +49,12 @@ func okURL(u string) bool {
 	return (strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "http://")) && len(u) < 4096
 }
 
+// Skip, when set, keeps pages out of the history (adult and gambling sites).
+var Skip func(url string) bool
+
 // Add records a visit (the same page again moves to the top).
 func (s *Store) Add(title, u string) {
-	if !okURL(u) {
+	if !okURL(u) || Skip != nil && Skip(u) {
 		return
 	}
 	title = strings.TrimSpace(title)
@@ -148,6 +151,24 @@ func (s *Store) Search(q string, max int) []Entry {
 		}
 	}
 	return out
+}
+
+// RemoveWhere deletes every visit whose address matches and tells how many went.
+func (s *Store) RemoveWhere(match func(url string) bool) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	keep := s.list[:0]
+	for _, e := range s.list {
+		if !match(e.URL) {
+			keep = append(keep, e)
+		}
+	}
+	n := len(s.list) - len(keep)
+	if n > 0 {
+		s.dirty = true
+	}
+	s.list = keep
+	return n
 }
 
 // Remove deletes one page (every visit of it) from the history.

@@ -47,3 +47,13 @@ for pg in range(3):
     c.showPage()
 c.save()
 print(os.path.getsize(os.path.join(out, "textonly.pdf")))
+# a small Word file (Hindi + a table) for Convert -> PDF
+try:
+    import docx
+    d = docx.Document()
+    d.add_paragraph("कार्यालय आदेश: यह एक परीक्षण दस्तावेज़ है।")
+    t = d.add_table(rows=2, cols=2)
+    t.cell(0, 0).text = "नाम"; t.cell(0, 1).text = "पद"; t.cell(1, 0).text = "राम कुमार"; t.cell(1, 1).text = "सहायक अध्यापक"
+    d.save(os.path.join(out, "letter.docx"))
+except ImportError:
+    pass

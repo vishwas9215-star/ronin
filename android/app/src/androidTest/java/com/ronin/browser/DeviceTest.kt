@@ -312,7 +312,7 @@ class DeviceTest {
         ActivityScenario.launch(MainActivity::class.java).use { sc ->
             Thread.sleep(1500)
             sc.onActivity { a -> a.openToolsForTest() }
-            assertTrue("tools page did not open", waitFor(20) { eval(sc, "document.querySelectorAll('.tool').length") == "14" })
+            assertTrue("tools page did not open", waitFor(20) { eval(sc, "document.querySelectorAll('.tool').length") == "19" })
             eval(sc, "window.__roninToolsOpen('datamatch'),1")
             Thread.sleep(800)
             shot("10-datamatch-page")
@@ -326,11 +326,24 @@ class DeviceTest {
             eval(sc, "document.querySelector('button.big.go').click(),1")
             var found = emptyList<Pair<String, Long>>()
             assertTrue("matched Excel + PDF not saved", waitFor(40) {
-                found = recentDownloads(before, "Prerna + UDISE+")
+                found = recentDownloads(before, "Prerna_UDISE")
                 found.any { it.first.endsWith(".xlsx") && it.second > 500 } && found.any { it.first.endsWith(".pdf") && it.second > 500 }
             })
             Thread.sleep(800)
             shot("12-datamatch-saved")
+        }
+    }
+
+    @Test
+    fun adultSitesOpenInAPrivateTabWithoutHistory() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            sc.onActivity { a -> a.go("https://www.freeporn-ronin-test.com/") }
+            Thread.sleep(2500)
+            var priv = false; var inHistory = true
+            sc.onActivity { a -> priv = a.currentIsPrivateForTest(); inHistory = a.historyHasForTest("freeporn-ronin-test") }
+            assertTrue("adult site did not open in a private tab", priv)
+            assertTrue("adult site was written to the history", !inHistory)
         }
     }
 
@@ -341,7 +354,7 @@ class DeviceTest {
             var strip = 0
             sc.onActivity { a -> strip = a.tabStripForTest().childCount }
             sc.onActivity { a -> a.openToolsForTest() }
-            assertTrue("tools page did not open", waitFor(20) { eval(sc, "document.querySelectorAll('.tool').length") == "14" })
+            assertTrue("tools page did not open", waitFor(20) { eval(sc, "document.querySelectorAll('.tool').length") == "19" })
             var after = 0
             sc.onActivity { a -> after = a.tabStripForTest().childCount }
             assertEquals("Ronin Tools must not show as a tab", strip, after)
@@ -350,13 +363,13 @@ class DeviceTest {
             eval(sc, "window.__roninToolsSelfTest().then(function(r){window.__selfTest=r},function(e){window.__selfTest='error '+e.message}),1")
             assertTrue("self test: " + eval(sc, "window.__selfTest"), waitFor(60) { eval(sc, "window.__selfTest||''").contains("ok 2") })
             var found = emptyList<Pair<String, Long>>()
-            assertTrue("tools file not saved", waitFor(20) { found = recentDownloads(before, "Ronin tools self-test"); found.any { it.first.endsWith(".pdf") && it.second > 1000 } })
+            assertTrue("tools file not saved", waitFor(20) { found = recentDownloads(before, "Ronin_tools_selftest"); found.any { it.first.endsWith(".pdf") && it.second > 1000 } })
             Thread.sleep(800)
             shot("14-tools-saved")
         }
     }
 
-    private fun recentDownloads(since: Long, prefix: String = "Student list test"): List<Pair<String, Long>> {
+    private fun recentDownloads(since: Long, prefix: String = "Student_list_test"): List<Pair<String, Long>> {
         if (Build.VERSION.SDK_INT < 29) return emptyList()
         val out = ArrayList<Pair<String, Long>>()
         app.contentResolver.query(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,

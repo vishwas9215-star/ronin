@@ -75,10 +75,18 @@ type Decision struct {
 //     goes back to PERSONAL.
 //   - Dhan, TradingView and Ronin Terminal open in TRADING.
 //   - KIDS never leaves KIDS and cannot open banking or trading sites.
+//
+// Sensitive tells adult / gambling sites (set by the app). They always open in a Private
+// window, so nothing about them is kept (history, cookies, passwords).
+var Sensitive func(url string) bool
+
 func Route(cur Container, n Nav, l safemoney.Lists) Decision {
 	v := safemoney.Classify(n.URL, l)
 	d := Decision{Action: Stay, Target: cur, Verdict: v}
 	byUser := n.UserInitiated && (!n.Redirected || n.ViaRedirector)
+	if cur != Private && cur != Kids && Sensitive != nil && Sensitive(n.URL) {
+		return move(d, Private)
+	}
 
 	if v.Lookalike {
 		d.Action = Warn

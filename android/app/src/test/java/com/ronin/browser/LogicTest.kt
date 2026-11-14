@@ -118,6 +118,11 @@ class LogicTest {
         assertTrue(rules.quickLinks.any { it.name == "Fyers" && it.section == "Trading" })
     }
 
+    @Test fun sensitiveSites() {
+        assertTrue(Sensitive.site("https://www.pornhub.com/x") && Sensitive.site("https://freeporn.example/") && Sensitive.site("https://chaturbate.com/"))
+        assertTrue(!Sensitive.site("https://www.wikipedia.org/") && !Sensitive.site("https://essex.ac.uk/") && !Sensitive.site("https://prernaup.in/"))
+    }
+
     @Test fun mergeResultExcel() {
         val t = TableExport(File("../../internal/tablexport/testdata/merge.json").readText())
         assertTrue(t.info.any { it.first.startsWith("अंतर वाले") } && t.legend.any { it.first == "diff" } && t.printCols.isNotEmpty())

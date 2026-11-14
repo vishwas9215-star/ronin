@@ -158,6 +158,9 @@
     return { tables, site: '', title: '' };
   }
 
+  // one file out of a zip (a .docx is a zip): its text, or null
+  M.unzipText = async (buf, name) => (await unzip(buf)).get(name);
+
   // readFile: {name, bytes(ArrayBuffer)} -> {tables:[{head, rows}], site, title}
   M.readFile = async function (name, buf) {
     const u8 = new Uint8Array(buf.slice(0, 8));

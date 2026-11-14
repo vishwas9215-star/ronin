@@ -1,4 +1,4 @@
-# Ronin Browser 3 — HANDOFF 8 (14 Nov 2026, 3.8.0 published)
+# Ronin Browser 3 — HANDOFF 8 (14 Nov 2026, 3.8.0 published; 3.9.0 built, waiting for approval)
 
 Owner: Vishwas (Hindi; both hands injured: fewest taps/typing). Not a coder: explain in Hindi, technical words in English.
 Current version: **3.8.0** published (Windows + Android). Rollback: 3.7.1 / 3.7.0 / 3.6.1 releases on GitHub; Windows
@@ -85,6 +85,15 @@ Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + tes
 - Data button: progress box on the page (% from "1 to 10 of 53" or page numbers); "Next" that loads a new web page
   or a postback: progress kept in sessionStorage, native re-injects table_export.js and calls resume(); 60 min cap;
   screen / laptop kept awake while reading.
+- 3.9.0 tools: Edit PDF / Fill Form (one editor: tap a typed word -> white-out + new text; free text; white-out box;
+  sign block from saved signers {name, post, office, signature} in localStorage 'ronin.signers' - posts are free text,
+  chips only suggestions), Documents to PDF (camera/photos/PDFs, scan look, 500 KB-5 MB limit), Edit Photo (hand crop,
+  turn, passport/stamp/sign sizes, B&W, JPG/PNG, KB), Convert (Excel->PDF, PDF->Excel via text positions, PDF->JPG,
+  docx->PDF text+tables). File names: fileName() = ascii letters/digits/_ <=24 + tag + one extension; data export
+  names Title_yyyymmdd_hhmm. Android: Share / WhatsApp buttons. Owner rule: NOTHING hard-coded (posts, offices, dates).
+- 3.9.0 sensitive sites (kids.LooksAdult + kidsBlocker list): Windows containers.Sensitive -> always moved to a Private
+  window; history.Skip + RemoveWhere purge at start. Android Sensitive.kt -> private tab (WebView MULTI_PROFILE
+  'ronin-private', wiped when the last private tab closes), never in history, old entries removed at start.
 - Tests: tools/uitest/merge.js (fixtures in tools/uitest/fixtures, made-up), pdftools.js (fixtures from
   make_tool_fixtures.py), DeviceTest merge + tools self-test.
 - Owner's real Prerna file checked locally only (never committed): fake UDISE with 6 planted changes -> all 6 found.
