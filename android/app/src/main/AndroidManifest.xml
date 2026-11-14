@@ -74,14 +74,45 @@
             </intent-filter>
         </activity>
 
-        <!-- its own icon on the home screen: the family's email with Safe Mail -->
+        <!-- Ronin Mail / Ronin Social: their own app window (own task in Recents, Back stays inside) -->
+        <activity
+            android:name=".MailActivity"
+            android:exported="false"
+            android:icon="@mipmap/ic_mail"
+            android:label="Ronin Mail"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.ronin.browser.mail"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".SocialActivity"
+            android:exported="false"
+            android:icon="@mipmap/ic_social"
+            android:label="Ronin Social"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.ronin.browser.social"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
+            android:windowSoftInputMode="adjustResize" />
+        <!-- the home-screen icons (same component names as before, so a chosen icon stays) -->
         <activity-alias
             android:name=".MailLauncher"
-            android:targetActivity=".MainActivity"
+            android:targetActivity=".MailActivity"
             android:enabled="false"
             android:exported="true"
             android:icon="@mipmap/ic_mail"
             android:label="Ronin Mail">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".SocialLauncher"
+            android:targetActivity=".SocialActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_social"
+            android:label="Ronin Social">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -150,6 +181,7 @@
             </intent-filter>
         </receiver>
         <receiver android:name=".SmsSentReceiver" android:exported="false" />
+        <receiver android:name=".OtpCopyReceiver" android:exported="false" />
         <service
             android:name=".HeadlessSmsSendService"
             android:enabled="false"

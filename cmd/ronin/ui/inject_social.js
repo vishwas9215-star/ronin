@@ -346,9 +346,38 @@
 
   // ---- watch the page as it scrolls / loads more
   var queued = false;
+  // "Open in the app" / "Use the Gmail app" banners: the family stays in the protected window
+  var APP_TEXT = /^(open( in)?( the)? app|use (the )?app|get the app|open instagram|open facebook|open whatsapp|try the gmail app|use the gmail app|switch to the app|ऐप में खोलें|ऐप खोलें)$/i;
+  function hideAppPromos(root) {
+    var list = root.querySelectorAll("a[href*='play.google.com/store/apps'],a[href*='com.google.android.gm'],a[href^='intent:'],a,button,[role=button]");
+    for (var i = 0; i < list.length && i < 400; i++) {
+      var n = list[i];
+      if (n.__roninPromo) continue;
+      var href = n.getAttribute && (n.getAttribute("href") || "");
+      var t = (n.textContent || "").replace(/\s+/g, " ").trim();
+      if (!(/play\.google\.com\/store\/apps|com\.google\.android\.gm|^intent:/.test(href) || (t.length < 40 && APP_TEXT.test(t)))) continue;
+      n.__roninPromo = true;
+      // hide the small banner around it (not the page): climb while the box stays short
+      var box = n;
+      for (var up = 0; up < 3 && box.parentElement && box.parentElement !== document.body; up++) {
+        var r = box.parentElement.getBoundingClientRect();
+        if (r.height > 140 || r.height === 0) break;
+        box = box.parentElement;
+      }
+      box.style.setProperty("display", "none", "important");
+    }
+  }
+  function mailChip() {
+    if (document.getElementById("ronin-mail-on") || !document.body) return;
+    var c = el("div", "ronin-scam"); c.id = "ronin-mail-on";
+    c.textContent = L("🛡 Safe Mail चालू: हर खोला गया email ठगी / धमकी के लिए जाँचा जा रहा है", "🛡 Safe Mail is on: every email you open is checked for scams / threats");
+    c.style.cssText = "position:fixed;left:10px;right:10px;bottom:12px;z-index:2147483646;background:#dcfce7;color:#14532d;border-color:#16a34a;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.3)";
+    put(c);
+    setTimeout(function () { c.remove(); }, 6000);
+  }
   function work() {
     queued = false;
-    try { hideAds(document); if (!isMail()) scanText(document); strangers(); } catch (e) {}
+    try { hideAds(document); hideAppPromos(document); if (!isMail()) scanText(document); strangers(); } catch (e) {}
     if (isMail()) { clearTimeout(mailTimer); mailTimer = setTimeout(function () { try { mailCheck(); } catch (e) {} }, 300); }
   }
   function later() { if (!queued) { queued = true; setTimeout(work, 400); } }
@@ -371,6 +400,7 @@
     new MutationObserver(later).observe(document.documentElement, { childList: true, subtree: true });
     window.addEventListener("hashchange", later);
     if (C().social) buttons();
+    if (isMail()) mailChip();
   }
 
   // ---- Safe Social tab: big labelled buttons

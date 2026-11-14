@@ -35,6 +35,13 @@ object SmsSort {
 
     // banks and offices never go to ads, even when they write "cashback" or "free"
     private val bankish = Regex("(BK|BNK|BANK|SBI|HDFC|ICICI|AXIS|PNB|KOTAK|CANARA|UIDAI|EPFO|IRCTC|UPPCL|GOV|NIC)", RegexOption.IGNORE_CASE)
+    // a real transaction / OTP / bill: never hidden as an ad, whatever else it says
+    private val transaction = Regex("(\\botp\\b|one.?time|verification|\\bcode\\b|password|debited|credited|a/c|\\bacct|account no|\\bbal(ance)?\\b|txn|transaction|\\bupi\\b|\\bnach\\b|\\bemi\\b|\\bdue\\b|overdue|\\bpaid\\b|payment|received|\\bsent\\b|statement|policy no|premium|booking|\\bpnr\\b|ticket|order|delivered|refund|blocked|unblock|login|kyc|ओटीपी|खाता|जमा|निकासी|भुगतान)", RegexOption.IGNORE_CASE)
+    // selling / loan offers (the owner does not want to see them at all)
+    private val offer = Regex("(loan (approval|offer|eligib|limit|amount|up ?to|ready|sanction)|pre-?approved|instant loan|personal loan|get (up ?to|a loan)|apply now|apply today|lowest (rate|price|emi)|\\boffer\\b|cashback|discount|% ?off|limited (time|period)|hurry|shop now|buy now|free trial|upgrade now|lucky|congratulations|लोन|ऑफर)", RegexOption.IGNORE_CASE)
+    /** An offer / loan / selling SMS that is not a transaction. */
+    fun isOffer(body: String) = offer.containsMatchIn(body) && !transaction.containsMatchIn(body)
+
     /** A registered service / transaction / government sender ("-S", "-T", "-G"). */
     fun trustedHeader(address: String) = header.find(address.trim())?.groupValues?.get(2)?.uppercase() in setOf("S", "T", "G")
 
@@ -42,13 +49,39 @@ object SmsSort {
         if (scamLevel.isNotEmpty()) return "scam"
         val a = address.trim()
         header.find(a)?.let { m ->
-            return when (m.groupValues[2].uppercase()) { "P" -> "ads"; "S", "T", "G" -> "work"; else -> if (promo.containsMatchIn(body) && !bankish.containsMatchIn(a)) "ads" else "work" }
+            return when (m.groupValues[2].uppercase()) { "P" -> "ads"; "S", "T", "G" -> if (isOffer(body)) "ads" else "work"; else -> if (isOffer(body) || (promo.containsMatchIn(body) && !bankish.containsMatchIn(a))) "ads" else "work" }
         }
         val digits = a.filter { it.isDigit() }
         if (a.any { it.isLetter() }) return if (promo.containsMatchIn(body) && !bankish.containsMatchIn(a)) "ads" else "work" // old-style "JIOINF"
         if (digits.length in 3..6) return "work" // short codes (bank, operator)
         if (inContacts) return "work"
         return if (promo.containsMatchIn(body)) "ads" else "unknown"
+    }
+}
+
+/** The OTP / code in a message: shown big and blue, one tap copies only the digits. */
+object Otp {
+    private val before = Regex("(otp|one.?time|code|pin|password|passcode|verification|ओटीपी|कोड|पासवर्ड)[^0-9]{0,40}?(?<!\\d)(\\d{4,8})(?!\\d)", RegexOption.IGNORE_CASE)
+    private val after = Regex("(?<!\\d)(\\d{4,8})(?!\\d)[^0-9]{0,30}?(is your|is the|is ur|as your|otp|one.?time|code|ओटीपी|कोड)", RegexOption.IGNORE_CASE)
+    fun find(body: String): String? = before.find(body)?.groupValues?.get(2) ?: after.find(body)?.groupValues?.get(1)
+
+    fun copy(ctx: Context, code: String) {
+        val cm = ctx.getSystemService(android.content.ClipboardManager::class.java) ?: return
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("OTP", code).apply {
+            // Android hides a "sensitive" copy from the clipboard preview
+            if (Build.VERSION.SDK_INT >= 24) description.extras = android.os.PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
+        })
+        if (Build.VERSION.SDK_INT < 33) android.widget.Toast.makeText(ctx, L("📋 OTP copy हो गया: ", "📋 OTP copied: ") + code, android.widget.Toast.LENGTH_SHORT).show()
+    }
+}
+
+/** "📋 Copy OTP" on the SMS notification. */
+class OtpCopyReceiver : BroadcastReceiver() {
+    override fun onReceive(ctx: Context, intent: Intent) {
+        val code = intent.getStringExtra("code")?.takeIf { it.all(Char::isDigit) && it.length in 4..8 } ?: return
+        Otp.copy(ctx, code)
+        val id = intent.getIntExtra("id", 0)
+        if (id != 0) try { ctx.getSystemService(NotificationManager::class.java).cancel(id) } catch (e: Exception) { }
     }
 }
 
@@ -130,6 +163,26 @@ object SmsStore {
         try { ctx.contentResolver.update(Telephony.Sms.CONTENT_URI, ContentValues().apply { put("read", 1); put("seen", 1) }, "thread_id=? AND read=0", arrayOf(thread.toString())) } catch (e: Exception) { }
     }
 
+    /** Ads / offers are hidden, and deleted by themselves after 30 days (the owner's choice). Once a day at most. */
+    fun cleanAds(ctx: Context) {
+        if (!isDefault(ctx)) return
+        val p = ctx.getSharedPreferences("ronin_sms", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        if (now - p.getLong("adsCleaned", 0) < 20 * 3600_000L) return
+        p.edit().putLong("adsCleaned", now).apply()
+        val cut = (now - 30L * 24 * 3600_000L).toString()
+        val gone = ArrayList<Long>()
+        try {
+            ctx.contentResolver.query(Telephony.Sms.Inbox.CONTENT_URI, arrayOf("_id", "address", "body"), "date<?", arrayOf(cut), null)?.use { c ->
+                while (c.moveToNext()) {
+                    val addr = c.str("address"); val body = c.str("body")
+                    if (SmsSort.category(addr, body, contactName(ctx, addr) != null, "") == "ads") gone.add(c.lng("_id"))
+                }
+            }
+            for (id in gone) ctx.contentResolver.delete(Uri.parse("content://sms/$id"), null, null)
+        } catch (e: Exception) { }
+    }
+
     fun deleteThread(ctx: Context, thread: Long): Boolean {
         if (!isDefault(ctx)) return false
         return try { ctx.contentResolver.delete(Uri.parse("content://sms/conversations/$thread"), null, null) > 0 } catch (e: Exception) { false }
@@ -190,16 +243,21 @@ object SmsStore {
         nm.createNotificationChannel(NotificationChannel(CH_WARN, L("ठगी की चेतावनी", "Scam warnings"), NotificationManager.IMPORTANCE_DEFAULT))
         nm.createNotificationChannel(NotificationChannel(CH_QUIET, L("अनजान नंबर के SMS (बिना घंटी)", "SMS from unknown numbers (no sound)"), NotificationManager.IMPORTANCE_LOW))
     }
-    fun notify(ctx: Context, id: Int, channel: String, title: String, text: String, open: Intent) {
+    fun notify(ctx: Context, id: Int, channel: String, title: String, text: String, open: Intent, otp: String? = null) {
         channels(ctx)
         val pi = PendingIntent.getActivity(ctx, id, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val n = NotificationCompat.Builder(ctx, channel).setSmallIcon(android.R.drawable.sym_action_email).setContentTitle(title)
+        val nb = NotificationCompat.Builder(ctx, channel).setSmallIcon(android.R.drawable.sym_action_email).setContentTitle(title)
             .setContentText(text).setStyle(NotificationCompat.BigTextStyle().bigText(text)).setAutoCancel(true).setContentIntent(pi)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             // on the lock screen only "a message": OTPs and names stay hidden until unlocked
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(NotificationCompat.Builder(ctx, channel).setSmallIcon(android.R.drawable.sym_action_email).setContentTitle(L("📩 नया संदेश", "📩 New message")).build())
-            .build()
+        if (otp != null) {
+            val copy = PendingIntent.getBroadcast(ctx, id, Intent(ctx, OtpCopyReceiver::class.java).putExtra("code", otp).putExtra("id", id),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            nb.addAction(0, L("📋 OTP copy करें ($otp)", "📋 Copy OTP ($otp)"), copy)
+        }
+        val n = nb.build()
         try { ctx.getSystemService(NotificationManager::class.java).notify(id, n) } catch (e: SecurityException) { }
     }
 }
@@ -235,12 +293,13 @@ class SmsDeliverReceiver : BroadcastReceiver() {
                 }
                 val (cat, r) = try { SmsStore.categorize(ctx, address, body) } catch (e: Exception) { "work" to null }
                 when (cat) {
-                    "work" -> SmsStore.notify(ctx, address.hashCode(), SmsStore.CH_SMS, who, body, open)
+                    "work" -> SmsStore.notify(ctx, address.hashCode(), SmsStore.CH_SMS, who, body, open, Otp.find(body))
                     "unknown" -> SmsStore.notify(ctx, address.hashCode(), SmsStore.CH_QUIET, "👤 $who", body, open)
                     "scam" -> SmsStore.notify(ctx, address.hashCode(), SmsStore.CH_WARN, L("⛔ ठगी वाला SMS: $who", "⛔ Scam SMS: $who"),
                         (r?.reasons?.firstOrNull() ?: L("ठगी के संकेत", "Signs of a scam")) + L("\nRonin ने इसे ⛔ ठगी में रखा है। पैसे, OTP, PIN न दें।", "\nRonin put it in ⛔ Scam. Never give money, OTP or PIN."), open)
-                    else -> { } // ads: quietly in their tab
+                    else -> { } // ads: hidden, no sound
                 }
+                SmsStore.cleanAds(ctx)
             } finally { pending.finish() }
         }.start()
     }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the shield on a white tile: no black corners whatever shape the phone's launcher cuts -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_tile" />
+    <foreground android:drawable="@mipmap/ic_social_fg" />
+</adaptive-icon>

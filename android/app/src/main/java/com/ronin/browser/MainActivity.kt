@@ -72,7 +72,12 @@ fun keepClearOfSystemBars(root: View) {
     }
 }
 
-class MainActivity : AppCompatActivity() {
+open class MainActivity : AppCompatActivity() {
+    /** "" = the browser; "mail" / "social" = the Ronin Mail / Ronin Social icons: their own app window
+     *  (own task in Recents), only the guarded Safe Social tab, Back stays inside, ✕ leaves the app. */
+    protected open val appMode: String = ""
+    private val isApp get() = appMode.isNotEmpty()
+
 
     inner class Tab(val web: RoninWebView) {
         @Volatile var dangerHost = ""
@@ -150,11 +155,13 @@ class MainActivity : AppCompatActivity() {
         buildUi()
         app.store.removeHistory { Sensitive.site(it) } // old visits of adult / gambling sites go away
         wipePrivate() // left over if Ronin was closed with a private tab open
-        PlayerBridge.control = { a -> ui.post { mediaControl(a) } }
+        if (!isApp) PlayerBridge.control = { a -> ui.post { mediaControl(a) } }
 
         val restore = savedInstanceState?.getStringArrayList("tabs")
         val start = intent?.dataString
         when {
+            appMode == "mail" -> openMail()
+            appMode == "social" -> openSocial()
             !restore.isNullOrEmpty() -> {
                 restore.forEach { newTab(it, select = false) }
                 select(tabs[savedInstanceState.getInt("active", 0).coerceIn(0, tabs.size - 1)])
@@ -169,13 +176,15 @@ class MainActivity : AppCompatActivity() {
                 when {
                     fullView != null -> fullCallback?.onCustomViewHidden()
                     t != null && t.isTools && !t.isSocial -> leaveTools()
-                    t != null && t.isSocial -> if (t.web.canGoBack()) t.web.goBack() else if (t.url != SOCIAL) load(t, SOCIAL) else leaveSocial(t)
+                    t != null && t.isSocial -> socialBack(t)
                     t != null && !t.isSocial && t.web.canGoBack() -> t.web.goBack()
                     browsingTabs().size > 1 && t != null -> closeTab(t)
                     else -> moveTaskToBack(true) // the song keeps playing
                 }
             }
         })
+        if (isApp) return
+        Parts.sync(this)
         ui.postDelayed(mediaPoll, 1500)
         Updater.check(this, quiet = true)
         // first start of this version: which parts (Mail / Messages / Calls icons) the family wants
@@ -192,6 +201,7 @@ class MainActivity : AppCompatActivity() {
     /** "Ronin Mail" icon, and a WhatsApp / SMS message shared to Ronin ("क्या यह ठगी है?"). */
     private fun handleSpecial(i: Intent?) {
         i ?: return
+        if (isApp) return // the Mail / Social window opens its own page once, and keeps it after that
         if (i.component?.className?.endsWith(".MailLauncher") == true) { ui.post { openMail() }; return }
         if (i.action == Intent.ACTION_SEND && i.type?.startsWith("text/") == true) {
             val text = (i.getStringExtra(Intent.EXTRA_TEXT) ?: "").take(4000)
@@ -359,7 +369,7 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { act() }
         }
         socialBar.addView(socialButton(L("← पीछे", "← Back"), "socialBack") { current?.let { t -> if (t.web.canGoBack()) t.web.goBack() else load(t, SOCIAL) } })
-        socialBar.addView(socialButton(L("⊞ मेरे ऐप", "⊞ My apps"), "socialApps") { current?.let { load(it, SOCIAL) } })
+        if (appMode != "mail") socialBar.addView(socialButton(L("⊞ मेरे ऐप", "⊞ My apps"), "socialApps") { current?.let { load(it, SOCIAL) } })
         socialBar.addView(socialButton(L("✕ बंद", "✕ Close"), "socialClose") { current?.let { if (it.isSocial) leaveSocial(it) } })
         root.addView(bar); root.addView(progress); root.addView(holder); root.addView(readBar); root.addView(socialBar)
         keepClearOfSystemBars(root)
@@ -394,7 +404,8 @@ class MainActivity : AppCompatActivity() {
             WebSettingsCompat.setSafeBrowsingEnabled(w.settings, true)
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
-            WebSettingsCompat.setAlgorithmicDarkeningAllowed(w.settings, app.store.night)
+            // Safe Social shows the apps in their own colours (their own dark theme, never Ronin's forced one)
+            WebSettingsCompat.setAlgorithmicDarkeningAllowed(w.settings, app.store.night && !social)
         }
         CookieManager.getInstance().setAcceptThirdPartyCookies(w, false)
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
@@ -1024,7 +1035,19 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         }
     }
 
+    /** Back in Safe Social: back inside the site; never back to the app list by surprise. */
+    private fun socialBack(t: Tab) {
+        val list = t.web.copyBackForwardList()
+        val prev = if (list.currentIndex > 0) list.getItemAtIndex(list.currentIndex - 1)?.url else null
+        when {
+            prev != null && !prev.startsWith(SOCIAL) -> t.web.goBack()
+            appMode == "social" && !t.url.startsWith(SOCIAL) -> load(t, SOCIAL) // the Social app's own home
+            else -> leaveSocial(t)
+        }
+    }
+
     private fun leaveSocial(t: Tab) {
+        if (isApp) { moveTaskToBack(true); return } // the Mail / Social app goes away like any app
         val back = beforeSocial?.takeIf { it in tabs && !it.isSocial && !it.isTools }
         closeTab(t)
         if (back != null) select(back)
@@ -1367,7 +1390,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
 
     override fun onDestroy() {
         ui.removeCallbacks(mediaPoll)
-        if (PlayerBridge.control != null && !isChangingConfigurations) PlayerBridge.control = null
+        if (!isApp && PlayerBridge.control != null && !isChangingConfigurations) PlayerBridge.control = null
         readAloud?.shutdown()
         for (t in tabs) t.web.destroy()
         super.onDestroy()

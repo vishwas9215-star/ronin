@@ -16,9 +16,10 @@
     return e;
   };
   const when = ms => { const d = new Date(ms), n = new Date(); return (d.toDateString() === n.toDateString() ? '' : d.getDate() + '/' + (d.getMonth() + 1) + ' ') + d.toTimeString().slice(0, 5); };
-  let onlyGone = true, chat = null;
+  let onlyGone = true, chat = null, inSettings = false;
 
   async function draw() {
+    inSettings = false;
     const st = (await ask('state')) || {};
     const all = ((await ask('list')) || []).slice().reverse();
     const chats = [...new Set(all.map(m => m.chat))];
@@ -40,6 +41,7 @@
   }
 
   async function settings() {
+    inSettings = true;
     const st = (await ask('state')) || {};
     app.replaceChildren(h('div', { cls: 'top' }, h('button', { cls: 'pill', on: { click: draw } }, L('← वापस', '← Back')), h('h1', {}, L('⚙ Chat संदेश', '⚙ Chat messages')), h('span')),
       h('div', { cls: 'card' }, h('div', { cls: 'row' }, h('div', {}, L('संदेश 7 दिन रखें', 'Keep messages 7 days'), h('small', { cls: 'note', style: 'display:block' }, L('बंद करने पर सब रखे संदेश भी मिट जाते हैं।', 'Turning it off also deletes all kept messages.'))),
@@ -49,4 +51,6 @@
   }
   window.__roninChatLog = { draw }; // for the tests
   draw();
+  // the phone's Back: settings / one chat -> the list -> out of the app
+  window.__roninBack = () => { if (inSettings || chat) { inSettings = false; chat = null; draw(); return true; } return false; };
 })();

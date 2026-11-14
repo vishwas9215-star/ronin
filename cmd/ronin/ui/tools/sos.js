@@ -16,9 +16,10 @@
     kids.flat().forEach(c => e.append(c && c.nodeType ? c : document.createTextNode(c == null ? '' : String(c))));
     return e;
   };
-  let st = {};
+  let st = {}, inSetup = false;
 
   async function home() {
+    inSetup = false;
     st = (await ask('state')) || {};
     const fam = st.contacts || [];
     if (!fam.length) return setup();
@@ -45,6 +46,7 @@
   }
 
   async function setup() {
+    inSetup = true;
     st = (await ask('state')) || {};
     const fam = (st.contacts || []).slice();
     const name = h('input', { cls: 'txt', id: 'name', placeholder: L('आपका नाम (SMS में जाएगा)', 'Your name (goes in the SMS)'), value: st.name || '' });
@@ -72,4 +74,5 @@
   }
   window.__roninSos = { home }; // for the tests
   home();
+  window.__roninBack = () => { if (inSetup) { home(); return true; } return false; };
 })();

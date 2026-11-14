@@ -16,7 +16,7 @@
   };
   const LANG = window.__roninLang || ((navigator.language || 'en').toLowerCase().indexOf('hi') === 0 ? 'hi' : 'en');
   const L = (hi, en) => LANG === 'hi' ? hi : en;
-  let tab = 'pad', st = {}, number = '';
+  let tab = 'pad', st = {}, number = '', inSettings = false;
   const when = ms => { const d = new Date(ms), n = new Date(); return d.toDateString() === n.toDateString() ? d.toTimeString().slice(0, 5) : d.getDate() + '/' + (d.getMonth() + 1); };
   const TYPE = { 1: L('↙ आई', '↙ incoming'), 2: L('↗ की', '↗ outgoing'), 3: L('✖ छूटी', '✖ missed'), 5: L('⛔ काटी', '⛔ rejected'), 6: L('🚫 रोकी', '🚫 blocked') };
   // codes with * or # (e.g. *401*...) can send your calls and OTPs to someone else: ask first
@@ -47,6 +47,7 @@
   }
 
   async function draw() {
+    inSettings = false;
     st = (await ask('state')) || {};
     if (tab === 'pad') return pad();
     const rows = tab === 'recent' ? ((await ask('recent')) || []) : ((await ask('contacts')) || []);
@@ -84,6 +85,7 @@
   }
 
   async function settings() {
+    inSettings = true;
     st = (await ask('state')) || {};
     const sw = (key, title, sub) => h('div', { cls: 'row' }, h('div', {}, title, h('small', { cls: 'note', style: 'display:block' }, sub)),
       h('button', { cls: 'pill' + (st[key] ? ' green' : ''), 'data-set': key, on: { click: async e => { st[key] = !st[key]; await ask('set', { key, on: st[key] }); e.target.className = 'pill' + (st[key] ? ' green' : ''); e.target.textContent = st[key] ? L('चालू', 'On') : L('बंद', 'Off'); } } }, st[key] ? L('चालू', 'On') : L('बंद', 'Off')));
@@ -135,6 +137,12 @@
       h('h2', { style: 'margin-top:12px' }, '📂 Recordings'), h('button', { cls: 'pill', id: 'showRecs', on: { click: showRecs } }, L('दिखाएँ', 'Show')), recs);
   }
 
+  // the phone's Back: settings -> keypad / list -> keypad -> out of the app
+  window.__roninBack = () => {
+    if (inSettings) { draw(); return true; }
+    if (tab !== 'pad') { tab = 'pad'; draw(); return true; }
+    return false;
+  };
   window.__roninDial = n => { number = String(n || ''); tab = 'pad'; draw(); };
   if (location.hash.startsWith('#num=')) number = decodeURIComponent(location.hash.slice(5));
   draw();

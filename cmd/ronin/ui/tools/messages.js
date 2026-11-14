@@ -27,12 +27,39 @@
   const LANG = window.__roninLang || ((navigator.language || 'en').toLowerCase().indexOf('hi') === 0 ? 'hi' : 'en');
   const L = (hi, en) => LANG === 'hi' ? hi : en;
   const TABS = [['work', '✅', L('काम के', 'Important')], ['unknown', '👤', L('अनजान', 'Unknown')], ['ads', '📢', L('विज्ञापन', 'Ads')], ['scam', '⛔', L('ठगी', 'Scam')]];
+  const NAV = TABS.filter(t => t[0] !== 'ads'); // ads / loan offers are hidden (Settings can show them)
   let tab = 'work', view = 'list', cur = null, threads = [], st = {};
   const when = ms => { const d = new Date(ms), n = new Date(); return d.toDateString() === n.toDateString() ? d.toTimeString().slice(0, 5) : d.getDate() + '/' + (d.getMonth() + 1); };
   // sender names ("VM-HDFCBK-S", "AD-HDFCBK-S") are one company: "HDFCBK"
   const isName = a => /[a-z]/i.test(a || '');
   const core = a => (a || '').toUpperCase().replace(/^[A-Z]{2}-/, '').replace(/-[PSTG]$/, '');
   const who = t => t.name || (isName(t.address) ? core(t.address) : t.address);
+  // the OTP / code in a message (same rule as Otp.kt): shown big and blue, one tap copies only the digits
+  const OTP_BEFORE = /(otp|one.?time|code|pin|password|passcode|verification|ओटीपी|कोड|पासवर्ड)[^0-9]{0,40}?(?<!\d)(\d{4,8})(?!\d)/i;
+  const OTP_AFTER = /(?<!\d)(\d{4,8})(?!\d)[^0-9]{0,30}?(is your|is the|is ur|as your|otp|one.?time|code|ओटीपी|कोड)/i;
+  const otpOf = t => { const a = OTP_BEFORE.exec(t); if (a) return a[2]; const b = OTP_AFTER.exec(t); return b ? b[1] : ''; };
+  const URL_RE = /(https?:\/\/[^\s<>"']+|\b(?:[a-z0-9-]+\.)+[a-z]{2,}\/[^\s<>"']*)/gi;
+  // the text of one SMS: links open in Ronin (it checks every site) except in the Scam box; the OTP is a copy button
+  function smsBody(text, links) {
+    const out = [], code = otpOf(text);
+    let rest = String(text || '');
+    const parts = links ? rest.split(URL_RE) : [rest];
+    parts.forEach((p, i) => {
+      if (!p) return;
+      if (links && i % 2 === 1) {
+        const url = /^https?:/i.test(p) ? p.replace(/[.,)]+$/, '') : 'https://' + p.replace(/[.,)]+$/, '');
+        out.push(h('a', { cls: 'lnk', href: '#', on: { click: e => { e.preventDefault(); ask('open', { url }); } } }, p));
+        return;
+      }
+      if (code && p.indexOf(code) >= 0) {
+        const at = p.indexOf(code);
+        out.push(p.slice(0, at), h('button', { cls: 'otp', 'data-otp': code, on: { click: async e => { e.stopPropagation(); await ask('copy', { text: code }); e.currentTarget.classList.add('done'); } } }, code, h('span', {}, ' 📋')), p.slice(at + code.length));
+        return;
+      }
+      out.push(p);
+    });
+    return out;
+  }
   // one row per company (or per person) in each tab: all of HDFC's SMS together
   function group(list) {
     const by = new Map();
@@ -86,7 +113,7 @@
       })()),
       // ✏ new message and the four boxes sit at the bottom, where the thumb is
       h('button', { cls: 'pill blue fab', id: 'new', on: { click: () => compose('', '') } }, L('✏ नया', '✏ New')),
-      h('nav', { cls: 'nav' }, TABS.map(([id, icon, name]) => h('button', { cls: tab === id ? 'on' : '', 'data-tab': id, on: { click: () => { tab = id; list(); } } },
+      h('nav', { cls: 'nav' }, NAV.map(([id, icon, name]) => h('button', { cls: tab === id ? 'on' : '', 'data-tab': id, on: { click: () => { tab = id; list(); } } },
         h('span', { cls: 'ic' }, icon), h('span', {}, name + (count(id) ? ' (' + count(id) + ')' : ''))))));
   }
 
@@ -103,7 +130,7 @@
     const msgs = [].concat(...parts.map(x => x || [])).sort((a, b) => a.date - b.date);
     const body = h('div', { cls: 'msgs', id: 'msgs' }, msgs.map(m => h('div', {},
       m.type === 1 && m.level ? warnBox(m.level, m.reasons) : '',
-      h('div', { cls: 'b ' + (m.type === 1 ? 'in' : 'out'), 'data-level': m.level || '' }, m.body, h('small', {}, when(m.date) + (m.type === 5 ? L(' • ✖ नहीं गया', ' • ✖ not sent') : m.type === 4 ? L(' • भेज रहा...', ' • sending...') : ''))))));
+      h('div', { cls: 'b ' + (m.type === 1 ? 'in' : 'out'), 'data-level': m.level || '' }, smsBody(m.body, t.cat !== 'scam'), h('small', {}, when(m.date) + (m.type === 5 ? L(' • ✖ नहीं गया', ' • ✖ not sent') : m.type === 4 ? L(' • भेज रहा...', ' • sending...') : ''))))));
     // a new SMS arriving while you type must not wipe what you are writing
     const old = again && document.getElementById('text');
     const box = h('textarea', { placeholder: st.isDefault ? L('संदेश लिखें...', 'Type a message...') : L('भेजने के लिए Ronin Messages चालू करें', 'Turn on Ronin Messages to send'), id: 'text' });
@@ -117,6 +144,8 @@
           h('button', { cls: 'pill', id: 'del', on: { click: () => del(t) } }, '🗑'))),
       t.cat === 'scam' ? h('div', { cls: 'card' }, L('🆘 ठगी हो गई? ', '🆘 Lost money? '), h('a', { cls: 'pill red', href: 'tel:1930' }, '📞 1930'), ' ', h('button', { cls: 'pill', on: { click: () => ask('open', { url: 'https://sancharsaathi.gov.in/sfc/' }) } }, L('चक्षु पर शिकायत', 'Report on Chakshu'))) : '',
       body,
+      // a company sender ("HDFCBK") cannot get a reply: no send box there
+      isName(t.address) ? h('p', { cls: 'note', style: 'text-align:center' }, L('इस sender को जवाब नहीं भेजा जा सकता।', 'You cannot reply to this sender.')) :
       h('div', { cls: 'compose' }, box, h('button', { cls: 'pill blue', id: 'send', on: { click: async () => {
         const text = box.value.trim(); if (!text || !st.isDefault) return;
         box.value = '';
@@ -176,6 +205,9 @@
           h('button', { cls: 'pill blue', on: { click: () => ask('notifyAccess') } }, L('🔔 चालू करें', '🔔 Turn on')), ' ', h('button', { cls: 'pill', on: { click: () => ask('appInfo') } }, '⚙ App info'))),
       h('div', { cls: 'card' }, h('h2', {}, L('🚫 Block किए नंबर / sender (', '🚫 Blocked numbers / senders (') + blocked.length + ')'),
         blocked.length ? blocked.map(b => h('div', { cls: 'row' }, h('span', {}, b), h('button', { cls: 'pill', on: { click: async () => { await ask('unblock', { address: b }); settings(); } } }, L('हटाएँ', 'Unblock')))) : h('p', { cls: 'note' }, L('कोई नहीं', 'None'))),
+      h('div', { cls: 'card', id: 'adsCard' }, h('h2', {}, L('📢 विज्ञापन / loan वाले SMS', '📢 Ads / loan offer SMS')),
+        h('p', { cls: 'note' }, L('ये छिपे रहते हैं, घंटी नहीं बजती, और 30 दिन बाद अपने-आप मिट जाते हैं। कोई काम का SMS गलती से यहाँ गया हो तो देख लें।', 'They stay hidden, never ring, and are deleted by themselves after 30 days. Look here if an important SMS went missing.')),
+        h('button', { cls: 'pill', id: 'showAds', on: { click: () => { tab = 'ads'; list(); } } }, L('📢 छिपे विज्ञापन देखें', '📢 Show hidden ads'))),
       h('div', { cls: 'card' }, h('h2', {}, L('📢 विज्ञापन SMS बंद करें (सरकारी तरीका)', '📢 Stop ad SMS (government service)')),
         h('p', { cls: 'note' }, L('TRAI: 1909 पर "BLOCK PROMO" भेजने से सभी promotional SMS / calls रुकते हैं; OTP, बैंक और सरकारी SMS आते रहते हैं।', 'TRAI: sending "BLOCK PROMO" to 1909 stops all promotional SMS / calls; OTP, bank and government SMS keep coming.')),
         h('button', { cls: 'pill', on: { click: () => compose('1909', 'BLOCK PROMO') } }, L('1909 पर BLOCK PROMO', 'BLOCK PROMO to 1909'))),
@@ -200,6 +232,12 @@
     const core = a => a.toUpperCase().replace(/^[A-Z]{2}-/, '').replace(/-[PSTG]$/, '');
     const t = to && threads.find(x => /[a-z]/i.test(to) ? core(x.address) === core(to) : x.address.replace(/\D/g, '').slice(-10) === to.replace(/\D/g, '').slice(-10));
     if (t && !body) thread(t); else compose(to, body);
+  };
+  // the phone's Back: inside the app first (conversation -> list -> Important), then out of the app
+  window.__roninBack = () => {
+    if (view !== 'list') { list(); return true; }
+    if (tab !== 'work') { tab = 'work'; list(); return true; }
+    return false;
   };
   window.__roninMessages = { list: () => threads, view: () => view }; // for the tests
   if (location.hash.length > 1) window.__roninOpen(location.hash.slice(1)); else list();

@@ -15,7 +15,8 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
       {thread:3,address:'VM-SHOPPR-P',name:'',snippet:'Big sale',date:Date.now()-2000,unread:0,count:1,cat:'ads',level:'',reasons:[]},
       {thread:4,address:'+919800000000',name:'माँ',snippet:'खाना खा लिया?',date:Date.now()-3000,unread:0,count:5,cat:'work',level:'',reasons:[]}];
     const M=ST.msgs||{1:[{id:1,body:'Mujhe urgent 10000 rupaye ki zarurat hai, hospital me hoon, is QR par bhej do',date:Date.now(),type:1,level:'stop',reasons:['किसी जानने वाले के नाम से पैसे']}],
-      4:[{id:3,body:'हाँ, खा लिया',date:Date.now()-5000,type:2,level:'',reasons:[]},{id:2,body:'खाना खा लिया?',date:Date.now()-9000,type:1,level:'',reasons:[]}]};
+      4:[{id:3,body:'हाँ, खा लिया',date:Date.now()-5000,type:2,level:'',reasons:[]},{id:2,body:'खाना खा लिया?',date:Date.now()-9000,type:1,level:'',reasons:[]}],
+      2:[{id:5,body:'482913 is your OTP for login. Check https://kotk.in/KOTAKD/abc or kotk.in/x',date:Date.now()-1000,type:1,level:'',reasons:[]}]};
     window.roninPhone={postMessage(s){const m=JSON.parse(s);window.__log.push(m);let d=null;
       switch(m.op){case 'state':d=Object.assign({},ST,window.__sos||{});break;case 'save':window.__sos=Object.assign(window.__sos||{},{contacts:m.contacts,name:m.name});d=true;break;
       case 'start':d=!!(window.__sos&&window.__sos.contacts&&window.__sos.contacts.length);if(d)window.__sos.running=true;break;case 'stop':window.__sos.running=false;d=true;break;case 'threads':d=T;break;case 'messages':d=M[m.thread]||[];break;case 'makeDefault':d={ok:ST.grant};if(ST.grant)ST.isDefault=true;break;
@@ -50,10 +51,23 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   p2.on('dialog', d => d.accept());
   await p2.click('#block'); await p2.waitForTimeout(100);
   if (!(await p2.evaluate(() => window.__log.some(m => m.op === 'block' && m.address === '+919812300011')))) bad('block not asked');
-  await p2.click('text=← वापस'); await p2.click('[data-tab=work]'); await p2.click('.th[data-thread="4"]'); await p2.waitForSelector('#text');
+  // OTP big and blue, one tap copies only the digits; links in a normal SMS open in Ronin
+  await p2.click('text=← वापस'); await p2.click('[data-tab=work]'); await p2.click('.th[data-thread="2"]'); await p2.waitForSelector('.b');
+  const otp = await p2.$('button.otp'); if (!otp) bad('OTP not marked');
+  else { await otp.click(); await p2.waitForTimeout(100); if (!(await p2.evaluate(() => window.__log.some(m => m.op === 'copy' && m.text === '482913')))) bad('OTP copy'); }
+  const lnks = await p2.$$('a.lnk'); if (lnks.length !== 2) bad('links not tappable: ' + lnks.length);
+  else { await lnks[1].click(); await p2.waitForTimeout(100); if (!(await p2.evaluate(() => window.__log.some(m => m.op === 'open' && m.url === 'https://kotk.in/x')))) bad('link open'); }
+  await p2.screenshot({ path: path.join(out, 'messages-otp.png') });
+  // the phone's Back: conversation -> list
+  if (!(await p2.evaluate(() => window.__roninBack()))) bad('Back inside Messages');
+  await p2.waitForSelector('.nav');
+  await p2.click('[data-tab=work]'); await p2.click('.th[data-thread="4"]'); await p2.waitForSelector('#text');
   await p2.fill('#text', 'ठीक है'); await p2.click('#send'); await p2.waitForTimeout(100);
   if (!(await p2.evaluate(() => window.__log.some(m => m.op === 'send' && m.to === '+919800000000' && m.body === 'ठीक है')))) bad('send');
-  await p2.click('text=← वापस'); await p2.waitForSelector('[data-tab=ads]'); await p2.click('[data-tab=ads]'); await p2.waitForTimeout(200);
+  // ads are hidden: no Ads box at the bottom; Settings can show them
+  await p2.click('text=← वापस'); await p2.waitForSelector('.nav');
+  if (await p2.$('.nav [data-tab=ads]')) bad('ads box shown');
+  await p2.click('#settings'); await p2.click('#showAds'); await p2.waitForTimeout(200);
   if (!await p2.$('button:has-text("1909 पर भेजें")')) { bad('1909 BLOCK PROMO tip missing'); await p2.screenshot({ path: path.join(out, 'messages-ads.png') }); }
   // 3. Ronin Calls: keypad, recent with warnings, contacts
   const p3 = await b.newPage({ viewport: { width: 412, height: 860 } });

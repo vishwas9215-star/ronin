@@ -44,7 +44,7 @@ class MessagesActivity : PhonePage() {
                 askPermissions(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.POST_NOTIFICATIONS)) { done(JSONObject().put("ok", ok || SmsStore.isDefault(this))) }
             }
             "permissions" -> askPermissions(arrayOf(Manifest.permission.READ_SMS, Manifest.permission.READ_CONTACTS)) { done(true) }
-            "threads" -> bg { done(SmsStore.threads(this)) }
+            "threads" -> bg { SmsStore.cleanAds(this); done(SmsStore.threads(this)) }
             "messages" -> bg { val t = a.optLong("thread"); done(SmsStore.messages(this, t)); SmsStore.markRead(this, t) }
             "send" -> bg { done(SmsStore.send(this, a.optString("to"), a.optString("body"), a.optInt("sub", -1))) }
             "delete" -> bg { done(SmsStore.deleteThread(this, a.optLong("thread"))) }

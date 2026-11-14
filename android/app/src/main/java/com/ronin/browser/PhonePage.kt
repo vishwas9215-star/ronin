@@ -87,6 +87,12 @@ abstract class PhonePage : AppCompatActivity() {
             v.setPadding(b.left, b.top, b.right, b.bottom); androidx.core.view.WindowInsetsCompat.CONSUMED
         }
         web.loadUrl("https://ronin.home/tools/$page" + startQuery(intent))
+        // the phone's Back works inside the page first (a conversation -> the list), then leaves the app
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                web.evaluateJavascript("window.__roninBack?!!window.__roninBack():false") { r -> if (r != "true") finish() }
+            }
+        })
     }
 
     open fun startQuery(i: Intent?): String = ""
@@ -131,6 +137,7 @@ abstract class PhonePage : AppCompatActivity() {
             "defaultApps" -> { try { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) } catch (e: Exception) { startActivity(Intent(Settings.ACTION_SETTINGS)) }; done(true) }
             "notifyAccess" -> { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)); done(true) }
             "watcher" -> done(NotifyWatch.enabled(this))
+            "copy" -> { val c = a.optString("text").filter { it.isDigit() }.take(8); if (c.length >= 4) Otp.copy(this, c); done(c.length >= 4) }
             "lang" -> done(Lang.choice(this))
             "setLang" -> { Lang.set(this, a.optString("value")); done(true); runOnUiThread { recreate() } }
             "check" -> { val r = RoninApp.instance.rules.scam.text(a.optString("text")); done(JSONObject().put("level", r.level).put("reasons", org.json.JSONArray(r.reasons))) }

@@ -18,7 +18,7 @@ import android.widget.Toast
 object Parts {
     const val MAIL = "mail"; const val MESSAGES = "messages"; const val CALLS = "calls"; const val SOS = "sos"
     private val parts = mapOf(
-        MAIL to listOf("MailLauncher"),
+        MAIL to listOf("MailLauncher", "SocialLauncher"),
         MESSAGES to listOf("MessagesActivity", "MessagesLauncher", "SmsDeliverReceiver", "MmsReceiver", "HeadlessSmsSendService"),
         CALLS to listOf("CallsActivity", "CallsLauncher", "InCallActivity", "RoninInCallService", "RoninCallScreen", "CallActionReceiver", "RecordService", "RecordAccess"),
         SOS to listOf("SosActivity", "SosService"),
@@ -32,6 +32,11 @@ object Parts {
     fun set(ctx: Context, part: String, on: Boolean) {
         for (c in parts.getValue(part)) ctx.packageManager.setComponentEnabledSetting(cn(ctx, c),
             if (on) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+    }
+
+    /** After an update a part may have gained a component (3.11: Ronin Social with Mail): switch it on too. */
+    fun sync(ctx: Context) {
+        for (part in parts.keys) if (isOn(ctx, part)) set(ctx, part, true)
     }
 
     /** Can this device send SMS / make calls (a SIM phone)? */
@@ -96,7 +101,7 @@ object Parts {
         val phone = hasPhone(ctx)
         val ids = if (phone) listOf(MAIL, SOS, MESSAGES, CALLS) else listOf(MAIL)
         val names = ids.map {
-            when (it) { MAIL -> L("📧 Ronin Mail (Gmail आदि, ठगी वाले email पर चेतावनी)", "📧 Ronin Mail (Gmail etc., warns on scam emails)"); SOS -> L("🆘 Ronin SOS (मुसीबत में परिवार को जगह + battery)", "🆘 Ronin SOS (sends the family your place + battery in trouble)"); MESSAGES -> L("📩 Ronin Messages (SMS app: ठगी / विज्ञापन अलग)", "📩 Ronin Messages (SMS app: scams / ads kept apart)"); else -> L("📞 Ronin Calls (phone app: अनजान call पर चेतावनी)", "📞 Ronin Calls (phone app: warns on unknown calls)") }
+            when (it) { MAIL -> L("📧 Ronin Mail + Ronin Social (Gmail, Facebook, Instagram... ठगी पर चेतावनी)", "📧 Ronin Mail + Ronin Social (Gmail, Facebook, Instagram... warns on scams)"); SOS -> L("🆘 Ronin SOS (मुसीबत में परिवार को जगह + battery)", "🆘 Ronin SOS (sends the family your place + battery in trouble)"); MESSAGES -> L("📩 Ronin Messages (SMS app: ठगी / विज्ञापन अलग)", "📩 Ronin Messages (SMS app: scams / ads kept apart)"); else -> L("📞 Ronin Calls (phone app: अनजान call पर चेतावनी)", "📞 Ronin Calls (phone app: warns on unknown calls)") }
         }.toTypedArray()
         // first time: Mail ticked; Messages / Calls are big changes, the family ticks them itself
         val checked = ids.map { if (first) it == MAIL || it == SOS else isOn(ctx, it) }.toBooleanArray()
