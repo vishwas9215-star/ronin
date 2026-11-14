@@ -47,6 +47,8 @@ type Settings struct {
 	FocusSites        []string          `json:"focus_sites,omitempty"`  // empty = built-in list
 	FocusUntil        int64             `json:"focus_until,omitempty"`  // "study 1 hour now" ends (unix)
 	NoHistory         bool              `json:"no_history,omitempty"`   // do not keep visited pages
+	AdultBlock        bool              `json:"adult_block,omitempty"`  // adult / gambling sites fully off on this computer
+	AdultAsked        bool              `json:"adult_asked,omitempty"`  // the first-start question was answered
 	QuickLinks        []quicklinks.Link `json:"quick_links,omitempty"`  // links the user added on the new tab page
 	HiddenLinks       []string          `json:"hidden_links,omitempty"` // built-in quick links the user removed
 	DataSites         []string          `json:"data_sites,omitempty"`   // sites with the "Data -> Excel + PDF" button

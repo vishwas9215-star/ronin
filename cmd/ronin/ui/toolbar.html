@@ -417,6 +417,7 @@ function showMenu(){
   }
   if (CONTAINER === "PERSONAL" || CONTAINER === "TRADING" || CONTAINER === "CALLS") item("History   (Ctrl+H)", () => post({cmd:"history"}));
   if (CONTAINER !== "BANKING" && CONTAINER !== "KIDS") item("\u{1F511} Passwords (saved, import, export)", () => post({cmd:"passwords"}));
+  item("\u{1F51E} \u0917\u0902\u0926\u0940 \u0938\u093e\u0907\u091f\u0947\u0902: \u092c\u0902\u0926 / Private (\u092c\u0926\u0932\u0947\u0902)", () => post({cmd:"adultblock"}));
   item("\u27F3 Check for updates (\u0928\u092f\u093e Ronin)", () => post({cmd:"checkupdate"}));
   item("Settings", () => post({cmd:"settings"}));
   item("System health", () => post({cmd:"health"}));

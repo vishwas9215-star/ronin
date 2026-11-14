@@ -568,6 +568,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun load(t: Tab, url: String) {
+        if (Sensitive.site(url) && Parts.adultBlocked(this)) { blockAdult(t, url); return }
         if (!t.isPrivate && Sensitive.site(url)) { openPrivate(url, t); return }
         if (url.startsWith(SOCIAL)) {
             t.isTools = true
@@ -653,6 +654,8 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
             if (url == BACK_TO_SAFETY) { leaveDangerPage(tab()); return true }
+            if (req.isForMainFrame && Sensitive.site(url) && Parts.adultBlocked(this@MainActivity)) { blockAdult(tab(), url); return true }
+            if (req.isForMainFrame && Parts.adultBlocked(this@MainActivity) && Parts.safeSearch(url) != null) { view.loadUrl(Parts.safeSearch(url)!!); return true }
             if (req.isForMainFrame && !tab().isPrivate && Sensitive.site(url)) { openPrivate(url, tab()); return true }
             if (url.startsWith("https://ronin.newtab/")) { quickLinkChange(tab(), req.url); return true }
             if (url.startsWith("https://ronin.data/save")) {
@@ -840,6 +843,15 @@ class MainActivity : AppCompatActivity() {
         val brand = app.rules.fakeBank(url, store.trustedSites, store.userBanks) ?: return null
         t?.dangerHost = host
         return dangerHtml(host, brand)
+    }
+
+    /** This phone was set "adult sites fully off" (child / elderly): a plain stop page, no way around it. */
+    private fun blockAdult(t: Tab, url: String) {
+        val html = "<!DOCTYPE html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'></head>" +
+            "<body style='margin:0;background:#0f1218;color:#f1f3f7;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:20px'>" +
+            "<div><div style='font-size:64px'>⛔</div><h2>यह साइट इस device पर बंद है</h2><p style='color:#a3acbd'>परिवार की सुरक्षा के लिए गंदी / जुआ वाली साइटें यहाँ नहीं खुलतीं।</p>" +
+            "<a href='$BACK_TO_SAFETY' style='display:inline-block;margin-top:14px;padding:14px 22px;border-radius:14px;background:#16a34a;color:#fff;text-decoration:none;font-weight:700'>✔ वापस</a></div></body></html>"
+        t.web.loadDataWithBaseURL("https://ronin.home/blocked", html, "text/html", "utf-8", null)
     }
 
     private fun dangerHtml(host: String, brand: String?): String {
@@ -1373,8 +1385,10 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         items["🛡️ Safe Social (Facebook, Instagram, YouTube...)"] = { openSocial() }
         items["📧 Safe Mail (Gmail...)"] = { openMail() }
         items["📱 Ronin के हिस्से (Mail / Messages / Calls)"] = { Parts.choose(this, first = false) }
+        items[if (Parts.adultBlocked(this)) "🔞 गंदी साइटें: पूरी तरह बंद (बदलें)" else "🔞 गंदी साइटें: Private में खुलती हैं (बदलें)"] = { Parts.chooseAdult(this, first = false) }
         items["💬 Delete हुए WhatsApp संदेश"] = { ChatLogActivity.open(this) }
         if (Parts.isOn(this, Parts.MESSAGES)) items["📩 Ronin Messages"] = { startActivity(Intent(this, MessagesActivity::class.java)) }
+        if (Parts.isOn(this, Parts.SOS)) items["🆘 Ronin SOS"] = { startActivity(Intent(this, SosActivity::class.java)) }
         if (Parts.isOn(this, Parts.CALLS)) items["📞 Ronin Calls"] = { startActivity(Intent(this, CallsActivity::class.java)) }
         items["🔎 क्या यह ठगी है? (Scam Check)"] = { openTools("scamcheck") }
         items["🔎 Search widget home screen पर लगाएँ"] = {

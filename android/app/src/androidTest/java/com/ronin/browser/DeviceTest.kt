@@ -35,7 +35,7 @@ class DeviceTest {
 
     init {
         // the "which parts?" question of the first start does not cover the tests
-        InstrumentationRegistry.getInstrumentation().targetContext.getSharedPreferences("ronin_parts", Context.MODE_PRIVATE).edit().putBoolean("asked", true).commit()
+        InstrumentationRegistry.getInstrumentation().targetContext.getSharedPreferences("ronin_parts", Context.MODE_PRIVATE).edit().putBoolean("asked", true).putBoolean("adultAsked", true).commit()
     }
 
     private fun eval(sc: ActivityScenario<MainActivity>, js: String): String {

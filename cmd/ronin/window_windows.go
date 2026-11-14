@@ -773,6 +773,8 @@ func (w *Window) onUIMessage(raw string) {
 		w.overlay("settings", settingsData())
 	case "restart":
 		restartRonin()
+	case "adultblock":
+		askAdultBlock(w.hwnd)
 	case "checkupdate":
 		checkUpdateNow(w)
 	case "updatenow":

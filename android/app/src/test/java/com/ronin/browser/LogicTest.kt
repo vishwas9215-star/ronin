@@ -34,6 +34,12 @@ class LogicTest {
         assertEquals("", rules.scam.text("OTP किसी को मत बताना, बैंक कभी OTP नहीं माँगता").level)
     }
 
+    @Test fun safeSearchForced() {
+        assertEquals("https://www.google.com/search?q=x&safe=active", Parts.safeSearch("https://www.google.com/search?q=x"))
+        assertNull(Parts.safeSearch("https://www.google.com/search?q=x&safe=active"))
+        assertNull(Parts.safeSearch("https://www.google.com/maps"))
+    }
+
     @Test fun smsSorting() {
         assertEquals("ads", SmsSort.category("VM-SHOPPR-P", "Big sale! 70% off today", false, ""))
         assertEquals("work", SmsSort.category("JM-SBIINB-S", "Your OTP is 123456", false, ""))

@@ -143,6 +143,12 @@ func messageBox(hwnd uintptr, title, text string, flags uintptr) {
 	pMessageBoxW.Call(hwnd, uintptr(unsafe.Pointer(utf16(text))), uintptr(unsafe.Pointer(utf16(title))), flags)
 }
 
+// askYesNo shows a Yes / No question and tells whether Yes was pressed.
+func askYesNo(hwnd uintptr, title, text string) bool {
+	r, _, _ := pMessageBoxW.Call(hwnd, uintptr(unsafe.Pointer(utf16(text))), uintptr(unsafe.Pointer(utf16(title))), 0x4|0x20) // MB_YESNO | MB_ICONQUESTION
+	return r == 6 // IDYES
+}
+
 // keyDown reports whether a modifier key is held. Key presses inside a web
 // page are handled by WebView2's own process, so this thread's key state can
 // be out of date; the system-wide state is checked as well.

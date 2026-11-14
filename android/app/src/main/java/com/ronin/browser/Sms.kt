@@ -56,7 +56,9 @@ object SmsStore {
     // names are looked up from many threads; a name saved later shows up within 10 minutes
     private val nameCache = java.util.concurrent.ConcurrentHashMap<String, Pair<String, Long>>()
 
-    fun isDefault(ctx: Context) = Telephony.Sms.getDefaultSmsPackage(ctx) == ctx.packageName
+    fun isDefault(ctx: Context): Boolean =
+        if (Build.VERSION.SDK_INT >= 29) ctx.getSystemService(android.app.role.RoleManager::class.java)?.isRoleHeld(android.app.role.RoleManager.ROLE_SMS) == true
+        else Telephony.Sms.getDefaultSmsPackage(ctx) == ctx.packageName
 
     fun canReadContacts(ctx: Context) = ctx.checkSelfPermission(android.Manifest.permission.READ_CONTACTS) == android.content.pm.PackageManager.PERMISSION_GRANTED
     fun contactName(ctx: Context, address: String): String? {

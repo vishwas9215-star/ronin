@@ -8,6 +8,7 @@ import (
 	"html"
 	"net/url"
 	"path/filepath"
+	"roninbrowser/internal/kids"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -508,6 +509,21 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 					t.w.overlay("blocked", map[string]any{"tab": t.id, "host": hostOf(uri), "mode": "KIDS", "reason": r})
 				})
 			}
+			return
+		}
+	}
+	// this computer was set "adult / gambling sites fully off" (Menu, or the first-start question)
+	if store.Get().AdultBlock && strings.HasPrefix(uri, "http") {
+		if s := kids.SafeSearchURL(uri); s != "" {
+			call(args, nsSetCancel, 1)
+			runOnUI(func() { _ = t.wv.Navigate(s) })
+			return
+		}
+		if sensitiveSite(uri) {
+			call(args, nsSetCancel, 1)
+			runOnUI(func() {
+				t.w.overlay("blocked", map[string]any{"tab": t.id, "host": hostOf(uri), "mode": "KIDS", "reason": "गंदी / जुआ वाली साइटें इस computer पर बंद हैं (परिवार की सुरक्षा)।"})
+			})
 			return
 		}
 	}

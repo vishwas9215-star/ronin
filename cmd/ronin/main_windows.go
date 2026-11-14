@@ -123,6 +123,12 @@ func main() {
 	if len(windowsByHwnd) == 0 {
 		return
 	}
+	if !store.Get().AdultAsked && kidsLevel() == "" {
+		for h := range windowsByHwnd {
+			go runOnUI(func() { askAdultBlock(h) })
+			break
+		}
+	}
 	runMessageLoop()
 	if hist != nil {
 		_ = hist.Save()

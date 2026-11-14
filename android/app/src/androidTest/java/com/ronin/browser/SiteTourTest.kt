@@ -13,7 +13,7 @@ class SiteTourTest {
     private val inst = InstrumentationRegistry.getInstrumentation()
 
     init {
-        inst.targetContext.getSharedPreferences("ronin_parts", android.content.Context.MODE_PRIVATE).edit().putBoolean("asked", true).commit()
+        inst.targetContext.getSharedPreferences("ronin_parts", android.content.Context.MODE_PRIVATE).edit().putBoolean("asked", true).putBoolean("adultAsked", true).commit()
     }
 
     private fun shot(name: String) {
