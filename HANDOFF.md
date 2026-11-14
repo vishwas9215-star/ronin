@@ -78,6 +78,13 @@ Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + tes
   unlabelled files join only when their rows do not overlap (pieces), else compared (versions).
 - Windows updates: checks at start + every 6 h, never installs silently: "नया Ronin X आया है [Update करें]" -> install ->
   "[अभी Restart करें]"; Menu "Check for updates". (Owner: no hourly checks, ask before updating.)
+- 3.8.1 tools page: compact category cards (TOOLS list in tools.js: one line + T[id] adds a tool); Calculators:
+  Date Calculator (datecalc.js: age, Class 1 admission age on 1 April, service, retirement 62 + UP session benefit to
+  31 March, days between / after (leave), census age estimate from child / marriage / remembered event) and Amount
+  in Words (Hindi + English, lakh/crore).
+- Data button: progress box on the page (% from "1 to 10 of 53" or page numbers); "Next" that loads a new web page
+  or a postback: progress kept in sessionStorage, native re-injects table_export.js and calls resume(); 60 min cap;
+  screen / laptop kept awake while reading.
 - Tests: tools/uitest/merge.js (fixtures in tools/uitest/fixtures, made-up), pdftools.js (fixtures from
   make_tool_fixtures.py), DeviceTest merge + tools self-test.
 - Owner's real Prerna file checked locally only (never committed): fake UDISE with 6 planted changes -> all 6 found.

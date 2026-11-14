@@ -116,7 +116,7 @@
       if (c.length) {
         var e = c[0];
         if (disabled(e)) return null;
-        if (leavesPage(e)) { st.partial = "next page is a separate web page"; return null; }
+        e.__roninLeaves = leavesPage(e); // a separate web page: carried on after it loads
         return e;
       }
     }
@@ -155,37 +155,112 @@
     return null;
   }
 
+  // how much there is: "Showing 1 to 10 of 53 entries", "1-10 of 53", or the highest page number
+  function totals(tb) {
+    var out = { rows: 0, pages: 0 };
+    var scope = tb.el.parentElement;
+    for (var up = 0; up < 6 && scope && !out.rows; up++, scope = scope.parentElement) {
+      var text = (scope.innerText || "").replace(/,/g, "");
+      var pg = text.match(/page\s+\d+\s+of\s+(\d+)/i) || text.match(/पेज\s+\d+\s*\/\s*(\d+)/);
+      if (pg && !out.pages) out.pages = +pg[1];
+      var m = text.match(/\d+\s*(?:to|-|–)\s*\d+\s+of\s+(\d+)/i) || text.match(/\bof\s+(\d+)\s+(?:entries|records|rows|items|results)/i) ||
+        text.match(/(?:कुल|total)\s*(?:records?|entries|रिकॉर्ड|पंक्तियाँ|छात्र)?\s*[:：-]\s*(\d+)/i);
+      if (m && +m[1] > 0 && +m[1] < 1000000) out.rows = +m[1];
+      if (!out.pages) {
+        var nums = [].map.call(scope.querySelectorAll("a,button,li,span"), function (e) { var t = txt(e); return /^\d{1,4}$/.test(t) && !tb.el.contains(e) ? +t : 0; });
+        var mx = Math.max.apply(null, nums.concat([0]));
+        if (mx > 1) out.pages = mx;
+      }
+    }
+    return out;
+  }
+
+  // a small progress box on the page, so it is clear that work is going on and how far
+  function badge(text, pct, done) {
+    var b = document.getElementById("ronin-data-progress");
+    if (!b) {
+      if (!document.body) return;
+      b = document.createElement("div");
+      b.id = "ronin-data-progress";
+      b.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:2147483647;min-width:240px;max-width:340px;padding:12px 14px;border-radius:14px;background:#111827;color:#fff;font:600 15px sans-serif;box-shadow:0 4px 18px rgba(0,0,0,.4)";
+      var t = document.createElement("div"); t.className = "t"; t.style.whiteSpace = "pre-line";
+      var bar = document.createElement("div");
+      bar.style.cssText = "height:8px;border-radius:4px;background:#374151;margin-top:8px;overflow:hidden";
+      var fill = document.createElement("div"); fill.className = "f";
+      fill.style.cssText = "height:100%;width:0;background:#22c55e;transition:width .4s";
+      bar.appendChild(fill); b.appendChild(t); b.appendChild(bar);
+      document.body.appendChild(b);
+    }
+    var btn = document.getElementById("ronin-data-btn");
+    if (btn) btn.style.display = done ? "" : "none";
+    b.querySelector(".t").textContent = text;
+    var f = b.querySelector(".f");
+    if (pct == null) { f.style.width = "100%"; f.style.opacity = ".35"; } else { f.style.opacity = "1"; f.style.width = Math.max(3, Math.min(100, pct)) + "%"; }
+    if (done) setTimeout(function () { if (b.parentNode) b.parentNode.removeChild(b); }, 6000);
+  }
+  function progress() {
+    var pct = st.total ? Math.round(st.rows * 100 / st.total) : st.pages ? Math.round(st.page * 100 / st.pages) : null;
+    if (pct != null) pct = Math.min(99, pct); // 100 only when the files are made
+    st.pct = pct;
+    badge("📊 Data पढ़ रहा हूँ" + (pct != null ? ": " + pct + "%" : "...") + "\nपेज " + st.page + (st.pages ? " / " + st.pages : "") + " · " + st.rows + (st.total ? " / " + st.total : "") + " पंक्तियाँ", pct);
+  }
+
+  // When "Next" loads a whole new web page, what was read so far waits in this tab's
+  // sessionStorage; Ronin puts this script back on the new page and it carries on (resume).
+  var KEY = "ronin.export:" + location.origin + location.pathname;
+  function hash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return String(h); }
+  function saved() { try { var x = JSON.parse(sessionStorage.getItem(KEY) || "null"); return x && Date.now() - x.at < 15 * 60000 ? x : null; } catch (e) { return null; } }
+  function keep(x) { try { x.at = Date.now(); sessionStorage.setItem(KEY, JSON.stringify(x)); return true; } catch (e) { return false; } }
+  function forget() { try { sessionStorage.removeItem(KEY); } catch (e) {} }
+  async function waitTable() {
+    for (var i = 0; i < 300 && !stopNow; i++) { var t = best(); if (t && read(t).rows.length) return t; await sleep(150); }
+    return null;
+  }
+
   var stopNow = false;
-  async function collect() {
-    st = { phase: "reading", page: 1, rows: 0, error: "", partial: "" };
+  async function collect(resume) {
+    var back = resume ? saved() : null;
+    if (resume && !back) throw new Error("nothing to continue");
+    st = { phase: "reading", page: back ? back.page : 1, rows: 0, error: "", partial: "", total: back ? back.total : 0, pages: back ? back.pages : 0, pct: null };
     stopNow = false;
-    var tb = best();
-    if (!tb || !read(tb).rows.length) throw new Error("No table found on this page.");
+    if (!back) { forget(); badge("📊 Data पढ़ना शुरू... (रुकिए, page बंद न करें)", null); }
+    var tb = back ? await waitTable() : best();
+    if (!tb || !read(tb).rows.length) { forget(); badge("⚠ इस page पर table नहीं मिली", 100, true); throw new Error("No table found on this page."); }
+    if (!back) { var tot = totals(tb); st.total = tot.rows; st.pages = tot.pages; }
     var sig = JSON.stringify(read(tb).rows);
-    if (showAll(tb)) { var t2 = await waitChange(sig); if (t2) tb = t2; }
-    var first = read(tb), head = first.head, seenPages = {}, rows = [];
+    if (!back && showAll(tb)) { var t2 = await waitChange(sig); if (t2) tb = t2; }
+    var first = read(tb), head = back ? back.head : first.head, seenPages = {}, rows = back ? back.rows : [];
+    var perPage = back ? back.perPage : first.rows.length;
+    if (back) back.seen.forEach(function (k) { seenPages[k] = 1; });
     var add = function (rs) {
-      var k = JSON.stringify(rs);
+      var k = hash(JSON.stringify(rs));
       if (seenPages[k]) return false; // the same page came back: paging is finished
       seenPages[k] = 1;
       rows.push.apply(rows, rs);
       return true;
     };
-    add(first.rows); st.rows = rows.length;
-    for (var p = 2; p <= 1000 && !stopNow; p++) {
+    var fresh = add(first.rows);
+    if (back) { st.page = back.page + (fresh ? 1 : 0); }
+    st.rows = rows.length; progress();
+    for (var p = st.page + 1; p <= 1000 && !stopNow && (fresh || !back); p++) {
       var nb = nextButton(tb);
       if (!nb) break;
       sig = JSON.stringify(read(tb).rows);
+      // ready for a whole new page: if this one goes away, the next one carries on from here
+      keep({ head: head, rows: rows, seen: Object.keys(seenPages), page: st.page, total: st.total, pages: st.pages, perPage: perPage });
+      if (nb.__roninLeaves) { st.phase = "navigating"; nb.click(); return new Promise(function () {}); }
       nb.click();
       var t = await waitChange(sig);
       if (!t) { if (!stopNow) st.partial = "page " + p + " did not load"; break; }
       tb = t;
       var got = read(tb).rows;
       if (!add(got)) break;
-      st.page = p; st.rows = rows.length;
-      if (got.length < first.rows.length) break; // a shorter page is the last one
+      st.page = p; st.rows = rows.length; progress();
+      if (got.length < perPage) break; // a shorter page is the last one
     }
+    forget();
     if (stopNow) st.partial = "stopped at page " + st.page;
+    badge("📊 " + rows.length + " पंक्तियाँ पढ़ लीं (" + (st.partial ? "अधूरा" : "100%") + ")\nExcel + PDF बन रही है...", st.partial ? st.pct : 100);
     var w = head.length;
     rows.forEach(function (r) { w = Math.max(w, r.length); });
     for (var i = head.length; i < w; i++) head.push("Column " + (i + 1));
@@ -314,8 +389,19 @@
         function (e) { st.phase = "error"; st.error = String(e && e.message || e); });
       return "started";
     },
+    // after "Next" loaded a new web page: carry on with what was read before ("none" = nothing saved)
+    resume: function () {
+      if (st.phase === "reading") return "busy";
+      if (!saved()) return "none";
+      out = null;
+      st.phase = "reading";
+      collect(true).then(function (d) { d.check = check(d); out = d; st.phase = "done"; },
+        function (e) { st.phase = "error"; st.error = String(e && e.message || e); });
+      return "resumed";
+    },
     state: function () { return JSON.stringify(st); },
     stop: function () { stopNow = true; return "stopping"; },
+    badge: function (text, pct, done) { badge(text, pct, done); return "ok"; }, // Ronin says when the files are saved
     result: function () { return out ? JSON.stringify(out) : ""; },
     _check: check // for tests
   };

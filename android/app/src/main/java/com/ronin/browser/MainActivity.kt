@@ -889,6 +889,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
 
     private val tableJs: String by lazy { assets.open("ronin/table_export.js").bufferedReader().readText() }
     private var exporting = false
+    private var exportTab: Tab? = null
 
     /** The green "Excel + PDF" button on sites where the user switched it on. */
     private fun showDataButton(t: Tab) {
@@ -905,22 +906,34 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     fun exportData(t: Tab) {
         if (exporting) return
         exporting = true
+        exportTab = t
         Toast.makeText(this, "📊 Table पढ़ रहा हूँ... (Reading the table)", Toast.LENGTH_SHORT).show()
         val started = System.currentTimeMillis()
+        var lastSeen = started
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) // he may walk away: the screen stays on
         t.web.evaluateJavascript("$tableJs;window.__roninTable.start()") {
             val poll = object : Runnable {
                 override fun run() {
                     if (t !in tabs) { finishExport(null, "tab closed"); return }
                     t.web.evaluateJavascript("window.__roninTable?window.__roninTable.state():''") { raw ->
                         val st = try { JSONObject(jsString(raw)) } catch (e: Exception) { JSONObject() }
-                        when (st.optString("phase")) {
-                            "reading" -> {
-                                if (System.currentTimeMillis() - started > 15 * 60_000) t.web.evaluateJavascript("window.__roninTable.stop()", null) // keep what was read
-                                readNote.text = "📊 पेज ${st.optInt("page")} · ${st.optInt("rows")} पंक्तियाँ पढ़ीं..."
+                        val phase = st.optString("phase")
+                        if (phase.isNotEmpty()) lastSeen = System.currentTimeMillis()
+                        when {
+                            // "Next" opened a new web page: put the script back, it carries on from sessionStorage
+                            phase.isEmpty() && System.currentTimeMillis() - lastSeen < 90_000 -> {
+                                t.web.evaluateJavascript("if(document.readyState==='complete'&&!window.__roninTable){$tableJs;window.__roninTable.resume()}", null)
+                                ui.postDelayed(this, 1000)
+                            }
+                            phase == "navigating" -> ui.postDelayed(this, 600)
+                            phase == "reading" -> {
+                                if (System.currentTimeMillis() - started > 60 * 60_000) t.web.evaluateJavascript("window.__roninTable.stop()", null) // keep what was read
+                                val pct = if (st.isNull("pct")) "" else "${st.optInt("pct")}% · "
+                                readNote.text = "📊 ${pct}पेज ${st.optInt("page")} · ${st.optInt("rows")} पंक्तियाँ पढ़ीं..."
                                 readBar.visibility = View.VISIBLE
                                 ui.postDelayed(this, 600)
                             }
-                            "done" -> t.web.evaluateJavascript("window.__roninTable.result()") { res -> finishExport(jsString(res), null) }
+                            phase == "done" -> t.web.evaluateJavascript("window.__roninTable.result()") { res -> finishExport(jsString(res), null) }
                             else -> finishExport(null, st.optString("error").ifEmpty { "No table found on this page." })
                         }
                     }
@@ -932,6 +945,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
 
     private fun finishExport(json: String?, error: String?) {
         readBar.visibility = View.GONE
+        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (json == null) {
             exporting = false
             Toast.makeText(this, "📊 Table नहीं मिली / could not read the table: $error", Toast.LENGTH_LONG).show(); return
@@ -945,6 +959,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                 val p = saveToDownloads("$base.pdf", "application/pdf", te.pdf())
                 runOnUiThread {
                     exporting = false
+                    exportTab?.web?.evaluateJavascript("window.__roninTable&&window.__roninTable.badge('✔ Excel + PDF बन गई (Downloads → Ronin)',100,true)", null)
                     val c = te.counts
                     AlertDialog.Builder(this).setTitle("📊 Excel + PDF बन गई")
                         .setMessage(if (te.info.isNotEmpty()) te.info.joinToString("\n") { "${it.first}: ${it.second}" }.take(1500) + "\n\nDownloads → Ronin में save है।"

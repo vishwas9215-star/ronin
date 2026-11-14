@@ -56,12 +56,15 @@ func (t *Tab) exportData() {
 	}
 	t.exporting = true
 	w := t.w
+	keepAwake(true) // the owner may walk away: the laptop must not sleep in the middle
 	w.bar(t, "info", "📊 इस page की table पढ़ रहा हूँ... (Reading the table)", nil)
 	t.runScript(tableExportJS+";window.__roninTable.start()", func(string) {
 		start := time.Now()
+		lastSeen := time.Now() // the script answered (a new web page takes it away for a moment)
 		var poll func()
 		poll = func() {
 			if t.destroyed {
+				keepAwake(false)
 				return
 			}
 			t.runScript("window.__roninTable?window.__roninTable.state():''", func(raw string) {
@@ -70,15 +73,29 @@ func (t *Tab) exportData() {
 				var s struct {
 					Phase, Error string
 					Page, Rows   int
+					Pct          *int
 				}
 				_ = json.Unmarshal([]byte(js), &s)
+				if s.Phase != "" {
+					lastSeen = time.Now()
+				}
 				switch {
-				case s.Phase == "reading" && time.Since(start) >= 15*time.Minute:
+				case s.Phase == "" && time.Since(lastSeen) < 90*time.Second:
+					// "Next" opened a new web page: put the script back, it carries on from sessionStorage
+					t.runScript("if(document.readyState==='complete'&&!window.__roninTable){"+tableExportJS+";window.__roninTable.resume()}", func(string) {})
+					time.AfterFunc(time.Second, func() { runOnUI(poll) })
+				case s.Phase == "navigating":
+					time.AfterFunc(600*time.Millisecond, func() { runOnUI(poll) })
+				case s.Phase == "reading" && time.Since(start) >= 60*time.Minute:
 					// too long: keep what was read (the file says it is not complete)
 					t.runScript("window.__roninTable.stop()", func(string) {})
 					time.AfterFunc(time.Second, func() { runOnUI(poll) })
 				case s.Phase == "reading":
-					w.bar(t, "info", fmt.Sprintf("📊 पेज %d पढ़ लिया, %d पंक्तियाँ... (Reading page %d, %d rows)", s.Page, s.Rows, s.Page, s.Rows), nil)
+					pct := ""
+					if s.Pct != nil {
+						pct = fmt.Sprintf("%d%% · ", *s.Pct)
+					}
+					w.bar(t, "info", fmt.Sprintf("📊 %sपेज %d पढ़ लिया, %d पंक्तियाँ... (Reading page %d, %d rows)", pct, s.Page, s.Rows, s.Page, s.Rows), nil)
 					time.AfterFunc(600*time.Millisecond, func() { runOnUI(poll) })
 				case s.Phase == "done":
 					t.runScript("window.__roninTable.result()", func(res string) {
@@ -88,6 +105,7 @@ func (t *Tab) exportData() {
 					})
 				default:
 					t.exporting = false
+					keepAwake(false)
 					msg := s.Error
 					if msg == "" {
 						msg = "the page did not answer"
@@ -100,8 +118,21 @@ func (t *Tab) exportData() {
 	})
 }
 
+// keepAwake stops Windows from sleeping (and the screen from going off) while data is read.
+func keepAwake(on bool) {
+	const esContinuous, esSystem, esDisplay = 0x80000000, 0x00000001, 0x00000002
+	if on {
+		_, _, _ = pSetThreadExecutionState.Call(esContinuous | esSystem | esDisplay)
+	} else {
+		_, _, _ = pSetThreadExecutionState.Call(esContinuous)
+	}
+}
+
+var pSetThreadExecutionState = windows.NewLazySystemDLL("kernel32.dll").NewProc("SetThreadExecutionState")
+
 func (t *Tab) saveData(body string) {
 	w := t.w
+	keepAwake(false)
 	t.exporting = false
 	d, err := tablexport.Parse(body)
 	if err != nil {
@@ -123,6 +154,7 @@ func (t *Tab) saveData(body string) {
 		return
 	}
 	savePageFile(w, xlsx, true)
+	t.runScript("window.__roninTable&&window.__roninTable.badge('✔ Excel बन गई (Downloads). PDF भी बन रही है...',100,true)", func(string) {})
 	c := d.Check.Counts
 	note := ""
 	if d.Partial != "" {

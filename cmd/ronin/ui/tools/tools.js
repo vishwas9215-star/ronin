@@ -327,32 +327,33 @@ function topBar(back) {
     back ? h('button', { cls: 'back', on: { click: home } }, '‹ All tools') : h('span'),
     h('button', { cls: 'chip', on: { click: closeTools } }, '✕ Back to browser'));
 }
+// every tool once: [category, id, icon, name, what it does]. A new tool = one line here + T[id].
+const CATS = [['data', '📊 Data'], ['calc', '🧮 Calculators'], ['pdf', '📄 PDF'], ['photo', '🖼️ Photo']];
+const TOOLS = [
+  ['data', 'datamatch', '🔀', 'Data Match', 'कोई भी 2 या ज़्यादा Excel / CSV: अंतर और छूटे हुए'],
+  ['calc', 'datecalc', '📅', 'Date Calculator', 'उम्र, प्रवेश आयु, सेवा, सेवानिवृत्ति, छुट्टी के दिन, उम्र का अनुमान'],
+  ['calc', 'words', '₹', 'Amount in Words', 'रकम शब्दों में: Hindi और English (bill, चेक, form)'],
+  ['pdf', 'pdfsmall', '📉', 'Compress PDF', '50 KB, 100 KB... जितनी चाहिए'],
+  ['pdf', 'merge', '➕', 'Merge PDF', 'कई PDF / photo एक PDF में'],
+  ['pdf', 'pages', '📄', 'Organize Pages', 'पेज हटाओ, क्रम बदलो, घुमाओ'],
+  ['pdf', 'numbers', '🔢', 'Page Numbers', 'हर पेज पर नंबर'],
+  ['pdf', 'pdfsign', '✍️', 'Sign PDF', 'sign, नाम, तारीख'],
+  ['pdf', 'unlock', '🔓', 'Unlock PDF', 'जिसका password आपको पता है'],
+  ['pdf', 'topdf', '🖼️', 'Photos to PDF', 'कई photo, एक PDF'],
+  ['photo', 'photosmall', '📉', 'Compress Photo', '20 KB, 50 KB... form के लिए'],
+  ['photo', 'photosign', '✍️', 'Sign Photo', 'sign, नाम, तारीख'],
+  ['photo', 'collage', '🧩', 'Collage', '2-4 photo एक में'],
+  ['photo', 'whatsapp', '📱', 'WhatsApp Size', 'DP और Status'],
+];
 function home() {
   msgEl = null;
   app.innerHTML = '';
-  const tile = (id, icon, name, sub) => h('button', { cls: 'tile', on: { click: () => open(id) } }, h('span', {}, icon), name, h('small', {}, sub));
   app.append(
-    topBar(false),
-    h('h1', {}, '🧰 Ronin Tools'),
-    h('p', { cls: 'sub' }, '🔒 सब कुछ इसी device पर होता है: कोई file internet पर नहीं जाती। बनी हुई file Downloads में save होती है।'),
-    h('h2', {}, '📊 Data'),
-    h('div', { cls: 'grid' },
-      tile('datamatch', '🔀', 'Data Match', 'कोई भी 2 या ज़्यादा Excel / CSV: अंतर और छूटे हुए')),
-    h('h2', {}, '📄 PDF'),
-    h('div', { cls: 'grid' },
-      tile('pdfsmall', '📉', 'Compress PDF', '50 KB, 100 KB... जितनी चाहिए'),
-      tile('merge', '➕', 'Merge PDF', 'कई PDF / photo एक PDF में'),
-      tile('pages', '📄', 'Organize Pages', 'पेज हटाओ, क्रम बदलो, घुमाओ'),
-      tile('numbers', '🔢', 'Page Numbers', 'हर पेज पर नंबर'),
-      tile('pdfsign', '✍️', 'Sign PDF', 'sign, नाम, तारीख'),
-      tile('unlock', '🔓', 'Unlock PDF', 'जिसका password आपको पता है'),
-      tile('topdf', '🖼️', 'Photos to PDF', 'कई photo, एक PDF')),
-    h('h2', {}, '🖼️ Photo'),
-    h('div', { cls: 'grid' },
-      tile('photosmall', '📉', 'Compress Photo', '20 KB, 50 KB... form के लिए'),
-      tile('photosign', '✍️', 'Sign Photo', 'sign, नाम, तारीख'),
-      tile('collage', '🧩', 'Collage', '2-4 photo एक में'),
-      tile('whatsapp', '📱', 'WhatsApp Size', 'DP और Status')));
+    h('div', { cls: 'head' }, h('h1', {}, '🧰 Ronin Tools'), h('button', { cls: 'chip', on: { click: closeTools } }, '✕ Back to browser')),
+    h('p', { cls: 'note' }, '🔒 सब कुछ इसी device पर होता है: कोई file internet पर नहीं जाती।'),
+    h('div', { cls: 'cats' }, CATS.map(([c, title]) => h('section', { cls: 'cat' }, h('h2', {}, title),
+      h('div', { cls: 'list' }, TOOLS.filter(t => t[0] === c).map(([, id, icon, name, sub]) =>
+        h('button', { cls: 'tool', title: sub, on: { click: () => open(id) } }, h('span', { cls: 'ic' }, icon), h('span', {}, h('b', {}, name), h('small', {}, sub)))))))));
   window.scrollTo(0, 0);
 }
 function open(id) {
@@ -446,6 +447,146 @@ T.datamatch = {
     } } });
     body.append(pick, box, run);
     draw();
+  },
+};
+
+// ---- Date Calculator (datecalc.js): answers change as soon as a date is chosen
+T.datecalc = {
+  title: '📅 Date Calculator', sub: 'तारीख़ चुनते ही जवाब आ जाता है।',
+  show(body) {
+    const D = window.RoninDate, today = D.today();
+    const st = { mode: 'age', on: 'today', onDate: null, min: 6, retAge: 62, session: true, estOn: 'today' };
+    const out = h('div');
+    const dateIn = (label, key) => {
+      const i = h('input', { type: 'date', max: '2100-12-31' });
+      if (st[key]) i.value = D.iso(st[key]); // keeps what was chosen when the screen changes
+      i.addEventListener('input', () => { st[key] = D.parse(i.value); draw(); });
+      return h('div', {}, h('label', { cls: 'opt' }, label), i);
+    };
+    const numIn = (label, key, ph) => {
+      const i = h('input', { type: 'number', min: 0, max: 130, inputmode: 'numeric', placeholder: ph || '' });
+      if (st[key] !== undefined) i.value = st[key];
+      i.addEventListener('input', () => { st[key] = i.value === '' ? undefined : +i.value; draw(); });
+      return h('div', {}, h('label', { cls: 'opt' }, label), i);
+    };
+    const april = y => ({ y, m: 4, d: 1 });
+    const sessionYear = today.m >= 8 ? today.y + 1 : today.y; // after July the next admissions are next April
+    const onDate = () => st.on === 'today' ? today : st.on === 'april' ? april(sessionYear) : st.onDate;
+    const res = (cls, big, text) => h('div', { cls: 'res ' + cls }, h('big', {}, big), text || '');
+    const forms = {
+      age: () => [dateIn('जन्मतिथि', 'dob'), h('label', { cls: 'opt' }, 'किस तारीख़ को'),
+        chips([['today', 'आज'], ['april', '1 अप्रैल ' + sessionYear], ['other', 'दूसरी तारीख़']], st.on, v => { st.on = v; drawForm(); }),
+        st.on === 'other' ? dateIn('तारीख़', 'onDate') : ''],
+      admission: () => [dateIn('बच्चे की जन्मतिथि (आधार / जन्म प्रमाण पत्र से)', 'dob'),
+        h('label', { cls: 'opt' }, 'कितने वर्ष पूरे होने चाहिए'),
+        chips([[6, 'कक्षा 1: 6 वर्ष'], [5, '5 वर्ष'], [4, '4 वर्ष'], [3, 'बालवाटिका: 3 वर्ष']], st.min, v => { st.min = v; draw(); }),
+        h('label', { cls: 'opt' }, 'किस तारीख़ तक'),
+        chips([['april', '1 अप्रैल ' + sessionYear], ['today', 'आज'], ['other', 'दूसरी तारीख़']], st.on === 'today' || st.on === 'other' ? st.on : 'april', v => { st.on = v; drawForm(); }),
+        st.on === 'other' ? dateIn('तारीख़', 'onDate') : '',
+        h('p', { cls: 'note' }, 'UP में कक्षा 1 के लिए 1 अप्रैल तक 6 वर्ष पूरे होने चाहिए (विभाग का निर्देश बदले तो ऊपर तारीख़ बदल लें)।')],
+      service: () => [dateIn('नियुक्ति / joining की तारीख़', 'join'), h('label', { cls: 'opt' }, 'किस तारीख़ तक'),
+        chips([['today', 'आज'], ['other', 'दूसरी तारीख़']], st.on === 'other' ? 'other' : 'today', v => { st.on = v; drawForm(); }),
+        st.on === 'other' ? dateIn('तारीख़', 'onDate') : ''],
+      retire: () => [dateIn('जन्मतिथि (सेवा पुस्तिका के अनुसार)', 'dob'), h('label', { cls: 'opt' }, 'सेवानिवृत्ति की आयु'),
+        chips([[62, '62 (UP बेसिक शिक्षक)'], [60, '60'], [58, '58'], [65, '65']], st.retAge, v => { st.retAge = v; draw(); }),
+        chips([[true, 'सत्र लाभ: 31 मार्च तक'], [false, 'सत्र लाभ नहीं']], st.session, v => { st.session = v; draw(); })],
+      days: () => [chips([['between', 'दो तारीख़ों के बीच कितने दिन'], ['after', 'इतने दिन बाद कौन-सी तारीख़']], st.dmode || 'between', v => { st.dmode = v; drawForm(); }),
+        dateIn((st.dmode || 'between') === 'between' ? 'पहली तारीख़' : 'शुरू की तारीख़ (जैसे छुट्टी का पहला दिन)', 'from'),
+        (st.dmode || 'between') === 'between' ? dateIn('दूसरी तारीख़', 'to') : numIn('कितने दिन (जैसे 180)', 'ndays')],
+      guess: () => [h('p', { cls: 'note' }, 'जिनकी जन्मतिथि का कोई काग़ज़ नहीं और याद भी नहीं: जो बातें पता हों वही भरें, बाक़ी खाली छोड़ दें। जितनी ज़्यादा बातें, उतना पक्का अनुमान।'),
+        h('label', { cls: 'opt' }, 'किस तारीख़ की उम्र'),
+        chips([['today', 'आज'], ['census', 'जनगणना: 1 मार्च 2027']], st.estOn, v => { st.estOn = v; draw(); }),
+        h('div', { cls: 'row2' },
+          numIn('सबसे बड़े बच्चे की उम्र अभी (वर्ष)', 'childAge'), numIn('पहला बच्चा होते समय इनकी उम्र (लगभग)', 'ageAtFirstChild', 'महिला ~20, पुरुष ~24'),
+          numIn('शादी को कितने वर्ष हुए', 'yearsMarried'), numIn('शादी के समय इनकी उम्र (लगभग)', 'ageAtMarriage', 'महिला ~18, पुरुष ~22')),
+        h('label', { cls: 'opt' }, 'कोई पुरानी घटना याद है?'),
+        (() => {
+          const sel = h('select', {}, h('option', { value: '' }, '— कोई नहीं —'), D.EVENTS.map(([y, n]) => h('option', { value: y }, y + ': ' + n)));
+          sel.value = st.eventYear || '';
+          sel.addEventListener('change', () => { st.eventYear = +sel.value || undefined; draw(); });
+          return sel;
+        })(),
+        numIn('उस समय इनकी उम्र (लगभग, वर्ष)', 'ageAtEvent')],
+    };
+    const answer = () => {
+      const on = onDate();
+      if (st.mode === 'age') {
+        if (!st.dob || !on) return '';
+        const r = D.diff(st.dob, on);
+        return r ? res('ok', D.ymd(r), D.show(on) + ' को उम्र (कुल ' + r.total.toLocaleString('en-IN') + ' दिन)') : res('bad', 'यह तारीख़ जन्म से पहले की है');
+      }
+      if (st.mode === 'admission') {
+        const day = st.on === 'today' ? today : st.on === 'other' ? st.onDate : april(sessionYear);
+        if (!st.dob || !day) return '';
+        const a = D.admission(st.dob, day, st.min);
+        if (!a.age) return res('bad', 'यह तारीख़ जन्म से पहले की है');
+        return a.ok ? res('ok', '✔ हाँ, ' + st.min + ' वर्ष पूरे हैं', D.show(day) + ' को उम्र: ' + D.ymd(a.age))
+          : res('bad', '✘ नहीं, ' + a.short + ' दिन कम हैं', D.show(day) + ' को उम्र: ' + D.ymd(a.age) + '\n' + st.min + ' वर्ष पूरे होंगे: ' + D.show(a.turns));
+      }
+      if (st.mode === 'service') {
+        const day = st.on === 'other' ? st.onDate : today;
+        if (!st.join || !day) return '';
+        const r = D.diff(st.join, day);
+        return r ? res('ok', D.ymd(r), D.show(st.join) + ' से ' + D.show(day) + ' तक सेवा (कुल ' + r.total.toLocaleString('en-IN') + ' दिन)') : res('bad', 'joining की तारीख़ बाद की है');
+      }
+      if (st.mode === 'retire') {
+        if (!st.dob) return '';
+        const r = D.retirement(st.dob, st.retAge, st.session);
+        const left = D.cmp(r.end, today) >= 0 ? D.diff(today, r.end) : null;
+        return res('ok', 'सेवानिवृत्ति: ' + D.show(r.end),
+          st.retAge + ' वर्ष पूरे: ' + D.show(r.reach) + '\nमहीने की आखिरी तारीख़: ' + D.show(r.retire) +
+          (r.extended ? '\nसत्र लाभ से: ' + D.show(r.end) + ' तक' : '') +
+          (left ? '\nअभी बाकी: ' + D.ymd(left) : '\n(यह तारीख़ बीत चुकी है)') +
+          '\nनियम: जिस महीने आयु पूरी हो उसकी आखिरी तारीख़; जन्मतिथि महीने की 1 तारीख़ हो तो पिछले महीने की आखिरी तारीख़।');
+      }
+      if (st.mode === 'days') {
+        if (!st.from) return '';
+        if ((st.dmode || 'between') === 'between') {
+          if (!st.to) return '';
+          const [a, b] = D.cmp(st.from, st.to) <= 0 ? [st.from, st.to] : [st.to, st.from];
+          const n = D.days(a, b);
+          return res('ok', n + ' दिन का अंतर', 'दोनों दिन गिनकर: ' + (n + 1) + ' दिन\n' + D.ymd(D.diff(a, b)));
+        }
+        if (!(st.ndays > 0)) return '';
+        return res('ok', st.ndays + ' दिन बाद: ' + D.show(D.addDays(st.from, st.ndays)),
+          'छुट्टी हो तो आखिरी दिन (पहला दिन गिनकर ' + st.ndays + ' दिन): ' + D.show(D.addDays(st.from, st.ndays - 1)) + '\nकाम पर वापसी: ' + D.show(D.addDays(st.from, st.ndays)));
+      }
+      const y = st.estOn === 'census' ? 2027 : today.y;
+      const e = D.estimate({ childAge: st.childAge, ageAtFirstChild: st.ageAtFirstChild, yearsMarried: st.yearsMarried, ageAtMarriage: st.ageAtMarriage, eventYear: st.eventYear, ageAtEvent: st.ageAtEvent }, y);
+      if (!e) return res('', 'ऊपर कोई एक बात भरें', 'जैसे सबसे बड़े बच्चे की उम्र और पहला बच्चा होते समय इनकी उम्र।');
+      return res(e.agree ? 'ok' : 'bad', 'लगभग ' + e.age + ' वर्ष' + (e.from !== e.to ? ' (' + e.from + ' से ' + e.to + ')' : ''),
+        'जन्म का वर्ष लगभग: ' + e.birthYear + '\n' + e.got.map(g => g.how + ': ' + g.age + ' वर्ष').join('\n') +
+        (e.agree ? '' : '\n⚠ अलग-अलग बातों से उम्र में 5 वर्ष से ज़्यादा अंतर है: दोबारा पूछ लें।') + '\nयह सिर्फ़ अनुमान है।');
+    };
+    const formBox = h('div');
+    function draw() { out.innerHTML = ''; const a = answer(); if (a) out.append(a); }
+    function drawForm() { formBox.innerHTML = ''; formBox.append(...forms[st.mode]()); draw(); }
+    body.append(
+      chips([['age', '🎂 उम्र'], ['admission', '🏫 प्रवेश आयु'], ['service', '💼 सेवा अवधि'], ['retire', '🏁 सेवानिवृत्ति'], ['days', '📆 दिन गिनो / छुट्टी'], ['guess', '👴 उम्र का अनुमान (जनगणना)']], st.mode,
+        v => { st.mode = v; st.on = v === 'admission' ? 'april' : 'today'; st.onDate = null; drawForm(); }),
+      formBox, out);
+    drawForm();
+  },
+};
+
+// ---- amount in words
+T.words = {
+  title: '₹ Amount in Words', sub: 'रकम लिखें (जैसे 125000 या 1,25,000.50): शब्दों में तुरंत, Hindi और English दोनों।',
+  show(body) {
+    const D = window.RoninDate;
+    const inp = h('input', { type: 'text', inputmode: 'decimal', placeholder: 'जैसे 125000' });
+    const out = h('div');
+    const line = (label, text) => h('div', { cls: 'res ok' }, h('small', {}, label), h('big', { style: 'font-size:19px;user-select:all' }, text),
+      h('button', { cls: 'chip', on: { click: async e => { try { await navigator.clipboard.writeText(text); e.target.textContent = '✔ Copied'; } catch (x) { e.target.textContent = 'ऊपर दबाकर चुनें'; } } } }, '📋 Copy'));
+    inp.addEventListener('input', () => {
+      out.innerHTML = '';
+      if (!inp.value.trim()) return;
+      const w = D.words(inp.value);
+      if (!w) { out.append(h('div', { cls: 'res bad' }, 'सिर्फ़ अंक लिखें (पैसे के लिए दशमलव, जैसे 1500.50)')); return; }
+      out.append(line('अंकों में', w.figure), line('हिन्दी', w.hi), line('English', w.en));
+    });
+    body.append(inp, out);
+    setTimeout(() => inp.focus(), 50);
   },
 };
 

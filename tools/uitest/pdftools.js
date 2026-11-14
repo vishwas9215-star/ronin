@@ -12,7 +12,7 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
     const file = fs.existsSync(f) && fs.statSync(f).isFile() ? f : path.join(dir, 'index.html');
     r.fulfill({ body: fs.readFileSync(file), contentType: /\.m?js$/.test(file) ? 'text/javascript' : 'text/html' });
   });
-  async function tool(id) { await p.goto('https://ronin.home/tools/?t=' + Date.now() + '#' + id); await p.waitForSelector('button.big'); }
+  async function tool(id) { await p.goto('https://ronin.home/tools/?t=' + Date.now() + '#' + id); await p.waitForSelector('main h1'); }
   async function choose(files, label) {
     const [fc] = await Promise.all([p.waitForEvent('filechooser'), p.click(label ? 'button.big:has-text("' + label + '")' : 'button.big >> nth=0')]);
     await fc.setFiles(files.map(f => path.join(fx, f)));
@@ -35,8 +35,10 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   const chip = t => p.click('button.chip:has-text("' + t + '")');
   let r;
 
-  await p.goto('https://ronin.home/tools/'); await p.waitForSelector('.tile');
+  await p.goto('https://ronin.home/tools/'); await p.waitForSelector('.tool');
   await p.screenshot({ path: path.join(out, 'tools-home.png'), fullPage: true });
+  await p.setViewportSize({ width: 1280, height: 700 }); await p.screenshot({ path: path.join(out, 'tools-home-wide.png') });
+  await p.setViewportSize({ width: 820, height: 1100 });
 
   await tool('pdfsmall'); await choose(['report.pdf']); await chip('500 KB'); r = await run(120000);
   if (!r.size || r.size > 500 * 1024 || r.pages !== 6) bad('PDF smaller: ' + JSON.stringify(r));
@@ -103,6 +105,28 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   await tool('whatsapp'); await choose(['photo1.jpg']); await chip('Status'); r = await run();
   if (r.w !== 1080 || r.h !== 1920) bad('Status: ' + JSON.stringify(r));
 
+  // Date Calculator
+  await tool('datecalc');
+  const answer = () => p.$eval('.res', e => e.textContent).catch(() => '');
+  await p.fill('input[type=date] >> nth=0', '2017-01-25'); await p.waitForTimeout(150);
+  if (!/वर्ष/.test(await answer())) bad('age: ' + await answer());
+  await chip('प्रवेश आयु'); await p.fill('input[type=date] >> nth=0', '2020-04-02'); await chip('दूसरी तारीख़');
+  await p.fill('input[type=date] >> nth=1', '2026-04-01'); await p.waitForTimeout(150);
+  if (!/1 दिन कम/.test(await answer())) bad('admission: ' + await answer());
+  await chip('सेवानिवृत्ति'); await p.fill('input[type=date] >> nth=0', '1970-07-15'); await p.waitForTimeout(150);
+  if (!/31\/03\/2033/.test(await answer())) bad('retirement: ' + await answer());
+  await chip('उम्र का अनुमान'); await chip('जनगणना');
+  await p.fill('input[type=number] >> nth=0', '40'); await p.fill('input[type=number] >> nth=1', '22'); await p.waitForTimeout(150);
+  if (!/लगभग 62 वर्ष/.test(await answer())) bad('estimate: ' + await answer());
+  await chip('दिन गिनो'); await chip('इतने दिन बाद');
+  await p.fill('input[type=date] >> nth=0', '2026-11-15'); await p.fill('input[type=number] >> nth=0', '180'); await p.waitForTimeout(150);
+  if (!/14\/05\/2027/.test(await answer()) || !/13\/05\/2027/.test(await answer())) bad('days after: ' + await answer());
+  await p.screenshot({ path: path.join(out, 'tools-date.png'), fullPage: true });
+  await tool('words'); await p.fill('input[type=text]', '125000');
+  await p.waitForTimeout(150);
+  const w = await p.$$eval('.res big', a => a.map(x => x.textContent).join(' | '));
+  if (!/एक लाख पच्चीस हज़ार रुपये मात्र/.test(w) || !/One Lakh Twenty Five Thousand/.test(w)) bad('amount in words: ' + w);
+
   // a turned page (/Rotate 90): the signature lands where tapped, upright
   await tool('pdfsign');
   const rot = await p.evaluate(async () => {
@@ -132,7 +156,7 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
 
   // the hand-over to Ronin, as Ronin does it: read the pieces, say "saved"
   await p.route('https://ronin.data/**', r => r.fulfill({ status: 204, body: '' }));
-  await p.goto('https://ronin.home/tools/?k=TESTKEY'); await p.waitForSelector('.tile');
+  await p.goto('https://ronin.home/tools/?k=TESTKEY'); await p.waitForSelector('.tool');
   await p.evaluate(() => { window.__selfTest = ''; window.__roninToolsSelfTest().then(r => { window.__selfTest = r; }, e => { window.__selfTest = 'error ' + e.message; }); });
   await p.waitForFunction(() => window.__roninSave && window.__roninSave.state === 'waiting', null, { timeout: 30000 });
   const got = await p.evaluate(() => { const s = window.__roninSave; let b = ''; for (let i = 0; i < s.n; i++) b += s.part(i); s.state = 'saved'; return { name: s.name, len: atob(b).length }; });

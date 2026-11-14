@@ -312,7 +312,7 @@ class DeviceTest {
         ActivityScenario.launch(MainActivity::class.java).use { sc ->
             Thread.sleep(1500)
             sc.onActivity { a -> a.openToolsForTest() }
-            assertTrue("tools page did not open", waitFor(20) { eval(sc, "document.querySelectorAll('.tile').length") == "12" })
+            assertTrue("tools page did not open", waitFor(20) { eval(sc, "document.querySelectorAll('.tool').length") == "14" })
             eval(sc, "window.__roninToolsOpen('datamatch'),1")
             Thread.sleep(800)
             shot("10-datamatch-page")
@@ -341,7 +341,7 @@ class DeviceTest {
             var strip = 0
             sc.onActivity { a -> strip = a.tabStripForTest().childCount }
             sc.onActivity { a -> a.openToolsForTest() }
-            assertTrue("tools page did not open", waitFor(20) { eval(sc, "document.querySelectorAll('.tile').length") == "12" })
+            assertTrue("tools page did not open", waitFor(20) { eval(sc, "document.querySelectorAll('.tool').length") == "14" })
             var after = 0
             sc.onActivity { a -> after = a.tabStripForTest().childCount }
             assertEquals("Ronin Tools must not show as a tab", strip, after)

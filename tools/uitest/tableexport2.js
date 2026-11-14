@@ -23,9 +23,31 @@ const { chromium } = require('playwright'); const fs = require('fs');
   // exact repeated rows (no serial number) are kept and marked
   r = await run(`<table><tr><th>Name</th><th>Father</th></tr><tr><td>Asha Devi</td><td>Ram Lal</td></tr><tr><td>Asha Devi</td><td>Ram Lal</td></tr><tr><td>Vinod Kumar</td><td>Shyam Lal</td></tr></table>`);
   if (!r || r.rows.length !== 3 || r.check.counts.dupRows !== 1) bad('repeated row: ' + JSON.stringify(r && r.check.counts));
-  // a Next that loads another web page: what was read is kept and the file says it is partial
-  r = await run(`<table><tr><th>Name</th></tr><tr><td>Asha Devi</td></tr><tr><td>Vinod Kumar</td></tr></table><a href="/list?page=2">Next</a>`, 'https://school.example/list?page=1');
-  if (!r || r.rows.length !== 2 || !/separate web page/.test(r.partial)) bad('next is a link: ' + JSON.stringify(r && { n: r.rows.length, p: r.partial }));
+  // a Next that loads another web page: Ronin puts the script back on the new page and it carries on
+  {
+    const p = await b.newPage();
+    const pages = { 1: ['Asha Devi', 'Vinod Kumar'], 2: ['Ravi Verma', 'Sita Devi'], 3: ['Mohan Lal'] };
+    await p.route('https://school.example/**', r => {
+      const n = +new URL(r.request().url()).searchParams.get('page') || 1;
+      const next = pages[n + 1] ? `<a href="/list?page=${n + 1}">Next</a>` : '';
+      r.fulfill({ contentType: 'text/html', body: `<table><tr><th>Name</th></tr>${pages[n].map(x => '<tr><td>' + x + '</td></tr>').join('')}</table>${next}` });
+    });
+    await p.goto('https://school.example/list?page=1');
+    await p.evaluate(js); await p.evaluate(() => window.__roninTable.start());
+    let res = null;
+    for (let i = 0; i < 200 && !res; i++) {
+      await p.waitForTimeout(200);
+      // what Ronin does: if the script is gone (a new page), put it back and resume
+      const st = await p.evaluate(() => window.__roninTable ? window.__roninTable.state() : '').catch(() => 'nav');
+      if (st === 'nav') continue;
+      if (st === '') { await p.waitForLoadState(); await p.evaluate(js); await p.evaluate(() => window.__roninTable.resume()); continue; }
+      const s2 = JSON.parse(st);
+      if (s2.phase === 'done') res = JSON.parse(await p.evaluate(() => window.__roninTable.result()));
+      if (s2.phase === 'error') { res = { rows: [], partial: s2.error }; }
+    }
+    if (!res || res.rows.length !== 5 || res.partial) bad('next is a separate page: ' + JSON.stringify(res && { n: res.rows.length, p: res.partial }));
+    await p.close();
+  }
   // 500 different realistic names: very few "look-alike" alarms
   const first = ['Ram', 'Raj', 'Rakesh', 'Ramesh', 'Rita', 'Riya', 'Suresh', 'Mahesh', 'Dinesh', 'Ganesh', 'Rahul', 'Rohit', 'Mohit', 'Sohan', 'Mohan', 'Sita', 'Gita', 'Anita', 'Sunita', 'Vinita', 'Pooja', 'Puja', 'Neha', 'Sneha', 'Amit', 'Sumit', 'Ankit', 'Ajay', 'Vijay', 'Sanjay'];
   const last = ['Kumar', 'Singh', 'Yadav', 'Verma', 'Gupta', 'Maurya', 'Pal', 'Devi', 'Kumari', 'Prasad', 'Lal', 'Ram', 'Sharma', 'Mishra', 'Pandey', 'Tiwari', 'Shukla'];
