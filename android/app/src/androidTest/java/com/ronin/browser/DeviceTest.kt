@@ -454,6 +454,13 @@ class DeviceTest {
             var shieldShown = false
             sc.onActivity { a -> shieldShown = (a.socialBarForTest() as android.view.ViewGroup).findViewWithTag<android.view.View>("socialShield")?.isShown == true }
             assertTrue("protection shield not shown in Safe Social", shieldShown)
+            // signed-out Gmail's advert page goes to Google's sign-in; the inbox itself is left alone
+            sc.onActivity { a ->
+                assertTrue(a.gmailAdvertForTest("https://workspace.google.com/intl/en-US/gmail/"))
+                assertTrue(a.gmailAdvertForTest("https://www.google.com/intl/en/gmail/about/"))
+                assertTrue(!a.gmailAdvertForTest("https://mail.google.com/mail/u/0/"))
+                assertTrue(!a.gmailAdvertForTest("https://workspace.google.com/pricing"))
+            }
             shot("15-safe-social")
             // ✕ closes it and the browser is back
             eval(sc, "location.href='https://ronin.data/social?do=close&k='+new URLSearchParams(location.search).get('k'),1")

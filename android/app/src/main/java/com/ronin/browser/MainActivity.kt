@@ -594,6 +594,7 @@ open class MainActivity : AppCompatActivity() {
     }
 
     fun tabStripForTest(): LinearLayout = tabStrip
+    fun gmailAdvertForTest(u: String) = gmailAdvert(u)
     fun newTabButtonForTest(): View = newTabButton
     fun goHomeForTest() { current?.let { load(it, HOME) } }
     fun exportDataForTest() { current?.let { exportData(it) } }
@@ -712,6 +713,8 @@ open class MainActivity : AppCompatActivity() {
                 return true
             }
             if (url == BACK_TO_SAFETY) { leaveDangerPage(tab()); return true }
+            // Ronin Mail signed out: Gmail sends you to its advert page; go straight to Google's own sign-in instead
+            if (tab().isSocial && req.isForMainFrame && gmailAdvert(url)) { view.loadUrl(GMAIL_SIGNIN); return true }
             if (req.isForMainFrame && Sensitive.site(url) && Parts.adultBlocked(this@MainActivity)) { blockAdult(tab(), url); return true }
             if (req.isForMainFrame && Parts.adultBlocked(this@MainActivity) && Parts.safeSearch(url) != null) { view.loadUrl(Parts.safeSearch(url)!!); return true }
             if (req.isForMainFrame && !tab().isPrivate && Sensitive.site(url)) { openPrivate(url, tab()); return true }
@@ -932,6 +935,8 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     }
 
     /** The engine's own name without "wv" (Google refuses sign-in in apps that show it). */
+    private val GMAIL_SIGNIN = "https://accounts.google.com/ServiceLogin?service=mail&continue=https%3A%2F%2Fmail.google.com%2Fmail%2F"
+
     private val phoneUa: String by lazy {
         WebSettings.getDefaultUserAgent(this).replace("; wv", "").replace(Regex("Version/\\d+(\\.\\d+)* "), "")
     }
@@ -1033,6 +1038,10 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     }
     private fun socialName(app: String): String? = socialAppNames[app] ?: app.removePrefix("c").toIntOrNull()?.let { if (app.startsWith("c")) customApps().getOrNull(it)?.first else null }
     /** The "Ronin Mail" icon: the family's email, full screen, Safe Mail on. */
+    private fun gmailAdvert(url: String): Boolean {
+        val u = android.net.Uri.parse(url); val h = u.host ?: return false; val p = u.path ?: ""
+        return (h == "workspace.google.com" || h == "www.google.com" || h == "google.com") && Regex("^(/intl/[^/]+)?/gmail(/about)?/?$").matches(p)
+    }
     fun openMail() = openSocial(socialUrl(socialSettings().optString("mailApp", "gmail")).ifEmpty { "https://mail.google.com/" })
 
     fun openSocial(open: String = "") {
