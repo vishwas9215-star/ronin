@@ -77,6 +77,26 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   await p2.route('https://www.google.com/**', r => r.fulfill(html('<html><body>results</body></html>')));
   await p2.goto('https://www.google.com/search?q=free+laptop+yojana'); await p2.waitForTimeout(500);
   if (!await p2.$('#ronin-fact a[href*="boomlive"]')) bad('no fact check on Google');
+  // Instagram (like the real one, Nov 2026): the "Ad" label and the "Shop now" button come AFTER the post,
+  // and a caption opens with "... more"
+  const ig = `<html><body><main>
+    <article id=igok><header><a><span>friend_ram</span></a></header><span dir=auto id=igcap>Sunday walk with family</span><a role=button>Follow</a></article>
+    <article id=igad><header><a><span>kasperskylab</span></a><div id=lbl></div></header><div>photo</div></article>
+    <article id=igshop><header><a><span>brand</span></a></header><a href="https://l.instagram.com/?u=x" id=cta></a></article>
+    <article id=igreel><span dir=auto id=reelcap>Trading tips...</span></article>
+  </main></body></html>`;
+  await p2.route('https://www.instagram.com/**', r => r.fulfill(html(ig)));
+  await p2.goto('https://www.instagram.com/'); await p2.waitForTimeout(600);
+  await p2.evaluate(() => { document.getElementById('lbl').innerHTML = '<span>Ad</span>'; document.getElementById('cta').textContent = 'Shop now';
+    document.getElementById('reelcap').textContent = 'Trading tips: invest 10k get 1 lakh in 7 days, 100% guarantee, join my Telegram channel, link in bio'; });
+  await p2.waitForTimeout(1200);
+  const igv = id => p2.$eval('#' + id, e => getComputedStyle(e).display !== 'none');
+  if (await igv('igad')) bad('instagram "Ad" post shown');
+  if (await igv('igshop')) bad('instagram "Shop now" ad shown');
+  if (!await igv('igok')) bad('instagram normal post hidden');
+  if (!await p2.$('.ronin-scam + #reelcap')) bad('reel caption that opened later not warned');
+  if (await p2.$('.ronin-scam + #igcap')) bad('normal caption warned');
+  if ((await p2.evaluate(() => window.__roninSocialCounts.ads)) !== 2) bad('ads count');
   // message requests: a stranger banner
   await p2.route('https://www.instagram.com/**', r => r.fulfill(html('<div>requests</div>')));
   await p2.goto('https://www.instagram.com/direct/requests/'); await p2.waitForTimeout(600);

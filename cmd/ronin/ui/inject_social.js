@@ -99,13 +99,21 @@
   function sayBtn(id) { var b = el("button", "ronin-say", L("🔊 सुनें", "🔊 Listen")); b.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); say(id); }, true); return b; }
 
   // ---- 1. sponsored posts away (Facebook / Instagram write "Sponsored" in many hidden ways)
-  var SPONSOR = /^(sponsored|प्रायोजित|sponsorisé|patrocinado|ప్రాయోజిత|প্রযোজিত|ਸਪਾਂਸਰ ਕੀਤਾ)$/i;
+  var SPONSOR = /^(sponsored|ad|ads|paidpartnership|प्रायोजित|विज्ञापन|sponsorisé|patrocinado|ప్రాయోజిత|প্রযোজিত|ਸਪਾਂਸਰ ਕੀਤਾ)$/i;
+  // the button under an Instagram / Facebook ad (ordinary posts never have one)
+  var CTA = /^(shop now|learn more|install now|install|book now|apply now|order now|buy now|get offer|get quote|sign up|download|play game|use app|open app|अभी खरीदें|और जानें|इंस्टॉल करें)$/i;
   function sponsoredIn(el0) {
     if (el0.querySelector("a[href*='/ads/about'],a[href*='ads/about'],[aria-label='Sponsored'],[aria-label='प्रायोजित']")) return true;
-    var bits = el0.querySelectorAll("a span, span[dir], div[dir] > span");
-    for (var i = 0; i < bits.length && i < 60; i++) {
-      var t = (bits[i].innerText || "").replace(/\s+/g, "");
-      if (t.length > 3 && t.length < 25 && SPONSOR.test(t)) return true;
+    // the label sits in the post's header, near the top: "Ad" / "Sponsored"
+    var bits = el0.querySelectorAll("span, a");
+    for (var i = 0; i < bits.length && i < 80; i++) {
+      var t = (bits[i].textContent || "").replace(/\s+/g, "");
+      if (t.length >= 2 && t.length < 25 && SPONSOR.test(t)) return true;
+    }
+    var btns = el0.querySelectorAll("a, [role=button], button");
+    for (var j = 0; j < btns.length && j < 80; j++) {
+      var c = (btns[j].textContent || "").replace(/\s+/g, " ").trim();
+      if (c.length < 20 && CTA.test(c)) return true;
     }
     return false;
   }
@@ -114,9 +122,9 @@
     var units = (root.querySelectorAll ? root : document).querySelectorAll("[role=article], article, div[data-pagelet^='FeedUnit'], div[data-pagelet^='TimelineFeedUnit']");
     for (var i = 0; i < units.length; i++) {
       var u = units[i];
+      // checked again on every change: the "Ad" label and the shop button arrive after the post
       if (u.__roninAd) continue;
-      u.__roninAd = 1;
-      if (sponsoredIn(u)) { u.style.setProperty("display", "none", "important"); counts.ads++; }
+      if (sponsoredIn(u)) { u.__roninAd = 1; u.style.setProperty("display", "none", "important"); counts.ads++; }
     }
   }
 
@@ -199,15 +207,17 @@
     var nodes = (root.querySelectorAll ? root : document).querySelectorAll("div[dir=auto], span[dir=auto], div[role=row] span.selectable-text, [data-testid='tweetText'], #content-text, .copyable-text span, h1, p");
     for (var i = 0, n; i < nodes.length && i < 500; i++) {
       n = nodes[i];
-      if (n.__roninScam || n.closest(".ronin-scam,#ronin-soc-warn,.ronin-bar,[contenteditable=true]")) continue;
-      n.__roninScam = 1;
+      if (n.__roninScam === 2 || n.closest(".ronin-scam,#ronin-soc-warn,.ronin-bar,[contenteditable=true]")) continue;
       var t = n.innerText || "";
+      // a caption that opens ("... more") or loads later is checked again; a warned one never twice
+      if (n.__roninScamLen === t.length) continue;
+      n.__roninScamLen = t.length;
       if (t.length < 12 || t.length > 4000) continue;
       // the innermost text only: a parent holding the same text was or will be checked once
       if (n.querySelector("div[dir=auto], span[dir=auto]")) continue;
       var r = S.text(t);
-      if (r.level) { tag(n, r); counts.scam++; }
-      else if (r.rumour) { rumourTag(n, t); counts.rumour++; }
+      if (r.level) { n.__roninScam = 2; tag(n, r); counts.scam++; }
+      else if (r.rumour) { n.__roninScam = 2; rumourTag(n, t); counts.rumour++; }
     }
   }
 

@@ -110,6 +110,27 @@ open class MainActivity : AppCompatActivity() {
     private lateinit var holder: FrameLayout
     private lateinit var readBar: LinearLayout
     private lateinit var socialBar: LinearLayout
+    private lateinit var shield: Button
+    private var shieldCounts = IntArray(5)
+    private val shieldTick = object : Runnable {
+        override fun run() {
+            val t = current
+            if (!::socialBar.isInitialized || socialBar.visibility != View.VISIBLE || t == null || !t.isSocial) return
+            t.web.evaluateJavascript("(function(c){return c?[c.ads,c.links,c.scam,c.rumour,c.mail].join(','):''})(window.__roninSocialCounts)") { v ->
+                val p = v.trim('"').split(',').mapNotNull { it.toIntOrNull() }
+                if (p.size == 5) { shieldCounts = p.toIntArray(); val n = p.sum(); shield.text = if (n == 0) L("🛡 चालू", "🛡 On") else "🛡 $n" }
+            }
+            ui.postDelayed(this, 3000)
+        }
+    }
+    /** What Ronin did on this page, in plain words. */
+    private fun showShield() {
+        val c = shieldCounts
+        AlertDialog.Builder(this).setTitle(L("🛡 Ronin आपकी रक्षा कर रहा है", "🛡 Ronin is protecting you"))
+            .setMessage(L("इस page पर:\n• गंदे / धोखे वाले विज्ञापन हटाए: ${c[0]}\n• ख़तरनाक links रोके: ${c[1]}\n• ठगी वाले संदेश पर चेतावनी: ${c[2]}\n• \"जाँचें\" वाली ख़बरें: ${c[3]}\n• ठगी वाली emails: ${c[4]}\n\nहर संदेश, comment और reel की caption अपने-आप जाँची जाती है। पैसे / OTP / video call माँगने वाले अनजान से बात न करें। ठगी हो तो 1930।",
+                "On this page:\n• Dirty / fake ads removed: ${c[0]}\n• Dangerous links stopped: ${c[1]}\n• Scam messages warned: ${c[2]}\n• News to check first: ${c[3]}\n• Scam emails: ${c[4]}\n\nEvery message, comment and reel caption is checked by itself. Never deal with a stranger who asks for money, an OTP or a video call. Cheated? Call 1930."))
+            .setPositiveButton("OK", null).show()
+    }
     private lateinit var readPlay: Button
     private lateinit var readSpeed: Button
     private lateinit var readNote: TextView
@@ -371,6 +392,9 @@ open class MainActivity : AppCompatActivity() {
         socialBar.addView(socialButton(L("← पीछे", "← Back"), "socialBack") { current?.let { t -> if (t.isSocial) socialBack(t) } })
         if (appMode != "mail") socialBar.addView(socialButton(L("⊞ मेरे ऐप", "⊞ My apps"), "socialApps") { current?.let { load(it, SOCIAL) } })
         socialBar.addView(socialButton(L("✕ बंद", "✕ Close"), "socialClose") { current?.let { if (it.isSocial) leaveSocial(it) } })
+        // the protection is visible: a green shield with what Ronin stopped on this page
+        shield = socialButton(L("🛡 चालू", "🛡 On"), "socialShield") { showShield() }.apply { setTextColor(Color.parseColor("#4ADE80")) }
+        socialBar.addView(shield)
         root.addView(bar); root.addView(progress); root.addView(holder); root.addView(readBar); root.addView(socialBar)
         keepClearOfSystemBars(root)
         setContentView(root)
@@ -1068,6 +1092,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         bar.visibility = if (on) View.GONE else View.VISIBLE
         stripRow.visibility = if (on) View.GONE else View.VISIBLE
         socialBar.visibility = if (on) View.VISIBLE else View.GONE
+        ui.removeCallbacks(shieldTick); if (on) { shieldCounts = IntArray(5); shield.text = L("🛡 चालू", "🛡 On"); ui.postDelayed(shieldTick, 1500) }
         androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).let { c ->
             if (on) { c.hide(androidx.core.view.WindowInsetsCompat.Type.statusBars()); c.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE }
             else c.show(androidx.core.view.WindowInsetsCompat.Type.statusBars())

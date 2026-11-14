@@ -450,6 +450,10 @@ class DeviceTest {
             var bottomBar = false
             sc.onActivity { a -> bottomBar = a.socialBarForTest().isShown }
             assertTrue("Back / My apps / Close bar not shown at the bottom", bottomBar)
+            // the green shield shows that Ronin is protecting this page
+            var shieldShown = false
+            sc.onActivity { a -> shieldShown = (a.socialBarForTest() as android.view.ViewGroup).findViewWithTag<android.view.View>("socialShield")?.isShown == true }
+            assertTrue("protection shield not shown in Safe Social", shieldShown)
             shot("15-safe-social")
             // ✕ closes it and the browser is back
             eval(sc, "location.href='https://ronin.data/social?do=close&k='+new URLSearchParams(location.search).get('k'),1")
