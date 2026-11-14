@@ -163,14 +163,14 @@ class DeviceTest {
         ActivityScenario.launch(MainActivity::class.java).use { sc ->
             Thread.sleep(1500)
             sc.onActivity { a -> a.go("https://ronin-phishing-test.com/login") }
-            assertTrue("danger site not stopped", waitFor(15) { pageText(sc).contains("खतरनाक साइट रोकी गई") })
+            assertTrue("danger site not stopped", waitFor(15) { pageText(sc).contains(L("खतरनाक साइट रोकी गई", "Dangerous site blocked")) })
             assertTrue(pageText(sc).contains("ronin-phishing-test.com"))
             // the only button goes back to safety
             eval(sc, "document.getElementById('back').click(); 1")
-            assertTrue("go back did not leave the red page", waitFor(10) { !pageText(sc).contains("खतरनाक") })
+            assertTrue("go back did not leave the red page", waitFor(10) { !pageText(sc).contains(L("खतरनाक", "Dangerous")) })
 
             sc.onActivity { a -> a.go("https://sbi-kyc-update.xyz/") }
-            assertTrue("fake bank site not stopped", waitFor(15) { pageText(sc).contains("नकली bank साइट") })
+            assertTrue("fake bank site not stopped", waitFor(15) { pageText(sc).contains(L("नकली bank साइट", "Fake bank site")) })
             assertTrue(pageText(sc).contains("SBI"))
         }
     }
@@ -230,10 +230,10 @@ class DeviceTest {
             Thread.sleep(1500)
             shot("02-two-tabs")
             sc.onActivity { a -> a.go("https://ronin-phishing-test.com/") }
-            waitFor(15) { pageText(sc).contains("खतरनाक") }
+            waitFor(15) { pageText(sc).contains(L("खतरनाक", "Dangerous")) }
             shot("03-danger-page")
             sc.onActivity { a -> a.go("https://sbi-kyc-update.xyz/") }
-            waitFor(15) { pageText(sc).contains("नकली") }
+            waitFor(15) { pageText(sc).contains(L("नकली", "Fake")) }
             shot("04-fake-bank")
             sc.onActivity { a -> a.showMenuForTest() }
             shot("05-menu")
