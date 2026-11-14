@@ -8,6 +8,8 @@ const { chromium } = require('playwright'); const fs = require('fs');
     '/download': `<a id=dl href="https://files.example/real.zip" onclick="event.preventDefault()">Download</a>
     <button id=login onclick="window.open('https://accounts.google.com/o/oauth2')">Sign in with Google</button>
     <button id=share onclick="window.open('https://moviesite.example/share')">Share</button>
+    <a id=mirror href="javascript:void(0)" onclick="window.open('https://cdn.mirror.example/file.zip')">Mirror download</a>
+    <a id=fees href="#" onclick="window.open('https://www.onlinesbi.sbi/sbicollect/')">Pay school fees</a>
     <script>document.addEventListener('click', function(){ window.open('https://ads.popnetwork.example/?z=1'); });</script>`,
     '/overlay': `<button id=real style="position:absolute;top:100px;left:100px" onclick="window.done=1">Real download</button>
     <a id=ov href="https://ads.example/" target=_blank style="position:fixed;inset:0;opacity:0;z-index:9"></a>` };
@@ -19,6 +21,10 @@ const { chromium } = require('playwright'); const fs = require('fs');
   const popups = ctx.pages().filter(x => x !== p);
   if (popups.some(x => x.url().includes('popnetwork'))) bad('advert pop-up opened on a link click');
   if ((await p.evaluate(() => window.__roninPopBlocked)) !== 1) bad('pop-up not counted as blocked');
+  await p.click('#mirror'); await p.waitForTimeout(500);
+  if (!ctx.pages().some(x => x.url().includes('cdn.mirror.example'))) bad('a javascript: download link was blocked');
+  await p.click('#fees'); await p.waitForTimeout(500);
+  if (!ctx.pages().some(x => x.url().includes('onlinesbi.sbi'))) bad('a # payment link was blocked');
   await p.click('#login'); await p.waitForTimeout(500);
   if (!ctx.pages().some(x => x.url().includes('accounts.google.com'))) bad('sign-in window was blocked');
   // invisible full-page link to another site is removed, the real button under it works

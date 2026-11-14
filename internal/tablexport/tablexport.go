@@ -19,6 +19,8 @@ type Data struct {
 	Site  string     `json:"site"`
 	Head  []string   `json:"head"`
 	Rows  [][]string `json:"rows"`
+	// Partial says why not every page could be read ("page 7 did not load"); empty = complete.
+	Partial string `json:"partial"`
 	Check struct {
 		Cells  [][]any        `json:"cells"` // [row, col, kind, note]
 		Counts map[string]int `json:"counts"`
@@ -133,6 +135,10 @@ func (d *Data) XLSX() ([]byte, error) {
 	}
 	sheet.WriteString(`</cols><sheetData>`)
 	cell := func(row, col, style int, v string) {
+		if row > 1 && col < ncol && number(v) {
+			fmt.Fprintf(&sheet, `<c r="%s%d" s="%d"><v>%s</v></c>`, colName(col), row, style, v)
+			return
+		}
 		fmt.Fprintf(&sheet, `<c r="%s%d" t="inlineStr" s="%d"><is><t xml:space="preserve">%s</t></is></c>`, colName(col), row, style, xmlText(v))
 	}
 	sheet.WriteString(`<row r="1">`)
@@ -208,7 +214,35 @@ func (d *Data) SummaryLines() [][2]string {
 		{"Repeated names / दोहराए नाम", fmt.Sprint(c["dupNames"])},
 		{"Look-alike names / मिलते-जुलते नाम", fmt.Sprint(c["similar"])},
 		{"Possible spelling mistakes / संभावित ग़लतियाँ", fmt.Sprint(c["spell"])},
+		{"Complete / पूरा", completeText(d.Partial)},
 	}
+}
+
+func completeText(partial string) string {
+	if partial == "" {
+		return "हाँ, सारे पेज पढ़े गए / yes, every page"
+	}
+	return "अधूरा! / NOT complete: " + partial
+}
+
+// number reports whether a cell should be a number in Excel (marks, amounts).
+// Long digit strings (Aadhaar, phone, account, UDISE code) and leading zeros stay text.
+func number(v string) bool {
+	if v == "" || len(v) > 9 || (len(v) > 1 && v[0] == '0' && v[1] != '.') {
+		return false
+	}
+	dot := false
+	for i, r := range v {
+		switch {
+		case r >= '0' && r <= '9':
+		case r == '.' && !dot && i > 0 && i < len(v)-1:
+			dot = true
+		case r == '-' && i == 0 && len(v) > 1:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // ReportHTML is a printable page (landscape A4) for "Save as PDF".
@@ -216,7 +250,7 @@ func (d *Data) ReportHTML() string {
 	iss := d.Issues()
 	var b strings.Builder
 	b.WriteString(`<!doctype html><html><head><meta charset="utf-8"><title>` + html.EscapeString(d.Title) + `</title><style>
-@page{size:A4 landscape;margin:10mm}body{font:11px "Segoe UI","Nirmala UI","Noto Sans Devanagari",sans-serif;color:#111;margin:0}
+@page{size:A4 landscape;margin:10mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font:11px "Segoe UI","Nirmala UI","Noto Sans Devanagari",sans-serif;color:#111;margin:0}
 h1{font-size:16px;margin:0 0 4px}.s{color:#444;margin:0 0 8px}table{border-collapse:collapse;width:100%}
 th,td{border:1px solid #999;padding:3px 5px;text-align:left;vertical-align:top}th{background:#dde6f5}
 tr{page-break-inside:avoid}thead{display:table-header-group}
@@ -228,6 +262,9 @@ tr{page-break-inside:avoid}thead{display:table-header-group}
 			b.WriteString(" · ")
 		}
 		b.WriteString(html.EscapeString(l[0] + ": " + l[1]))
+	}
+	if d.Partial != "" {
+		b.WriteString(`</p><p style="color:#b91c1c;font-weight:bold">` + html.EscapeString(completeText(d.Partial)))
 	}
 	b.WriteString(`</p><p class="legend"><span class="dup">पीला: दोहराया</span><span class="similar">नारंगी: मिलता-जुलता नाम</span><span class="spell">लाल: संभावित ग़लती</span></p><table><thead><tr>`)
 	for _, h := range d.Head {

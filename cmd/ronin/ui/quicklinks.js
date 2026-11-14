@@ -4,6 +4,7 @@
 (function () {
   var d = window.RONIN_QL, root = document.getElementById("ql");
   if (!d || !root) return;
+  if (d.edit) root.classList.add("edit"); // still editing after an add / remove
   var css = document.createElement("style");
   css.textContent =
     "#ql h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted,#9aa3b2);margin:18px 0 8px;font-weight:600}" +
@@ -11,8 +12,8 @@
     "#ql .chip{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 14px;border-radius:20px;background:var(--card,#1c2029);" +
     "border:1px solid var(--line,#2e3441);color:var(--text,#e8eaf0);text-decoration:none;font-size:14px;white-space:nowrap}" +
     "#ql .chip:hover{border-color:var(--accent,#3b82f6)}" +
-    "#ql .x{display:none;font-size:18px;line-height:1;color:#f87171;padding:0 2px 0 6px}" +
-    "#ql.edit .x{display:inline}" +
+    "#ql .x{display:none;align-items:center;justify-content:center;min-width:40px;min-height:40px;margin:0 -10px 0 2px;font-size:22px;line-height:1;color:#f87171}" +
+    "#ql.edit .x{display:inline-flex}#ql.edit .chip{pointer-events:none}#ql.edit .chip .x{pointer-events:auto}" +
     "#ql .add{display:none;min-height:40px;padding:0 14px;border-radius:20px;border:1px dashed var(--line,#2e3441);background:none;color:var(--muted,#9aa3b2);font:inherit;font-size:14px;cursor:pointer}" +
     "#ql.edit .add{display:inline-flex;align-items:center}" +
     "#ql form.new{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}" +

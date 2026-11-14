@@ -398,7 +398,7 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 	// the page's "Data -> Excel + PDF" button
 	if strings.HasPrefix(uri, "https://ronin.data/") {
 		call(args, nsSetCancel, 1)
-		if u, err := url.Parse(uri); err == nil && u.Query().Get("k") == newTabKey {
+		if u, err := url.Parse(uri); err == nil && u.Query().Get("k") == dataKey && store.IsDataSite(hostOf(t.url)) {
 			runOnUI(func() { t.exportData() })
 		}
 		return
@@ -408,6 +408,7 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 		call(args, nsSetCancel, 1)
 		if t.isNewTab {
 			if quickLinkChange(uri) {
+				newTabEditing = true
 				runOnUI(func() { t.showNewTab() })
 			}
 		}

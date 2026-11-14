@@ -41,11 +41,12 @@
     var me = bare(host);
     var hostOfUrl = function (u) { try { return bare(new URL(u, location.href).hostname); } catch (e) { return ""; } };
     var sameSite = function (a, b) { return a === b || (a && b && (a.slice(-b.length - 1) === "." + b || b.slice(-a.length - 1) === "." + a)); };
-    var SAFE = /(^|\.)(google\.com|google\.co\.in|microsoftonline\.com|live\.com|apple\.com|facebook\.com|razorpay\.com|paytm\.com|paytm\.in|payu\.in|ccavenue\.com|billdesk\.com|cashfree\.com|phonepe\.com|stripe\.com|paypal\.com|bank\.in|gov\.in|nic\.in)$/;
+    var SAFE = /(^|\.)(google\.com|google\.co\.in|microsoftonline\.com|live\.com|apple\.com|facebook\.com|razorpay\.com|paytm\.com|paytm\.in|payu\.in|ccavenue\.com|billdesk\.com|cashfree\.com|phonepe\.com|stripe\.com|paypal\.com|bank\.in|gov\.in|nic\.in|sbi|onlinesbi\.com|icicibank\.com|hdfcbank\.com|axisbank\.com|kotak\.com|kotakbank\.com|pnbindia\.in|bankofbaroda\.in|canarabank\.com|unionbankofindia\.co\.in|npci\.org\.in|bhimupi\.org\.in|digilocker\.gov\.in|meripehchaan\.gov\.in|udiseplus\.gov\.in|prernaup\.in)$/;
     var last = { t: 0, href: "" };
     document.addEventListener("click", function (e) {
       var a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
-      last = { t: Date.now(), href: a ? a.href : "" };
+      var raw = a ? (a.getAttribute("href") || "") : "";
+      last = { t: Date.now(), href: a && raw && raw.charAt(0) !== "#" && !/^javascript:/i.test(raw) ? a.href : "" };
       if (!a) return;
       var to = hostOfUrl(a.href);
       if (!to || sameSite(to, me) || SAFE.test(to) || !/^https?:/.test(a.href)) return;
@@ -61,7 +62,9 @@
     var realOpen = window.open;
     window.open = function (u) {
       var to = hostOfUrl(u || "");
-      var hijack = Date.now() - last.t < 2000 && last.href && u &&
+      // only a click on a REAL link (an address, not "#" or "javascript:") can be hijacked:
+      // buttons and "#" links that open a window are the page's own way of working
+      var hijack = Date.now() - last.t < 2000 && /^https?:/i.test(last.href) && !/#$/.test(last.href.split("?")[0]) && u &&
         new URL(u, location.href).href !== last.href && to && !sameSite(to, me) && !SAFE.test(to);
       if (hijack) {
         window.__roninPopBlocked = (window.__roninPopBlocked || 0) + 1;

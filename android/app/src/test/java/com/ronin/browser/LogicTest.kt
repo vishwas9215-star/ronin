@@ -88,7 +88,8 @@ class LogicTest {
             "https://www.youtube.com/watch?v=hdfc", "https://en.wikipedia.org/wiki/State_Bank_of_India",
             "https://www.dhanbank.com/", "https://www.onlinemarket.in/", "https://sbi.bank.in/",
             "https://netbanking.hdfcbank.com/", "https://www.icicisecurities.com/", "https://www.hdfccredila.com/",
-            "https://www.indusindnipponlife.com/", "https://www.yesbankltd.in/", "https://www.axisbankfoundation.org/")
+            "https://www.indusindnipponlife.com/", "https://www.yesbankltd.in/", "https://www.axisbankfoundation.org/",
+            "https://www.hdfcergo.com/", "https://www.hdfcfund.com/", "https://www.icicipruamc.com/", "https://www.iciciprulife.com/", "https://www.icicilombard.com/")
         for (u in good) assertNull("$u wrongly flagged", rules.fakeBank(u))
         assertNull(rules.fakeBank("https://sbi-pension-help.org/", trusted = setOf("sbi-pension-help.org")))
         assertEquals("sbi", rules.fakeBank("https://sbi-pension-help.org/"))
@@ -121,6 +122,7 @@ class LogicTest {
         val t = TableExport(File("../../internal/tablexport/testdata/result.json").readText())
         assertEquals(21, t.rows.size)
         assertEquals("AA", TableExport.colName(26))
+        assertTrue(TableExport.isNumber("40") && TableExport.isNumber("38.5") && !TableExport.isNumber("0123") && !TableExport.isNumber("9876543210") && !TableExport.isNumber(".5"))
         val x = t.xlsx()
         val z = java.util.zip.ZipInputStream(x.inputStream())
         val parts = HashMap<String, String>()

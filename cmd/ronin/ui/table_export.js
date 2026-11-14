@@ -23,28 +23,58 @@
     });
     return list;
   }
+  // header rows (THEAD rows, or rows of only <th> at the top) are merged column by
+  // column, with colspan / rowspan spread out, so "Marks" over "Maths | Hindi" gives
+  // "Marks Maths" and "Marks Hindi"
+  function headerNames(hrows) {
+    var grid = [];
+    hrows.forEach(function (cells, r) {
+      grid[r] = grid[r] || [];
+      var c = 0;
+      cells.forEach(function (cell) {
+        while (grid[r][c] !== undefined) c++;
+        var cs = Math.max(1, parseInt(cell.getAttribute("colspan") || "1", 10) || 1);
+        var rs = Math.max(1, parseInt(cell.getAttribute("rowspan") || "1", 10) || 1);
+        for (var y = 0; y < rs && r + y < hrows.length; y++) {
+          grid[r + y] = grid[r + y] || [];
+          for (var x = 0; x < cs; x++) grid[r + y][c + x] = txt(cell);
+        }
+        c += cs;
+      });
+    });
+    var n = 0; grid.forEach(function (g) { n = Math.max(n, g.length); });
+    var names = [];
+    for (var c = 0; c < n; c++) {
+      var parts = [];
+      grid.forEach(function (g) { var v = g[c]; if (v && parts[parts.length - 1] !== v) parts.push(v); });
+      names.push(parts.join(" "));
+    }
+    return names;
+  }
   function read(tb) {
-    var head = [], rows = [];
+    var hrows = [], rows = [];
     if (tb.kind === "table") {
       var trs = [].slice.call(tb.el.querySelectorAll("tr")).filter(function (tr) { return tr.closest("table") === tb.el; });
       trs.forEach(function (tr) {
         var cells = [].slice.call(tr.children).filter(function (c) { return c.tagName === "TD" || c.tagName === "TH"; });
         if (!cells.length) return;
-        var vals = cells.map(txt);
-        var isHead = !head.length && (tr.parentNode.tagName === "THEAD" || cells.every(function (c) { return c.tagName === "TH"; }));
-        if (isHead) head = vals; else if (vals.join("").length) rows.push(vals);
+        var isHead = !rows.length && (tr.parentNode.tagName === "THEAD" || cells.every(function (c) { return c.tagName === "TH"; }));
+        if (isHead) hrows.push(cells);
+        else { var vals = cells.map(txt); if (vals.join("").length) rows.push(vals); }
       });
     } else {
       var rs = tb.el.querySelectorAll("[role=row],mat-row,mat-header-row,tr");
       [].forEach.call(rs, function (r) {
-        var cells = r.querySelectorAll("[role=columnheader],[role=cell],[role=gridcell],mat-cell,mat-header-cell,td,th");
-        var vals = [].map.call(cells, txt);
-        if (!vals.length) return;
-        var isHead = !head.length && r.querySelector("[role=columnheader],mat-header-cell,th");
-        if (isHead) head = vals; else if (vals.join("").length) rows.push(vals);
+        var cells = [].slice.call(r.querySelectorAll("[role=columnheader],[role=cell],[role=gridcell],mat-cell,mat-header-cell,td,th"));
+        if (!cells.length) return;
+        var isHead = !rows.length && r.querySelector("[role=columnheader],mat-header-cell,th");
+        if (isHead) hrows.push(cells);
+        else { var vals = cells.map(txt); if (vals.join("").length) rows.push(vals); }
       });
     }
-    if (!head.length && rows.length) head = rows[0].map(function (_, i) { return "Column " + (i + 1); });
+    var head = headerNames(hrows), width = head.length;
+    rows.forEach(function (r) { width = Math.max(width, r.length); });
+    for (var i = head.length; i < width; i++) head.push("Column " + (i + 1));
     return { head: head, rows: rows };
   }
   function best() {
@@ -54,24 +84,40 @@
   }
 
   // ---- paging -----------------------------------------------------------------------------
-  var NEXT = /^(next|next\s*page|›|»|>|>>|अगला|आगे|अगले)$/i;
+  var NEXT = /^(next|next\s*page|›|>|अगला|आगे|अगले)$/i, LAST = /^(»|>>|last|अंतिम|last\s*page)$/i;
   function disabled(el) {
     for (var e = el, i = 0; e && i < 3; e = e.parentElement, i++) {
       if (e.disabled || e.getAttribute("aria-disabled") === "true" || /(^|\s)(disabled|ui-state-disabled)(\s|$)/.test(e.className || "")) return true;
     }
     return false;
   }
+  // a link that would load a whole new page (all collected rows would be lost)
+  function leavesPage(e) {
+    var a = e.closest ? e.closest("a[href]") : null;
+    if (!a) return false;
+    var h = a.getAttribute("href") || "";
+    if (!h || h.charAt(0) === "#" || /^javascript:/i.test(h)) return false;
+    try { var u = new URL(a.href, location.href); return !(u.origin === location.origin && u.pathname === location.pathname && u.search === location.search); } catch (x) { return false; }
+  }
   function nextButton(tb) {
     var scope = tb.el.parentElement;
     for (var up = 0; up < 6 && scope; up++, scope = scope.parentElement) {
-      var c = [].slice.call(scope.querySelectorAll("a,button,li,span,[role=button]")).filter(function (e) {
-        if (!visible(e) || tb.el.contains(e)) return false;
-        var l = (e.getAttribute("aria-label") || e.getAttribute("title") || "").trim();
-        return NEXT.test(txt(e)) || /next page|^next$/i.test(l) || /(^|[\s_-])(next|paginate_button next)([\s_-]|$)/i.test(e.className || "");
+      var exact = [], loose = [];
+      [].forEach.call(scope.querySelectorAll("a,button,li,span,[role=button]"), function (e) {
+        if (!visible(e) || tb.el.contains(e)) return;
+        var t = txt(e), l = (e.getAttribute("aria-label") || e.getAttribute("title") || "").trim();
+        if (LAST.test(t) || /last/i.test(l)) return;
+        if (NEXT.test(t) || /^next( page)?$/i.test(l)) exact.push(e);
+        else if (/(^|[\s_-])(next|paginate_button next)([\s_-]|$)/i.test(e.className || "")) loose.push(e);
       });
+      var c = exact.length ? exact : loose;
+      // the innermost one is the real button (<li><a>Next</a></li>: the <a>)
+      c = c.filter(function (e) { return !c.some(function (o) { return o !== e && e.contains(o); }); });
       if (c.length) {
-        var e = c[c.length - 1];
-        return disabled(e) ? null : e;
+        var e = c[0];
+        if (disabled(e)) return null;
+        if (leavesPage(e)) { st.partial = "next page is a separate web page"; return null; }
+        return e;
       }
     }
     return null;
@@ -101,34 +147,49 @@
     return false;
   }
   async function waitChange(sig) {
-    for (var i = 0; i < 80; i++) {
+    for (var i = 0; i < 300 && !stopNow; i++) { // up to 45 s: school portals can be slow
       await sleep(150);
       var t = best();
-      if (t && JSON.stringify(read(t).rows) !== sig) return t;
+      if (t && JSON.stringify(read(t).rows) !== sig) { await sleep(300); return best(); }
     }
     return null;
   }
 
+  var stopNow = false;
   async function collect() {
-    st = { phase: "reading", page: 1, rows: 0, error: "" };
+    st = { phase: "reading", page: 1, rows: 0, error: "", partial: "" };
+    stopNow = false;
     var tb = best();
     if (!tb || !read(tb).rows.length) throw new Error("No table found on this page.");
     var sig = JSON.stringify(read(tb).rows);
     if (showAll(tb)) { var t2 = await waitChange(sig); if (t2) tb = t2; }
-    var first = read(tb), head = first.head, seen = {}, rows = [];
-    var add = function (rs) { rs.forEach(function (r) { var k = r.join("\u0001"); if (!seen[k]) { seen[k] = 1; rows.push(r); } }); };
+    var first = read(tb), head = first.head, seenPages = {}, rows = [];
+    var add = function (rs) {
+      var k = JSON.stringify(rs);
+      if (seenPages[k]) return false; // the same page came back: paging is finished
+      seenPages[k] = 1;
+      rows.push.apply(rows, rs);
+      return true;
+    };
     add(first.rows); st.rows = rows.length;
-    for (var p = 2; p <= 400; p++) {
+    for (var p = 2; p <= 1000 && !stopNow; p++) {
       var nb = nextButton(tb);
       if (!nb) break;
       sig = JSON.stringify(read(tb).rows);
       nb.click();
       var t = await waitChange(sig);
-      if (!t) break;
-      tb = t; add(read(tb).rows);
+      if (!t) { if (!stopNow) st.partial = "page " + p + " did not load"; break; }
+      tb = t;
+      var got = read(tb).rows;
+      if (!add(got)) break;
       st.page = p; st.rows = rows.length;
+      if (got.length < first.rows.length) break; // a shorter page is the last one
     }
-    return { title: document.title || location.hostname, site: location.hostname, head: head, rows: rows };
+    if (stopNow) st.partial = "stopped at page " + st.page;
+    var w = head.length;
+    rows.forEach(function (r) { w = Math.max(w, r.length); });
+    for (var i = head.length; i < w; i++) head.push("Column " + (i + 1));
+    return { title: document.title || location.hostname, site: location.hostname, head: head, rows: rows, partial: st.partial };
   }
 
   // ---- checking -----------------------------------------------------------------------------
@@ -175,6 +236,8 @@
 
     // names
     var spell = 0, similar = 0, dupNames = 0;
+    var hasUpper = {};
+    nameCols.forEach(function (c) { hasUpper[c] = rows.some(function (x) { return /[A-Z]/.test(x[c] || ""); }); });
     nameCols.forEach(function (c) {
       var byName = {}, list = [];
       rows.forEach(function (r, i) {
@@ -186,26 +249,41 @@
         else if (/\s{2,}/.test(v) || v !== v.trim()) why = "दोहरी / फ़ालतू space";
         else if (/[a-z]/i.test(v) && /[ऀ-ॿ]/.test(v)) why = "हिंदी-English मिला हुआ";
         else if (/(.)\1\1/i.test(v)) why = "एक अक्षर तीन बार";
-        else if (/[a-z]/.test(v) && v === v.toLowerCase() && /[A-Z]/.test(rows.map(function (x) { return x[c]; }).join(""))) why = "छोटे अक्षरों में (बाक़ी नाम बड़े अक्षर से)";
+        else if (/[a-z]/.test(v) && v === v.toLowerCase() && hasUpper[c]) why = "छोटे अक्षरों में (बाक़ी नाम बड़े अक्षर से)";
         if (why) { mark(i, c, "spell", why); spell++; }
         if (byName[n] !== undefined) { mark(i, c, "dupname", "यही नाम row " + (byName[n] + 1) + " में भी"); mark(byName[n], c, "dupname", "यही नाम row " + (i + 1) + " में भी"); dupNames++; }
         else { byName[n] = i; list.push({ n: n, i: i }); }
       });
-      // names that differ by one or two letters: probably one of them is misspelt
-      var buckets = {};
-      list.forEach(function (x) { var k = x.n.charAt(0); (buckets[k] = buckets[k] || []).push(x); });
+      // the same name typed two ways: same words, one long word (6+ letters) differs by
+      // one letter ("Rahul Kumar" / "Rahul Kumr"). "Ram Kumar" / "Raj Kumar" are different people.
+      var buckets = {}, freq = {};
+      rows.forEach(function (r) { norm(r[c]).split(" ").forEach(function (w) { if (w) freq[w] = (freq[w] || 0) + 1; }); });
+      list.forEach(function (x) { var w = x.n.split(" "); (buckets[w.length] = buckets[w.length] || []).push({ n: x.n, i: x.i, w: w }); });
       Object.keys(buckets).forEach(function (k) {
-        var b = buckets[k];
-        for (var a = 0; a < b.length; a++) for (var z = a + 1; z < b.length; z++) {
-          var A = b[a], Z = b[z];
-          if (A.n.length < 5 || Z.n.length < 5) continue;
-          var dd = dist(A.n, Z.n, 2);
-          if (dd >= 1 && dd <= (A.n.length >= 9 ? 2 : 1)) {
-            mark(A.i, c, "similar", "मिलता-जुलता नाम: " + rows[Z.i][c] + " (row " + (Z.i + 1) + ")");
-            mark(Z.i, c, "similar", "मिलता-जुलता नाम: " + rows[A.i][c] + " (row " + (A.i + 1) + ")");
+        var b = buckets[k], byRest = {};
+        b.forEach(function (x) {
+          x.w.forEach(function (_, j) {
+            var key = j + ":" + x.w.filter(function (_, q) { return q !== j; }).join(" ");
+            (byRest[key] = byRest[key] || []).push(x);
+          });
+        });
+        Object.keys(byRest).forEach(function (key) {
+          var g = byRest[key], j = +key.split(":")[0];
+          if (g.length < 2 || g.length > 30) return;
+          for (var a = 0; a < g.length; a++) for (var z = a + 1; z < g.length; z++) {
+            var A = g[a].w[j], Z = g[z].w[j];
+            if (A === Z || Math.min(A.length, Z.length) < 4 || dist(A, Z, 1) !== 1) continue;
+            // a letter missing or extra ("Kumr" / "Kumar") is a typing slip; a changed letter
+            // ("Rakesh" / "Ramesh") is usually another name, unless one form is common and the other rare
+            var fa = freq[A] || 0, fz = freq[Z] || 0;
+            if (fa >= 2 && fz >= 2) continue; // both spellings are used often: two real names (Kumar / Kumari)
+            if (A.length === Z.length && !((fa >= 3 && fz === 1) || (fz >= 3 && fa === 1))) continue;
+            var ia = g[a].i, iz = g[z].i;
+            mark(ia, c, "similar", "मिलता-जुलता नाम: " + rows[iz][c] + " (row " + (iz + 1) + ") — जाँचें");
+            mark(iz, c, "similar", "मिलता-जुलता नाम: " + rows[ia][c] + " (row " + (ia + 1) + ") — जाँचें");
             similar++;
           }
-        }
+        });
       });
     });
     var list = Object.keys(issues).map(function (k) { var p = k.split(","); return [+p[0], +p[1], issues[k].kind, issues[k].note]; });
@@ -221,6 +299,7 @@
       return "started";
     },
     state: function () { return JSON.stringify(st); },
+    stop: function () { stopNow = true; return "stopping"; },
     result: function () { return out ? JSON.stringify(out) : ""; },
     _check: check // for tests
   };

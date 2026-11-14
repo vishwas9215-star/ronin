@@ -5,7 +5,7 @@
 // videos are turned back to their real colours. Pages that are already dark
 // are left alone. Only the top page decides (frames are handled by it).
 (function () {
-  if (window.top !== window || window.__roninDark) return;
+  if (window.top !== window || window.__roninDark || location.protocol === "file:") return; // Ronin's reports keep their colours
   window.__roninDark = true;
   var CLASS = "ronin-dark", STYLE_ID = "ronin-dark-style";
   var CSS =
@@ -18,7 +18,8 @@
     // black logos and drawings on a transparent background stay visible:
     // they get a light backing (photos are not transparent, so they do not change)
     "html.ronin-dark img{background-color:#fff!important}" +
-    "html.ronin-dark ::-webkit-scrollbar{background:#e6e6e6}";
+    "html.ronin-dark ::-webkit-scrollbar{background:#e6e6e6}" +
+    "@media print{html.ronin-dark,html.ronin-dark *{filter:none!important}}"; // printing / PDF in real colours
   var mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
 
   function off() {

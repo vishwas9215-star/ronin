@@ -25,6 +25,8 @@ class TableExport(json: String) {
     val rows: List<List<String>>
     private val issues = HashMap<Pair<Int, Int>, Pair<String, String>>()
     val counts = HashMap<String, Int>()
+    /** Why not every page was read ("page 7 did not load"); empty = complete. */
+    val partial: String
 
     init {
         val o = JSONObject(json)
@@ -41,6 +43,7 @@ class TableExport(json: String) {
             }
         }
         ch.optJSONObject("counts")?.let { c -> c.keys().forEach { counts[it] = c.optInt(it) } }
+        partial = o.optString("partial")
     }
 
     fun issue(r: Int, c: Int) = issues[r to c]
@@ -60,6 +63,7 @@ class TableExport(json: String) {
         "Repeated names / दोहराए नाम" to (counts["dupNames"] ?: 0).toString(),
         "Look-alike names / मिलते-जुलते नाम" to (counts["similar"] ?: 0).toString(),
         "Possible spelling mistakes / संभावित ग़लतियाँ" to (counts["spell"] ?: 0).toString(),
+        "Complete / पूरा" to (if (partial.isEmpty()) "हाँ, सारे पेज पढ़े गए / yes, every page" else "अधूरा! / NOT complete: $partial"),
     )
 
     // ---- Excel -------------------------------------------------------------------------
@@ -89,6 +93,7 @@ class TableExport(json: String) {
         }
         sh.append("</cols><sheetData>")
         fun cell(row: Int, col: Int, style: Int, v: String) {
+            if (row > 1 && col < n && isNumber(v)) { sh.append("""<c r="${colName(col)}$row" s="$style"><v>$v</v></c>"""); return }
             sh.append("""<c r="${colName(col)}$row" t="inlineStr" s="$style"><is><t xml:space="preserve">${esc(v)}</t></is></c>""")
         }
         sh.append("""<row r="1">"""); head.forEachIndexed { c, h -> cell(1, c, 1, h) }; cell(1, n, 1, "जाँच / Check"); sh.append("</row>")
@@ -196,6 +201,21 @@ class TableExport(json: String) {
     private fun drawHeader() = drawHeaderRef()
 
     companion object {
+        /** Marks and amounts become numbers; Aadhaar, phone and codes (long or with a leading 0) stay text. Same as Windows. */
+        fun isNumber(v: String): Boolean {
+            if (v.isEmpty() || v.length > 9 || (v.length > 1 && v[0] == '0' && v[1] != '.')) return false
+            var dot = false
+            v.forEachIndexed { i, c ->
+                when {
+                    c in '0'..'9' -> {}
+                    c == '.' && !dot && i > 0 && i < v.length - 1 -> dot = true
+                    c == '-' && i == 0 && v.length > 1 -> {}
+                    else -> return false
+                }
+            }
+            return true
+        }
+
         fun colName(i0: Int): String {
             var i = i0 + 1; var s = ""
             while (i > 0) { s = ('A' + (i - 1) % 26).toString() + s; i = (i - 1) / 26 }

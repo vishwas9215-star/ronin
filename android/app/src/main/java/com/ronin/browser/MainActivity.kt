@@ -75,6 +75,7 @@ fun keepClearOfSystemBars(root: View) {
 class MainActivity : AppCompatActivity() {
 
     inner class Tab(val web: RoninWebView) {
+        @Volatile var dangerHost = "" // the fake-bank red page now showing (its "I know this site" link works only for it)
         var title = ""
         @Volatile var url = ""
         @Volatile var topHost = ""
@@ -92,6 +93,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabsButton: Button
     private lateinit var tabStrip: LinearLayout
     private lateinit var newTabButton: Button
+    private var lastStripTab: Tab? = null
     private lateinit var progress: ProgressBar
     private lateinit var holder: FrameLayout
     private lateinit var readBar: LinearLayout
@@ -355,6 +357,7 @@ class MainActivity : AppCompatActivity() {
         holder.removeView(t.web)
         if (t == mediaTab) { mediaTab = null; mediaPlaying = false }
         t.web.destroy()
+        if (exporting) { exporting = false; readBar.visibility = View.GONE }
         if (tabs.isEmpty()) newTab(HOME) else if (current == t) select(tabs[(i - 1).coerceAtLeast(0)])
         updateTabsButton()
     }
@@ -401,6 +404,8 @@ class MainActivity : AppCompatActivity() {
             tabStrip.addView(chip)
         }
         val i = tabs.indexOf(current)
+        if (current == lastStripTab) return // a title changed: do not jump while the user is swiping the tabs
+        lastStripTab = current
         if (i >= 0) tabStrip.post { (tabStrip.parent as? android.widget.HorizontalScrollView)?.smoothScrollTo(tabStrip.getChildAt(i)?.left ?: 0, 0) }
     }
 
@@ -470,7 +475,7 @@ class MainActivity : AppCompatActivity() {
             val url = req.url.toString()
             val t = tab()
             if (req.isForMainFrame) {
-                stopPage(url)?.let { html ->
+                stopPage(url, t)?.let { html ->
                     return WebResourceResponse("text/html", "utf-8", 200, "OK", mapOf("Cache-Control" to "no-store"),
                         ByteArrayInputStream(html.toByteArray(Charsets.UTF_8)))
                 }
@@ -493,7 +498,11 @@ class MainActivity : AppCompatActivity() {
             }
             if (url == BACK_TO_SAFETY) { leaveDangerPage(tab()); return true }
             if (url.startsWith("https://ronin.newtab/")) { quickLinkChange(tab(), req.url); return true }
-            if (url.startsWith("https://ronin.data/")) { if (req.url.getQueryParameter("k") == pageKey) exportData(tab()); return true }
+            if (url.startsWith("https://ronin.data/")) {
+                val t = tab()
+                if (req.url.getQueryParameter("k") == dataKey && app.store.isDataSite(t.topHost)) exportData(t)
+                return true
+            }
             if (url.startsWith(TRUST_PREFIX)) { trustFromRedPage(tab(), req.url); return true }
             if (req.isForMainFrame && (scheme == "http" || scheme == "https") && view.settings.userAgentString != uaFor(url)) {
                 // Google Sheets / Docs open as the full (computer) version, other sites as normal
@@ -503,7 +512,7 @@ class MainActivity : AppCompatActivity() {
             }
             if (req.isForMainFrame && (scheme == "http" || scheme == "https")) {
                 // also short links and redirects that end at a dangerous site
-                stopPage(url)?.let { html ->
+                stopPage(url, tab())?.let { html ->
                     view.loadDataWithBaseURL(url, html, "text/html", "utf-8", null)
                     return true
                 }
@@ -528,6 +537,12 @@ class MainActivity : AppCompatActivity() {
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
             val t = tab()
             view.setBackgroundColor(if (url.startsWith("http") && !url.startsWith("https://ronin.home")) Color.WHITE else homeBg())
+            if (url.startsWith("http") && !url.startsWith("https://ronin.home") && view.settings.userAgentString != uaFor(url)) {
+                // Back / Reload into a site that needs the other version: load it again with the right one
+                view.settings.userAgentString = uaFor(url)
+                view.stopLoading(); view.loadUrl(url)
+                return
+            }
             if (!url.startsWith("https://ronin.home")) { t.url = url; t.topHost = Rules.hostOf(url) }
             if (t == current && !address.hasFocus()) address.setText(display(url))
             if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
@@ -617,7 +632,7 @@ class MainActivity : AppCompatActivity() {
     // ---- dangerous sites ------------------------------------------------------------------
 
     /** Ronin's red page for a known phishing / malware site or a fake bank site, else null. */
-    fun stopPage(url: String): String? {
+    fun stopPage(url: String, t: Tab? = null): String? {
         if (!url.startsWith("http")) return null
         val store = app.store
         if (app.rules.classify(url, store.userBanks) != Kind.GENERAL) return null
@@ -625,6 +640,7 @@ class MainActivity : AppCompatActivity() {
         if (host.isEmpty() || Rules.matchAny(host, store.trustedSites)) return null
         if (app.blocker.dangerous(host)) return dangerHtml(host, null)
         val brand = app.rules.fakeBank(url, store.trustedSites, store.userBanks) ?: return null
+        t?.dangerHost = host
         return dangerHtml(host, brand)
     }
 
@@ -669,7 +685,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     /** "I know this site" on the fake-bank page: only from Ronin's own page (key), and only after a question. */
     private fun trustFromRedPage(t: Tab, u: Uri) {
         val host = u.getQueryParameter("h") ?: return
-        if (u.getQueryParameter("k") != pageKey || host.isBlank()) return
+        if (u.getQueryParameter("k") != pageKey || host.isBlank() || t.dangerHost != host) return
         AlertDialog.Builder(this).setTitle("क्या आप पक्का हैं?")
             .setMessage("$host\n\nBanks कभी SMS, WhatsApp या call में भेजे link से login नहीं करवाते। सिर्फ़ तभी खोलें जब आप इस साइट को अच्छी तरह जानते हों।")
             .setPositiveButton("नहीं, वापस जाएँ", { _, _ -> leaveDangerPage(t) })
@@ -689,7 +705,9 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             }
             "/del" -> app.store.removeQuickLink(u.getQueryParameter("u") ?: "")
         }
+        homeEditing = true
         load(t, HOME)
+        homeEditing = false
     }
 
     private fun leaveDangerPage(t: Tab) {
@@ -722,7 +740,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         t.web.evaluateJavascript("(function(){if(document.getElementById('ronin-data-btn')||!document.body)return;var b=document.createElement('button');" +
             "b.id='ronin-data-btn';b.textContent='\uD83D\uDCCA Excel + PDF';" +
             "b.style.cssText='position:fixed;right:16px;bottom:16px;z-index:2147483647;min-height:52px;padding:0 22px;border-radius:26px;border:0;background:#16a34a;color:#fff;font:600 17px sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.35)';" +
-            "b.onclick=function(){location.href='https://ronin.data/go?k=$pageKey'};document.body.appendChild(b);})()", null)
+            "b.onclick=function(){location.href='https://ronin.data/go?k=$dataKey'};document.body.appendChild(b);})()", null)
     }
 
     private fun jsString(raw: String?): String = try { JSONArray("[$raw]").getString(0) } catch (e: Exception) { "" }
@@ -736,14 +754,16 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         t.web.evaluateJavascript("$tableJs;window.__roninTable.start()") {
             val poll = object : Runnable {
                 override fun run() {
+                    if (t !in tabs) { finishExport(null, "tab closed"); return }
                     t.web.evaluateJavascript("window.__roninTable?window.__roninTable.state():''") { raw ->
                         val st = try { JSONObject(jsString(raw)) } catch (e: Exception) { JSONObject() }
                         when (st.optString("phase")) {
-                            "reading" -> if (System.currentTimeMillis() - started < 15 * 60_000) {
-                                readNote.text = "📊 पेज ${st.optInt("page")} · ${st.optInt("rows")} पंक्तियाँ"
+                            "reading" -> {
+                                if (System.currentTimeMillis() - started > 15 * 60_000) t.web.evaluateJavascript("window.__roninTable.stop()", null) // keep what was read
+                                readNote.text = "📊 पेज ${st.optInt("page")} · ${st.optInt("rows")} पंक्तियाँ पढ़ीं..."
                                 readBar.visibility = View.VISIBLE
                                 ui.postDelayed(this, 600)
-                            } else finishExport(null, "बहुत देर लगी / took too long")
+                            }
                             "done" -> t.web.evaluateJavascript("window.__roninTable.result()") { res -> finishExport(jsString(res), null) }
                             else -> finishExport(null, st.optString("error").ifEmpty { "No table found on this page." })
                         }
@@ -771,7 +791,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                     exporting = false
                     val c = te.counts
                     AlertDialog.Builder(this).setTitle("📊 Excel + PDF बन गई")
-                        .setMessage("${te.rows.size} पंक्तियाँ\nदोहराए: ${(c["dupRows"] ?: 0) + (c["dupNames"] ?: 0)} · मिलते-जुलते नाम: ${c["similar"] ?: 0} · संभावित ग़लतियाँ: ${c["spell"] ?: 0}\n\nDownloads → Ronin में save है।")
+                        .setMessage((if (te.partial.isNotEmpty()) "⚠ अधूरा / NOT complete: ${te.partial}\n\n" else "") + "${te.rows.size} पंक्तियाँ\nदोहराए: ${(c["dupRows"] ?: 0) + (c["dupNames"] ?: 0)} · मिलते-जुलते नाम: ${c["similar"] ?: 0} · संभावित ग़लतियाँ: ${c["spell"] ?: 0}\n\nDownloads → Ronin में save है।")
                         .setPositiveButton("PDF खोलें") { _, _ -> openFile(p, "application/pdf") }
                         .setNeutralButton("Excel खोलें") { _, _ -> openFile(x, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") }
                         .setNegativeButton("ठीक है", null).show()
@@ -843,8 +863,12 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
 
     // ---- songs and videos in the background ------------------------------------------------
 
+    private var lastPlayingAt = 0L
+
     private val mediaPoll = object : Runnable {
         override fun run() {
+            // nothing played for 30 minutes: that tab may rest in the background again (battery)
+            mediaTab?.let { if (!mediaPlaying && System.currentTimeMillis() - lastPlayingAt > 30 * 60_000) it.web.keepPlaying = false }
             val candidates = listOfNotNull(mediaTab, current).distinct()
             for (t in candidates) {
                 t.web.evaluateJavascript(PageScripts.MEDIA_STATE) { r -> onMediaState(t, r) }
@@ -875,6 +899,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         if (t != mediaTab) return
         // stays on between songs (the player pauses for a moment while the next one loads)
         t.web.keepPlaying = true
+        if (playing) lastPlayingAt = System.currentTimeMillis()
         if (playing != mediaPlaying || title != mediaTitle) {
             mediaPlaying = playing; mediaTitle = title
             MediaPlaybackService.update(this, title, o.optString("a"), playing)
@@ -915,13 +940,13 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         val web = t != null && t.url.startsWith("http")
         val m = PopupMenu(this, anchor)
         val items = linkedMapOf<String, () -> Unit>()
-        items["New tab"] = { newTab(HOME) }
+        items["➕ नया tab / New tab"] = { newTab(HOME) }
         if (web) items[if (app.store.isBookmarked(t!!.url)) "★ Remove bookmark" else "☆ Bookmark this page"] = {
             val added = app.store.toggleBookmark(t.title, t.url)
             Toast.makeText(this, if (added) "Bookmark saved" else "Bookmark removed", Toast.LENGTH_SHORT).show()
         }
-        items["Bookmarks"] = { showPages("Bookmarks", app.store.bookmarks, bookmarks = true) }
-        items["History"] = { showPages("History", app.store.history, bookmarks = false) }
+        items["Bookmarks / बुकमार्क"] = { showPages("Bookmarks", app.store.bookmarks, bookmarks = true) }
+        items["History / इतिहास"] = { showPages("History", app.store.history, bookmarks = false) }
         if (web) items["🔊 Read this page aloud"] = { startReading() }
         if (web) items["Reload"] = { t!!.web.reload() }
         items[if (app.store.night) "☀ Day mode" else "☾ Night mode"] = {
@@ -929,7 +954,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             AppCompatDelegate.setDefaultNightMode(if (app.store.night) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO)
             recreate()
         }
-        if (web) items["This is my bank (open in Safe Money)"] = {
+        if (web) items["🏦 यह मेरा bank है (Safe Money में खोलें)"] = {
             val h = t!!.topHost.removePrefix("www.")
             if (h.isNotEmpty()) { app.store.userBanks = app.store.userBanks + h; load(t, t.url) }
         }
@@ -943,9 +968,9 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                 } else t.web.evaluateJavascript("(function(){var b=document.getElementById('ronin-data-btn');if(b)b.remove()})()", null)
             }
         }
-        items["🛡 Safe sites (stopped by mistake)"] = { showSafeSites() }
-        items["Ronin Safe Money (banking)"] = { startActivity(Intent(this, SafeMoneyActivity::class.java)) }
-        items["Check for updates"] = { Updater.check(this, quiet = false) }
+        items["🛡 Safe sites / ग़लती से रुकी साइटें"] = { showSafeSites() }
+        items["🏦 Ronin Safe Money (banking)"] = { startActivity(Intent(this, SafeMoneyActivity::class.java)) }
+        items["⟳ Update देखें / Check for updates"] = { Updater.check(this, quiet = false) }
         items["About Ronin"] = {
             AlertDialog.Builder(this).setTitle("Ronin Browser ${BuildConfigCompat.versionName(this)}")
                 .setMessage("Ad-block lists: ${app.blocker.listSize} sites.\nDanger list (phishing / malware): ${app.blocker.threatSize} sites, plus Google Safe Browsing.\nSongs and videos keep playing in the background; control them from the notification, the lock screen or your car.")
@@ -995,6 +1020,8 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
 
     // ---- new tab page ----------------------------------------------------------------------
 
+    private var homeEditing = false // the new tab page stays in "edit links" after an add / remove
+
     private val quickLinksJs: String by lazy { assets.open("ronin/quicklinks.js").bufferedReader().readText() }
 
     private fun homeHtml(): String {
@@ -1012,7 +1039,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             all.filter { it.section == sec }.forEach { links.put(JSONObject().put("n", it.name).put("u", it.url)) }
             sections.put(JSONObject().put("id", sec).put("title", titles[sec] ?: sec).put("links", links))
         }
-        val data = JSONObject().put("k", pageKey).put("sections", sections).toString().replace("</", "<\\/")
+        val data = JSONObject().put("k", pageKey).put("edit", homeEditing).put("sections", sections).toString().replace("</", "<\\/")
         return """<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>New tab</title>
 <style>:root{--bg:$bg;--card:$card;--line:$line;--text:$fg;--muted:$muted;--accent:#3b82f6}
 body{margin:0;padding:24px 18px 40px;background:$bg;color:$fg;font-family:sans-serif}main{max-width:820px;margin:0 auto}
@@ -1044,6 +1071,8 @@ h1{margin:0 0 4px;font-size:24px}p.sub{margin:0 0 6px;opacity:.7}p.note{margin-t
         const val TRUST_PREFIX = "https://ronin.home/trust"
         /** Proves a link came from Ronin's own page (new tab page, red page). New each start. */
         val pageKey: String = java.util.UUID.randomUUID().toString().replace("-", "")
+        /** A separate key for the Data button (it sits inside web pages; it can only start an export). */
+        val dataKey: String = java.util.UUID.randomUUID().toString().replace("-", "")
         /** App files from these sites need no warning (Ronin's own updates come from GitHub). */
         val trustedAppHosts = listOf("github.com", "githubusercontent.com", "f-droid.org")
     }

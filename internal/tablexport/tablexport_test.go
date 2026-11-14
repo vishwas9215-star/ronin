@@ -82,3 +82,16 @@ func TestColName(t *testing.T) {
 		}
 	}
 }
+
+func TestNumbersAndPartial(t *testing.T) {
+	for v, want := range map[string]bool{"40": true, "38.5": true, "-3": true, "0": true, "0123": false, "123456789012": false, "9876543210": false, "5A": false, "": false, ".5": false} {
+		if number(v) != want {
+			t.Errorf("%q: %v", v, !want)
+		}
+	}
+	d := load(t)
+	d.Partial = "page 7 did not load"
+	if !strings.Contains(d.ReportHTML(), "NOT complete: page 7") {
+		t.Fatal("partial not shown")
+	}
+}
