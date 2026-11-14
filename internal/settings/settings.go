@@ -50,6 +50,7 @@ type Settings struct {
 	QuickLinks        []quicklinks.Link `json:"quick_links,omitempty"`  // links the user added on the new tab page
 	HiddenLinks       []string          `json:"hidden_links,omitempty"` // built-in quick links the user removed
 	DataSites         []string          `json:"data_sites,omitempty"`   // sites with the "Data -> Excel + PDF" button
+	Social            string            `json:"social,omitempty"`       // Safe Social settings (JSON from the launcher page)
 }
 
 // DefaultUpdateChannel is where Ronin looks for new versions (signed manifest).

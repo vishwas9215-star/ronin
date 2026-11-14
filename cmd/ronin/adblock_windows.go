@@ -147,6 +147,13 @@ func (t *Tab) hookAdblock() {
 		if t.serveTools(uri, args) { // Ronin's own PDF / Photo tools page (from memory)
 			return
 		}
+		// Safe Social: YouTube in Restricted mode when the family asked for it
+		if t.isSocial && kids.IsYouTube(uri) && socialSettings().YtRestrict {
+			if h, err := req.GetHeaders(); err == nil && h != nil {
+				_ = h.SetHeader("YouTube-Restrict", "Moderate")
+				h.Release()
+			}
+		}
 		e := blocker.Load()
 		if e == nil {
 			return
@@ -185,7 +192,8 @@ func (t *Tab) hookAdblock() {
 		return // no scripts are ever added to bank pages
 	}
 	c.Init(adblockJS)
-	if pwSaves(cont) { // not in Private: nothing about logins is noticed there
+	c.Init(socialBaseJS() + socialJS) // Safe Social protection on social sites
+	if pwSaves(cont) {                // not in Private: nothing about logins is noticed there
 		c.Init(passJS)
 	}
 	if cont == containers.Personal || cont == containers.Private || cont == containers.Kids {

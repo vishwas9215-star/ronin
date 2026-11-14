@@ -8,4 +8,13 @@
         <item name="android:navigationBarColor">#14171F</item>
         <item name="android:windowBackground">@color/ronin_bg</item>
     </style>
+    <!-- the widget's search box: floats over the home screen -->
+    <style name="Theme.Ronin.Search" parent="Theme.AppCompat.DayNight.Dialog.Alert">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
+    </style>
 </resources>

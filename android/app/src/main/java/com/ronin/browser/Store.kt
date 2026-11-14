@@ -49,6 +49,11 @@ class Store(ctx: Context) {
 
     fun clearHistory() = write("history", emptyList())
 
+    /** Safe Social settings (JSON from the launcher page: apps, family, reels, ytRestrict). */
+    var social: String
+        get() = p.getString("social", "") ?: ""
+        set(v) { p.edit().putString("social", v).apply() }
+
     /** Deletes every visit whose address matches (adult / gambling sites). */
     fun removeHistory(match: (String) -> Boolean) {
         val all = read("history")

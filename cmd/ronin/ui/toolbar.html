@@ -402,6 +402,7 @@ function showMenu(){
     item("Night mode on this site again", () => post({cmd:"darkoff", value: false}));
   }
   if (CONTAINER !== "BANKING") item("\uD83E\uDDF0 Ronin Tools (Data Match, PDF, Photo)", () => post({cmd:"tools"}));
+  if (CONTAINER !== "BANKING" && CONTAINER !== "KIDS") item("\uD83D\uDEE1\uFE0F Safe Social (Facebook, Instagram, YouTube...)", () => post({cmd:"social"}));
   if (web && CONTAINER !== "BANKING") {
     item("Save page as PDF   (Ctrl+P)", () => post({cmd:"savepdf"}));
     if (S.dataSite) item("\uD83D\uDCCA Data \u2192 Excel + PDF (\u0907\u0938 page \u0915\u0940 \u092a\u0942\u0930\u0940 table)", () => post({cmd:"dataexport"}));

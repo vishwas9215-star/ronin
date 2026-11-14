@@ -50,6 +50,7 @@ type Tab struct {
 	protect         string // "", "payment", "bank" (Payment Protect reason)
 	isNewTab        bool
 	isTools         bool              // Ronin's own PDF / Photo tools page
+	isSocial        bool              // a Safe Social tab (full screen, guarded)
 	userURL         string            // address the user just asked for
 	chainStart      map[uint64]string // first address of each navigation chain
 	chainUser       map[uint64]bool   // whether that chain was started by the user
@@ -402,6 +403,10 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 	// the page's "Data -> Excel + PDF" button
 	if strings.HasPrefix(uri, "https://ronin.data/") {
 		call(args, nsSetCancel, 1)
+		if u, err := url.Parse(uri); err == nil && u.Path == "/social" {
+			runOnUI(func() { t.socialRequest(u) })
+			return
+		}
 		if u, err := url.Parse(uri); err == nil && u.Path == "/close" {
 			if u.Query().Get("k") == toolsKey && t.isTools {
 				runOnUI(func() { t.w.leaveTools() })
@@ -427,12 +432,23 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 	}
 	// Ronin's own tools page opens only from Ronin's menu
 	if strings.HasPrefix(uri, "https://ronin.home/") {
-		if !t.isTools || !strings.HasPrefix(uri, toolsPrefix) {
+		if !(t.isTools || t.isSocial) || !strings.HasPrefix(uri, toolsPrefix) {
 			call(args, nsSetCancel, 1)
 		}
 		return
 	}
 	// a change to the quick links, made on Ronin's own new tab page
+	if strings.HasPrefix(uri, "https://ronin.newtab/social") {
+		call(args, nsSetCancel, 1)
+		if u, err := url.Parse(uri); err == nil && u.Query().Get("k") == newTabKey && t.isNewTab {
+			open := ""
+			if a, ok := socialApps[u.Query().Get("app")]; ok {
+				open = a[1]
+			}
+			runOnUI(func() { t.w.showSocial(open) })
+		}
+		return
+	}
 	if strings.HasPrefix(uri, "https://ronin.newtab/") {
 		call(args, nsSetCancel, 1)
 		if t.isNewTab {

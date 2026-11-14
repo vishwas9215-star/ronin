@@ -82,6 +82,7 @@ class MainActivity : AppCompatActivity() {
         @Volatile var topHost = ""
         @Volatile var isTools = false // Ronin's own PDF / Photo tools page is open in this tab
         var isPrivate = false // adult / gambling site: own cookies, no history, wiped when closed
+        @Volatile var isSocial = false // a Safe Social tab: full screen, guarded (inject_social.js)
     }
 
     private val app get() = application as RoninApp
@@ -97,6 +98,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabStrip: LinearLayout
     private lateinit var newTabButton: Button
     private lateinit var toolsButton: Button
+    private lateinit var bar: LinearLayout
+    private lateinit var stripRow: LinearLayout
     private var lastStripTab: Tab? = null
     private lateinit var progress: ProgressBar
     private lateinit var holder: FrameLayout
@@ -163,8 +166,9 @@ class MainActivity : AppCompatActivity() {
                 val t = current
                 when {
                     fullView != null -> fullCallback?.onCustomViewHidden()
-                    t != null && t.isTools -> leaveTools()
-                    t != null && t.web.canGoBack() -> t.web.goBack()
+                    t != null && t.isTools && !t.isSocial -> leaveTools()
+                    t != null && t.isSocial -> if (t.web.canGoBack()) t.web.goBack() else if (t.url != SOCIAL) load(t, SOCIAL) else leaveSocial(t)
+                    t != null && !t.isSocial && t.web.canGoBack() -> t.web.goBack()
                     browsingTabs().size > 1 && t != null -> closeTab(t)
                     else -> moveTaskToBack(true) // the song keeps playing
                 }
@@ -202,7 +206,7 @@ class MainActivity : AppCompatActivity() {
     private fun buildUi() {
         val bg = Color.parseColor("#14171F")
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg) }
-        val bar = LinearLayout(this).apply {
+        bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(6), dp(4), dp(2), dp(4))
@@ -295,7 +299,7 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)).apply { marginEnd = dp(8) }
             setOnClickListener { openTools() }
         }
-        val stripRow = LinearLayout(this).apply {
+        stripRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(Color.parseColor("#0E1016"))
@@ -332,7 +336,7 @@ class MainActivity : AppCompatActivity() {
     // ---- tabs -----------------------------------------------------------------------
 
     @SuppressLint("SetJavaScriptEnabled")
-    private fun makeWebView(t: () -> Tab, private: Boolean = false): RoninWebView {
+    private fun makeWebView(t: () -> Tab, private: Boolean = false, social: Boolean = false): RoninWebView {
         val w = RoninWebView(this)
         // a private tab keeps its cookies and storage apart from everything else
         if (private && WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
@@ -363,6 +367,8 @@ class MainActivity : AppCompatActivity() {
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(w, PageScripts.BACKGROUND_PLAY, PageScripts.backgroundOrigins)
             WebViewCompat.addDocumentStartJavaScript(w, adblockJs, setOf("*"))
+            WebViewCompat.addDocumentStartJavaScript(w, socialBaseJs() + socialJs, setOf("*")) // Safe Social protection
+            if (social) WebViewCompat.addDocumentStartJavaScript(w, "window.__roninSocialCfg&&(window.__roninSocialCfg.social=true);", setOf("*"))
         }
         w.webViewClient = Client(t)
         w.webChromeClient = Chrome(t)
@@ -372,12 +378,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val adblockJs: String by lazy { assets.open("ronin/inject_adblock.js").bufferedReader().readText() }
+    private val socialJs: String by lazy { assets.open("ronin/inject_social.js").bufferedReader().readText() }
+    private fun socialSettings(): JSONObject = try { JSONObject(app.store.social) } catch (e: Exception) {
+        JSONObject().put("apps", JSONArray(listOf("facebook", "instagram", "youtube", "whatsapp"))).put("ytRestrict", true)
+    }
+    private fun socialBaseJs(): String {
+        val c = socialSettings()
+        return "window.__roninSocialCfg=" + JSONObject().put("k", toolsKey).put("family", c.optBoolean("family")).put("reels", c.optBoolean("reels")) + ";"
+    }
 
-    fun newTab(url: String, select: Boolean = true, private: Boolean = false): Tab {
+    fun newTab(url: String, select: Boolean = true, private: Boolean = false, social: Boolean = false): Tab {
         lateinit var tab: Tab
-        val w = makeWebView({ tab }, private)
+        val w = makeWebView({ tab }, private, social)
         tab = Tab(w)
         tab.isPrivate = private
+        tab.isSocial = social
         tabs.add(tab)
         holder.addView(w)
         w.visibility = View.GONE
@@ -393,6 +408,7 @@ class MainActivity : AppCompatActivity() {
         t.web.visibility = View.VISIBLE
         if (!address.hasFocus()) address.setText(display(t.url))
         updateTabsButton()
+        socialScreen()
     }
 
     private fun closeTab(t: Tab) {
@@ -496,6 +512,13 @@ class MainActivity : AppCompatActivity() {
 
     fun load(t: Tab, url: String) {
         if (!t.isPrivate && Sensitive.site(url)) { openPrivate(url, t); return }
+        if (url.startsWith(SOCIAL)) {
+            t.isTools = true
+            t.url = SOCIAL
+            t.title = "Safe Social"
+            t.web.loadUrl(SOCIAL + "?k=" + toolsKey + "&dark=" + (if (app.store.night) "1" else "0"))
+            return
+        }
         if (url.startsWith(TOOLS)) {
             t.isTools = true
             t.url = TOOLS
@@ -575,6 +598,14 @@ class MainActivity : AppCompatActivity() {
                 if (req.url.getQueryParameter("k") == toolsKey && t.isTools) saveToolFile(t)
                 return true
             }
+            if (url.startsWith("https://ronin.data/social")) {
+                if (req.url.getQueryParameter("k") == toolsKey && tab().isSocial) socialRequest(tab(), req.url)
+                return true
+            }
+            if (url.startsWith("https://ronin.newtab/social")) {
+                if (req.url.getQueryParameter("k") == pageKey && tab().url == HOME) openSocial(socialUrl(req.url.getQueryParameter("app")))
+                return true
+            }
             if (url.startsWith("https://ronin.data/close")) {
                 if (req.url.getQueryParameter("k") == toolsKey && tab().isTools) leaveTools()
                 return true
@@ -640,6 +671,7 @@ class MainActivity : AppCompatActivity() {
             if (t == current && !address.hasFocus()) address.setText(display(url))
             if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                 view.evaluateJavascript(adblockJs, null)
+                view.evaluateJavascript(socialBaseJs() + (if (tab().isSocial) "window.__roninSocialCfg.social=true;" else "") + socialJs, null)
                 if (PageScripts.backgroundOrigins.any { url.startsWith(it) }) view.evaluateJavascript(PageScripts.BACKGROUND_PLAY, null)
             }
         }
@@ -664,6 +696,14 @@ class MainActivity : AppCompatActivity() {
     /** upi:, tel:, mailto:, whatsapp:, intent: links open the right app. */
     private fun openOutside(url: String, view: WebView): Boolean {
         try {
+            // "open in the app" links inside Safe Social stay here (Instagram -> Threads in the same screen)
+            if (url.startsWith("intent:") && current?.isSocial == true) {
+                val i = Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
+                val web = i.getStringExtra("browser_fallback_url")?.takeIf { it.startsWith("https://") }
+                    ?: i.data?.takeIf { it.scheme == "https" || url.contains("scheme=https") }?.let { "https://" + it.host + (it.encodedPath ?: "") + (it.encodedQuery?.let { q -> "?$q" } ?: "") }
+                if (web != null) view.loadUrl(web)
+                return true
+            }
             if (url.startsWith("intent:")) {
                 val i = Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
                 i.addCategory(Intent.CATEGORY_BROWSABLE); i.component = null; i.selector = null
@@ -832,7 +872,67 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
 
     // ---- Ronin Tools: not a browsing tab; the 🧰 button and "Back to browser" switch to and from it
     private var beforeTools: Tab? = null
-    private fun browsingTabs() = tabs.filter { !it.isTools }
+    private fun browsingTabs() = tabs.filter { !it.isTools && !it.isSocial }
+
+    // ---- Safe Social: the family's social apps, full screen, guarded
+    private var beforeSocial: Tab? = null
+    private val socialAppUrls = mapOf("facebook" to "https://www.facebook.com/", "instagram" to "https://www.instagram.com/", "youtube" to "https://m.youtube.com/",
+        "whatsapp" to "https://web.whatsapp.com/", "x" to "https://x.com/", "threads" to "https://www.threads.net/", "sharechat" to "https://sharechat.com/",
+        "moj" to "https://mojapp.in/", "linkedin" to "https://www.linkedin.com/", "pinterest" to "https://www.pinterest.com/", "snapchat" to "https://web.snapchat.com/",
+        "telegram" to "https://web.telegram.org/")
+    private val socialAppNames = mapOf("facebook" to "Facebook", "instagram" to "Instagram", "youtube" to "YouTube", "whatsapp" to "WhatsApp", "x" to "X",
+        "threads" to "Threads", "sharechat" to "ShareChat", "moj" to "Moj", "linkedin" to "LinkedIn", "pinterest" to "Pinterest", "snapchat" to "Snapchat", "telegram" to "Telegram")
+    private fun socialUrl(app: String?) = socialAppUrls[app] ?: ""
+
+    fun openSocial(open: String = "") {
+        val t = tabs.firstOrNull { it.isSocial }
+        youtubeRestricted(socialSettings().optBoolean("ytRestrict", true))
+        if (t != null) {
+            if (t != current) { beforeSocial = current; select(t) }
+            if (open.isNotEmpty()) load(t, open)
+        } else {
+            beforeSocial = current
+            newTab(open.ifEmpty { SOCIAL }, select = true, social = true)
+        }
+        socialScreen()
+    }
+
+    private fun socialRequest(t: Tab, u: Uri) {
+        u.getQueryParameter("cfg")?.let { c ->
+            try { val j = String(android.util.Base64.decode(c, android.util.Base64.DEFAULT), Charsets.UTF_8); JSONObject(j); app.store.social = j } catch (e: Exception) { }
+        }
+        when (u.getQueryParameter("do")) {
+            "open" -> u.getQueryParameter("url")?.takeIf { it.startsWith("https://") }?.let { youtubeRestricted(socialSettings().optBoolean("ytRestrict", true)); load(t, it) }
+            "home" -> load(t, SOCIAL)
+            "close" -> leaveSocial(t)
+        }
+    }
+
+    private fun leaveSocial(t: Tab) {
+        val back = beforeSocial?.takeIf { it in tabs && !it.isSocial && !it.isTools }
+        closeTab(t)
+        if (back != null) select(back)
+        socialScreen()
+    }
+
+    /** YouTube's own Restricted mode (its PREF cookie): dirty videos and shorts stay hidden. */
+    private fun youtubeRestricted(on: Boolean) {
+        val cm = android.webkit.CookieManager.getInstance()
+        for (h in listOf("https://www.youtube.com", "https://m.youtube.com")) cm.setCookie(h, "PREF=f2=" + (if (on) "8000000" else "0") + "; domain=.youtube.com; path=/; max-age=31536000")
+    }
+
+    /** A Safe Social tab fills the screen: no address bar, no tab strip, no status bar. */
+    private fun socialScreen() {
+        if (!::bar.isInitialized) return
+        val on = current?.isSocial == true
+        bar.visibility = if (on) View.GONE else View.VISIBLE
+        stripRow.visibility = if (on) View.GONE else View.VISIBLE
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).let { c ->
+            if (on) { c.hide(androidx.core.view.WindowInsetsCompat.Type.statusBars()); c.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE }
+            else c.show(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+        }
+    }
+    fun currentIsSocialForTest() = current?.isSocial == true
 
     /** Nothing of the private tabs stays: cookies and site storage of their own profile are deleted. */
     private fun wipePrivate() {
@@ -866,7 +966,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     /** A file of the tools page, from inside the app (only for a tab Ronin opened the tools in). */
     private fun toolsFile(t: Tab, path: String): WebResourceResponse {
         val name = path.removePrefix("/tools/").ifEmpty { "index.html" }
-        val ok = t.isTools && !name.contains("..") && Regex("[A-Za-z0-9_./-]+").matches(name)
+        val ok = (t.isTools || t.isSocial) && !name.contains("..") && Regex("[A-Za-z0-9_./-]+").matches(name)
         val mime = when {
             name.endsWith(".js") || name.endsWith(".mjs") -> "text/javascript"
             name.endsWith(".html") -> "text/html"
@@ -1190,6 +1290,10 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             }
         }
         items["🧰 Ronin Tools (Data Match, PDF, Photo)"] = { openTools() }
+        items["🛡️ Safe Social (Facebook, Instagram, YouTube...)"] = { openSocial() }
+        items["🔎 Search widget home screen पर लगाएँ"] = {
+            if (!SearchWidget.pin(this)) Toast.makeText(this, "Home screen पर खाली जगह दबाकर रखें → Widgets → Ronin Search", Toast.LENGTH_LONG).show()
+        }
         items["🛡 Safe sites / ग़लती से रुकी साइटें"] = { showSafeSites() }
         items["🏦 Ronin Safe Money (banking)"] = { startActivity(Intent(this, SafeMoneyActivity::class.java)) }
         items["⟳ Update देखें / Check for updates"] = { Updater.check(this, quiet = false) }
@@ -1261,7 +1365,13 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             all.filter { it.section == sec }.forEach { links.put(JSONObject().put("n", it.name).put("u", it.url)) }
             sections.put(JSONObject().put("id", sec).put("title", titles[sec] ?: sec).put("links", links))
         }
-        val data = JSONObject().put("k", pageKey).put("edit", homeEditing).put("sections", sections).toString().replace("</", "<\\/")
+        // Safe Social row first: the family's apps (opens full screen, guarded)
+        val soc = JSONArray().put(JSONObject().put("n", "🛡️ सभी apps").put("u", "https://ronin.newtab/social?k=$pageKey"))
+        val chosen = socialSettings().optJSONArray("apps")
+        if (chosen != null) for (i in 0 until chosen.length()) chosen.optString(i).let { id -> socialAppNames[id]?.let { soc.put(JSONObject().put("n", it).put("u", "https://ronin.newtab/social?app=$id&k=$pageKey")) } }
+        val withSocial = JSONArray().put(JSONObject().put("id", "Safe Social").put("title", "🛡️ Safe Social").put("links", soc).put("fixed", true))
+        for (i in 0 until sections.length()) withSocial.put(sections.get(i))
+        val data = JSONObject().put("k", pageKey).put("edit", homeEditing).put("sections", withSocial).toString().replace("</", "<\\/")
         return """<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>New tab</title>
 <style>:root{--bg:$bg;--card:$card;--line:$line;--text:$fg;--muted:$muted;--accent:#3b82f6}
 body{margin:0;padding:24px 18px 40px;background:$bg;color:$fg;font-family:sans-serif}main{max-width:820px;margin:0 auto}
@@ -1293,6 +1403,7 @@ h1{margin:0 0 4px;font-size:24px}p.sub{margin:0 0 6px;opacity:.7}p.note{margin-t
         const val TRUST_PREFIX = "https://ronin.home/trust"
         const val TOOLS = "https://ronin.home/tools/"
         const val PRIVATE_PROFILE = "ronin-private"
+        const val SOCIAL = "https://ronin.home/tools/social.html"
         const val GOOGLE = "https://www.google.com/"
         /** Proves "save this file" came from the tools page. */
         val toolsKey: String = java.util.UUID.randomUUID().toString().replace("-", "")

@@ -33,7 +33,8 @@
       var a = document.createElement("a"); a.className = "chip"; a.href = l.u; a.title = l.u; a.textContent = l.n;
       var x = document.createElement("span"); x.className = "x"; x.textContent = "×"; x.title = "Remove";
       x.onclick = function (e) { e.preventDefault(); e.stopPropagation(); go("del", {u: l.u}); };
-      a.appendChild(x); box.appendChild(a);
+      if (!sec.fixed) a.appendChild(x); // a fixed row (Safe Social) is changed in its own settings
+      box.appendChild(a);
     });
     var add = document.createElement("button"); add.className = "add"; add.type = "button"; add.textContent = "+ जोड़ें / Add";
     add.onclick = function () {
@@ -45,7 +46,7 @@
       f.onsubmit = function (e) { e.preventDefault(); if (u.value.trim()) go("add", {s: sec.id, n: n.value, u: u.value}); };
       f.append(n, u, b); box.parentNode.insertBefore(f, box.nextSibling); n.focus();
     };
-    box.appendChild(add);
+    if (!sec.fixed) box.appendChild(add);
   });
   var ed = document.createElement("button"); ed.className = "edbtn"; ed.type = "button";
   var label = function () { ed.textContent = root.classList.contains("edit") ? "✓ Done" : "✎ Links बदलें / Edit links"; };

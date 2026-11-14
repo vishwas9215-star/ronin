@@ -335,6 +335,29 @@ class DeviceTest {
     }
 
     @Test
+    fun safeSocialOpensFullScreenAndCloses() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            var strip = 0
+            sc.onActivity { a -> strip = a.tabStripForTest().childCount; a.openSocial() }
+            assertTrue("Safe Social launcher did not open", waitFor(20) { eval(sc, "document.querySelectorAll('.app').length") == "4" })
+            var social = false; var barShown = true
+            sc.onActivity { a -> social = a.currentIsSocialForTest(); barShown = a.addressForTest().isShown }
+            assertTrue("not a Safe Social tab", social)
+            assertTrue("address bar still shown in Safe Social", !barShown)
+            shot("15-safe-social")
+            // ✕ closes it and the browser is back
+            eval(sc, "location.href='https://ronin.data/social?do=close&k='+new URLSearchParams(location.search).get('k'),1")
+            Thread.sleep(1500)
+            sc.onActivity { a -> social = a.currentIsSocialForTest(); barShown = a.addressForTest().isShown }
+            assertTrue("Safe Social did not close", !social && barShown)
+            var after = 0
+            sc.onActivity { a -> after = a.tabStripForTest().childCount }
+            assertEquals("tabs changed", strip, after)
+        }
+    }
+
+    @Test
     fun adultSitesOpenInAPrivateTabWithoutHistory() {
         ActivityScenario.launch(MainActivity::class.java).use { sc ->
             Thread.sleep(1500)

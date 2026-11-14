@@ -60,6 +60,26 @@
             android:excludeFromRecents="true"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
 
+        <!-- Ronin search on the home screen -->
+        <receiver
+            android:name=".SearchWidget"
+            android:exported="true"
+            android:label="Ronin Search">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/search_widget_info" />
+        </receiver>
+        <activity
+            android:name=".SearchActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity="com.ronin.browser.search"
+            android:theme="@style/Theme.Ronin.Search"
+            android:windowSoftInputMode="stateAlwaysVisible|adjustResize" />
+
         <service
             android:name=".MediaPlaybackService"
             android:exported="false"

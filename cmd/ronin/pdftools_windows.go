@@ -113,7 +113,7 @@ func (t *Tab) serveTools(uri string, args *edge.ICoreWebView2WebResourceRequeste
 	}
 	body, err := fs.ReadFile(toolsFiles, path.Join("ui/tools", path.Clean("/" + name)[1:]))
 	status, reason := 200, "OK"
-	if err != nil || !t.isTools || t.w.container == containers.Banking {
+	if err != nil || !(t.isTools || t.isSocial) || t.w.container == containers.Banking {
 		body, status, reason = []byte("not found"), 404, "Not Found"
 	}
 	ct := "text/html; charset=utf-8"

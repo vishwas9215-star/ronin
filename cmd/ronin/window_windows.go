@@ -50,6 +50,7 @@ type Window struct {
 	panelPending []func()
 	panelKind    string   // "" = closed
 	beforeTools  *Tab     // the page that was open when Ronin Tools came up
+	beforeSocial *Tab     // the page that was open when Safe Social came up
 	closedURLs   []string // closed tabs, for Ctrl+Shift+T (this run only, not saved)
 
 	// Safe Money
@@ -249,11 +250,11 @@ func (w *Window) sendState() {
 	var list []tabState
 	for _, t := range w.tabs {
 		u := omnibox.Display(t.url)
-		if t.isTools {
-			u = "" // Ronin Tools: no web address (and never its key)
+		if t.isTools || t.isSocial {
+			u = "" // Ronin Tools / Safe Social: not shown as tabs (and never their key)
 		}
 		list = append(list, tabState{
-			ID: t.id, Title: t.displayTitle(), URL: u, Tool: t.isTools, Loading: t.loading,
+			ID: t.id, Title: t.displayTitle(), URL: u, Tool: t.isTools || t.isSocial, Loading: t.loading,
 			Active: t == w.active, Protect: t.protect, CanBack: t.canBack, CanFwd: t.canFwd,
 			Secure:   strings.HasPrefix(t.url, "https://"),
 			BankHint: w.container == containers.Personal && strings.HasPrefix(t.url, "https://"),
@@ -444,6 +445,8 @@ func (w *Window) onUIMessage(raw string) {
 		w.closePanel()
 	case "tools":
 		w.showTools()
+	case "social":
+		w.showSocial("")
 	case "dataexport":
 		if w.active != nil {
 			w.active.exportData()
@@ -910,6 +913,9 @@ func (w *Window) layout() {
 		return
 	}
 	barH := w.scale(w.uiHeight)
+	if w.active != nil && w.active.isSocial && !w.uiFull {
+		barH = 0 // Safe Social: the page fills the window (its own ← ⊞ ✕ buttons)
+	}
 	if barH > r.Bottom-r.Top {
 		barH = r.Bottom - r.Top
 	}
