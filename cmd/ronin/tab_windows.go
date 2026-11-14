@@ -142,7 +142,7 @@ func (t *Tab) create() bool {
 	}
 	_ = c.PutIsPasswordAutosaveEnabled(false) // passwords belong in Bitwarden
 	_ = c.PutIsGeneralAutofillEnabled(t.w.container != containers.Banking && t.w.container != containers.Kids)
-	c.SetBackgroundColour(0xff, 0xff, 0xff, 255)
+	t.setBase(false) // dark until a web site loads: no white flash when a new tab opens
 	c.NavigationCompletedCallback = func(_ *edge.ICoreWebView2, args *edge.ICoreWebView2NavigationCompletedEventArgs) {
 		t.loading = false
 		if args != nil {
@@ -443,6 +443,7 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 		runOnUI(func() { t.apply(d, uri) })
 		return
 	}
+	t.setBase(strings.HasPrefix(uri, "http"))
 	t.loading = true
 	t.lastNavURL = uri
 	t.top.Store(uri) // so the page's own first request is not treated as an advert
@@ -619,7 +620,22 @@ func (t *Tab) onDownloadStarting(args uintptr) {
 
 // ---- new tab page, cleanup -------------------------------------------------
 
+// setBase sets what shows before a page paints (and behind pages without a
+// background): Ronin's own colour for the new tab page, white for web sites.
+func (t *Tab) setBase(web bool) {
+	if t.c == nil {
+		return
+	}
+	if web {
+		t.c.SetBackgroundColour(0xff, 0xff, 0xff, 255)
+		return
+	}
+	r, g, b := newTabBackground(t.w.container)
+	t.c.SetBackgroundColour(r, g, b, 255)
+}
+
 func (t *Tab) showNewTab() {
+	t.setBase(false)
 	t.isNewTab = true
 	t.title = ""
 	t.protect = ""

@@ -6,6 +6,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"roninbrowser/internal/containers"
 )
 
 // ---- Day / Night mode ------------------------------------------------------------
@@ -87,4 +89,21 @@ func toggleTheme() {
 		}
 		pInvalidateRect.Call(w.hwnd, 0, 1) // the window frame takes the new colour
 	}
+}
+
+// newTabBackground is the new tab page's own colour (same as newtab.html), so
+// opening a tab never flashes white.
+func newTabBackground(c containers.Container) (r, g, b uint8) {
+	light := themeName() == "light"
+	switch {
+	case c == containers.Banking && light:
+		return 0xe9, 0xf5, 0xee
+	case c == containers.Banking:
+		return 0x0f, 0x1a, 0x14
+	case c == containers.Private && light:
+		return 0xf1, 0xee, 0xf9
+	case c == containers.Private:
+		return 0x16, 0x13, 0x1f
+	}
+	return uiBackground()
 }

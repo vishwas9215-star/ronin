@@ -20,8 +20,8 @@ import (
 
 // Adult and gambling site lists used only in KIDS mode.
 var kidsLists = []filterList{
-	{"kids-adult", "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/porn-only/hosts", 10000},
-	{"kids-gambling", "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/gambling-only/hosts", 1000},
+	{"kids-adult", "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/porn-only/hosts", 10000, false},
+	{"kids-gambling", "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/gambling-only/hosts", 1000, false},
 }
 
 var kidsBlocker atomic.Pointer[adblock.Engine]
