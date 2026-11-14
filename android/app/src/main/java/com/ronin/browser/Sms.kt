@@ -158,6 +158,12 @@ object SmsStore {
         return out
     }
 
+    /** "Mark all read": every unread SMS at once. */
+    fun markAllRead(ctx: Context): Boolean {
+        if (!isDefault(ctx)) return false
+        return try { ctx.contentResolver.update(Telephony.Sms.CONTENT_URI, ContentValues().apply { put("read", 1); put("seen", 1) }, "read=0", null); true } catch (e: Exception) { false }
+    }
+
     fun markRead(ctx: Context, thread: Long) {
         if (!isDefault(ctx)) return
         try { ctx.contentResolver.update(Telephony.Sms.CONTENT_URI, ContentValues().apply { put("read", 1); put("seen", 1) }, "thread_id=? AND read=0", arrayOf(thread.toString())) } catch (e: Exception) { }
@@ -181,6 +187,32 @@ object SmsStore {
             }
             for (id in gone) ctx.contentResolver.delete(Uri.parse("content://sms/$id"), null, null)
         } catch (e: Exception) { }
+    }
+
+    /** "Mark all read": every unread SMS at once (the owner's many unread numbers). */
+    fun markAllRead(ctx: Context): Boolean {
+        if (!isDefault(ctx)) return false
+        return try { ctx.contentResolver.update(Telephony.Sms.CONTENT_URI, ContentValues().apply { put("read", 1); put("seen", 1) }, "read=0", null); true } catch (e: Exception) { false }
+    }
+
+    // ---- ⭐ Saved: the family's own copies of important SMS (an OTP, a booking...). A copy, so deleting a
+    // conversation, the 30-day ad clean-up or any other app never removes it; only "remove" in Saved does.
+    private fun savedFile(ctx: Context) = java.io.File(ctx.filesDir, "saved-sms.json")
+    @Synchronized fun saved(ctx: Context): JSONArray = try { JSONArray(savedFile(ctx).readText()) } catch (e: Exception) { JSONArray() }
+    @Synchronized fun save(ctx: Context, m: JSONObject): JSONArray {
+        val all = saved(ctx)
+        val id = m.optLong("id")
+        for (i in 0 until all.length()) if (all.getJSONObject(i).optLong("id") == id) return all
+        all.put(JSONObject().put("id", id).put("address", m.optString("address").take(40)).put("body", m.optString("body").take(2000))
+            .put("date", m.optLong("date")).put("saved", System.currentTimeMillis()))
+        savedFile(ctx).writeText(all.toString())
+        return all
+    }
+    @Synchronized fun unsave(ctx: Context, id: Long): JSONArray {
+        val all = saved(ctx); val keep = JSONArray()
+        for (i in 0 until all.length()) all.getJSONObject(i).let { if (it.optLong("id") != id) keep.put(it) }
+        savedFile(ctx).writeText(keep.toString())
+        return keep
     }
 
     fun deleteThread(ctx: Context, thread: Long): Boolean {

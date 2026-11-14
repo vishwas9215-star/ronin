@@ -169,8 +169,27 @@ top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped p
   (Accessibility must be turned on by him). Saw: Kotak "A/C blocked... kotk.in" SMS from JX-KOTAKD-S (probably real,
   told him not to tap, check in Kotak app). Minor: a saved contact can show "Unknown number" in Recent for outgoing
   rows (contact lookup) - check.
-- Still to do before publish: tablet check (asked him to connect the tablet), CI green, independent QA review,
-  then he names the version.
+- Night 14->15 Nov, owner's second round (all built into 3.11.0, checked on his phone via scrcpy):
+  * Ronin Mail / Ronin Social = own apps: MailActivity / SocialActivity (subclasses of `open class MainActivity`,
+    `appMode`), own taskAffinity, aliases MailLauncher / SocialLauncher (Parts MAIL = both; `Parts.sync` turns the
+    new one on after an update). Social Back: back inside the site; never back to the launcher page by surprise
+    (`socialBack`); Close / last Back = moveTaskToBack in app mode. No forced darkening in social tabs.
+  * PhonePage Back -> `window.__roninBack()` in each page (messages / calls / sos / chatlog), else finish().
+    SOS with no family: Back and the page's Back leave (was a loop). New common ops: copy, close, icon.
+  * Messages: links tappable (except Scam box) -> ask('open') -> Ronin browser; OTP (Otp.kt / otpOf in JS,
+    digit lookarounds) big blue copy button, "🆕 Latest OTP" on the newest, older dimmed; notification action
+    "📋 Copy OTP" (OtpCopyReceiver, clip marked sensitive); Ads box hidden (Settings -> Show hidden ads),
+    SmsSort.isOffer moves loan / selling SMS from -S senders to ads unless transactional; ads older than 30 days
+    deleted (SmsStore.cleanAds, at most daily; owner chose this); no reply box for company senders.
+  * Sender identity like caller-ID apps: cmd/ronin/ui/tools/senders.js (code -> company name, colour, short
+    letters, website); badge shows the company's own site icon fetched by SenderIcons.kt (https, image magic
+    check, 200 KB, cached in files/sender-icons, retry weekly). Owner allowed internet for this. Real logos NOT
+    bundled (trademarks) - told him.
+  * Icons: adaptive (mipmap-anydpi-v26, white tile @color/ic_tile + *_fg.png), new ic_social.
+  * Gmail / social "Open in app" banners hidden (hideAppPromos); green "Safe Mail is on" note for 6 s.
+  * His phone: Stay awake ON (Developer options), phone silent, laptop muted, laptop sleep Never (was already).
+    He allowed me to turn on Ronin-only Android permissions; recording Accessibility still OFF (not done yet).
+- Still to do before publish: tablet check, CI green, independent QA review, then he names the version.
 
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only

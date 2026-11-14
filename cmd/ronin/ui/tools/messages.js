@@ -28,7 +28,9 @@
   const LANG = window.__roninLang || ((navigator.language || 'en').toLowerCase().indexOf('hi') === 0 ? 'hi' : 'en');
   const L = (hi, en) => LANG === 'hi' ? hi : en;
   const TABS = [['work', '✅', L('काम के', 'Important')], ['unknown', '👤', L('अनजान', 'Unknown')], ['ads', '📢', L('विज्ञापन', 'Ads')], ['scam', '⛔', L('ठगी', 'Scam')]];
-  const NAV = TABS.filter(t => t[0] !== 'ads'); // ads / loan offers are hidden (Settings can show them)
+  // ads / loan offers are hidden (Settings can show them); ⭐ Saved = the family's own kept SMS
+  const NAV = TABS.filter(t => t[0] !== 'ads').concat([['saved', '⭐', L('सहेजे', 'Saved')]]);
+  let savedIds = new Set();
   let tab = 'work', view = 'list', cur = null, threads = [], st = {};
   const when = ms => { const d = new Date(ms), n = new Date(); return d.toDateString() === n.toDateString() ? d.toTimeString().slice(0, 5) : d.getDate() + '/' + (d.getMonth() + 1); };
   // sender names ("VM-HDFCBK-S", "AD-HDFCBK-S") are one company: "HDFCBK"
@@ -118,12 +120,16 @@
   }
 
   async function list() {
+    if (tab === 'saved') return savedList();
     view = 'list'; cur = null;
     st = (await ask('state')) || {};
     threads = group((st.isDefault || st.read) ? ((await ask('threads')) || []) : []);
     const count = c => threads.filter(t => t.cat === c).reduce((n, t) => n + (t.unread ? 1 : 0), 0);
     app.replaceChildren(
-      h('div', { cls: 'top' }, h('h1', {}, '📩 Ronin Messages'), h('button', { cls: 'pill', id: 'settings', 'aria-label': 'Settings', on: { click: settings } }, '⚙')),
+      h('div', { cls: 'top' }, h('h1', {}, '📩 Ronin Messages'),
+        // small: every unread SMS read at once (no need to open each one)
+        threads.some(t => t.unread) ? h('button', { cls: 'mini', id: 'readAll', on: { click: async () => { await ask('readAll'); list(); } } }, L('✓ सब पढ़ लिया', '✓ Mark all read')) : '',
+        h('button', { cls: 'pill', id: 'settings', 'aria-label': 'Settings', on: { click: settings } }, '⚙')),
       setup() || '',
       tab === 'ads' ? h('p', { cls: 'note' }, L('📢 विज्ञापन SMS हमेशा के लिए रोकने का सरकारी तरीका: 1909 पर "BLOCK PROMO" भेजें (OTP / बैंक के SMS आते रहेंगे)।', '📢 To stop ad SMS for good (government service): send "BLOCK PROMO" to 1909. OTP and bank SMS keep coming.'), ' ', h('button', { cls: 'pill', on: { click: () => compose('1909', 'BLOCK PROMO') } }, L('1909 पर भेजें', 'Send to 1909'))) : '',
       tab === 'scam' ? h('p', { cls: 'note' }, L('⛔ ये SMS ठगी जैसे हैं। इनमें दिए link न खोलें, call न करें, पैसे / OTP न दें। शिकायत: 📞 1930, या sancharsaathi.gov.in (चक्षु)।', '⛔ These SMS look like scams. Do not open their links, do not call back, never give money or an OTP. Report: 📞 1930 or sancharsaathi.gov.in (Chakshu).')) : '',
@@ -137,8 +143,34 @@
       })()),
       // ✏ new message and the four boxes sit at the bottom, where the thumb is
       h('button', { cls: 'pill blue fab', id: 'new', on: { click: () => compose('', '') } }, L('✏ नया', '✏ New')),
-      h('nav', { cls: 'nav' }, NAV.map(([id, icon, name]) => h('button', { cls: tab === id ? 'on' : '', 'data-tab': id, on: { click: () => { tab = id; list(); } } },
-        h('span', { cls: 'ic' }, icon), h('span', {}, name + (count(id) ? ' (' + count(id) + ')' : ''))))));
+      nav(count));
+  }
+
+  function nav(count) {
+    return h('nav', { cls: 'nav' }, NAV.map(([id, icon, name]) => h('button', { cls: tab === id ? 'on' : '', 'data-tab': id, on: { click: () => { tab = id; list(); } } },
+      h('span', { cls: 'ic' }, icon), h('span', {}, name + (count && count(id) ? ' (' + count(id) + ')' : '')))));
+  }
+
+  // ⭐ Saved: copies kept by Ronin; removed only here (never by deleting a conversation or the ad clean-up)
+  async function savedList() {
+    view = 'saved'; cur = null;
+    const all = ((await ask('savedSms')) || []).slice().sort((a, b) => b.date - a.date);
+    savedIds = new Set(all.map(m => m.id));
+    app.replaceChildren(
+      h('div', { cls: 'top' }, h('h1', {}, L('⭐ सहेजे संदेश', '⭐ Saved messages')), h('button', { cls: 'pill', id: 'settings', on: { click: settings } }, '⚙')),
+      h('p', { cls: 'note' }, L('यहाँ रखे SMS कहीं और से नहीं मिटते: बातचीत मिटाने या पुराने SMS अपने-आप हटने पर भी ये बने रहते हैं। हटाना हो तो यहीं से 🗑 दबाएँ।',
+        'SMS kept here are never deleted from anywhere else: not when a conversation is deleted, not by any clean-up. To remove one, tap 🗑 here.')),
+      h('div', { id: 'savedList', cls: 'msgs' }, all.length ? all.map(m => {
+        const t = { address: m.address, name: '', cat: 'work' };
+        return h('div', { cls: 'saved', 'data-saved': m.id },
+          h('div', { cls: 'shead' }, badge(t), h('b', {}, who(t)), h('small', {}, when(m.date)),
+            h('button', { cls: 'pill', 'data-unsave': m.id, on: { click: async () => {
+              if (!confirm(L('यह सहेजा SMS हटा दें?', 'Remove this saved SMS?'))) return;
+              await ask('unsaveSms', { sid: m.id }); savedList();
+            } } }, '🗑')),
+          h('div', { cls: 'b in' }, smsBody(m.body, true)));
+      }) : h('div', { cls: 'empty' }, L('अभी कुछ नहीं। किसी SMS के नीचे ☆ दबाकर उसे यहाँ रखें।', 'Nothing yet. Tap ☆ under any SMS to keep it here.'))),
+      nav(null));
   }
 
   function warnBox(level, reasons) {
@@ -151,6 +183,7 @@
     view = 'thread'; cur = t;
     // a company's SMS from all its sender names, oldest first
     const parts = await Promise.all((t.threads || [t.thread]).map(id => ask('messages', { thread: id })));
+    savedIds = new Set(((await ask('savedSms')) || []).map(m => m.id));
     const msgs = [].concat(...parts.map(x => x || [])).sort((a, b) => a.date - b.date);
     // several OTPs: the newest one says "Latest", the older ones are dimmed (moves on when a new one comes)
     let latest = -1;
@@ -158,7 +191,13 @@
     const body = h('div', { cls: 'msgs', id: 'msgs' }, msgs.map((m, i) => h('div', {},
       m.type === 1 && m.level ? warnBox(m.level, m.reasons) : '',
       i === latest ? h('div', { cls: 'latest' }, L('🆕 सबसे नया OTP', '🆕 Latest OTP')) : '',
-      h('div', { cls: 'b ' + (m.type === 1 ? 'in' : 'out') + (m.type === 1 && otpOf(m.body) && i !== latest ? ' oldotp' : ''), 'data-level': m.level || '' }, smsBody(m.body, t.cat !== 'scam'), h('small', {}, when(m.date) + (m.type === 5 ? L(' • ✖ नहीं गया', ' • ✖ not sent') : m.type === 4 ? L(' • भेज रहा...', ' • sending...') : ''))))));
+      h('div', { cls: 'b ' + (m.type === 1 ? 'in' : 'out') + (m.type === 1 && otpOf(m.body) && i !== latest ? ' oldotp' : ''), 'data-level': m.level || '' }, smsBody(m.body, t.cat !== 'scam'),
+        h('button', { cls: 'star' + (savedIds.has(m.id) ? ' on' : ''), 'data-star': m.id, title: L('सहेजें', 'Save'), on: { click: async e => {
+          e.stopPropagation();
+          const b = e.currentTarget, on = savedIds.has(m.id);
+          const all = (await ask(on ? 'unsaveSms' : 'saveSms', on ? { sid: m.id } : { msg: { id: m.id, address: t.address, body: m.body, date: m.date } })) || [];
+          savedIds = new Set(all.map(x => x.id)); b.classList.toggle('on', savedIds.has(m.id)); b.textContent = savedIds.has(m.id) ? '⭐' : '☆';
+        } } }, savedIds.has(m.id) ? '⭐' : '☆'), h('small', {}, when(m.date) + (m.type === 5 ? L(' • ✖ नहीं गया', ' • ✖ not sent') : m.type === 4 ? L(' • भेज रहा...', ' • sending...') : ''))))));
     // a new SMS arriving while you type must not wipe what you are writing
     const old = again && document.getElementById('text');
     const box = h('textarea', { placeholder: st.isDefault ? L('संदेश लिखें...', 'Type a message...') : L('भेजने के लिए Ronin Messages चालू करें', 'Turn on Ronin Messages to send'), id: 'text' });
@@ -263,7 +302,7 @@
   };
   // the phone's Back: inside the app first (conversation -> list -> Important), then out of the app
   window.__roninBack = () => {
-    if (view !== 'list') { list(); return true; }
+    if (view !== 'list' && view !== 'saved') { list(); return true; }
     if (tab !== 'work') { tab = 'work'; list(); return true; }
     return false;
   };

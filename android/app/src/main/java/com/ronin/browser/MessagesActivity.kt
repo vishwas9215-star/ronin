@@ -47,7 +47,12 @@ class MessagesActivity : PhonePage() {
             "threads" -> bg { SmsStore.cleanAds(this); done(SmsStore.threads(this)) }
             "messages" -> bg { val t = a.optLong("thread"); done(SmsStore.messages(this, t)); SmsStore.markRead(this, t) }
             "send" -> bg { done(SmsStore.send(this, a.optString("to"), a.optString("body"), a.optInt("sub", -1))) }
+            "readAll" -> bg { done(SmsStore.markAllRead(this)) }
             "delete" -> bg { done(SmsStore.deleteThread(this, a.optLong("thread"))) }
+            "readAll" -> bg { done(SmsStore.markAllRead(this)) }
+            "savedSms" -> bg { done(SmsStore.saved(this)) }
+            "saveSms" -> bg { done(SmsStore.save(this, a.optJSONObject("msg") ?: JSONObject())) }
+            "unsaveSms" -> bg { done(SmsStore.unsave(this, a.optLong("sid"))) }
             "block" -> bg { done(SmsStore.block(this, a.optString("address"))) }
             "unblock" -> bg { done(SmsStore.unblock(this, a.optString("address"))) }
             "blocked" -> bg { done(SmsStore.blocked(this)) }

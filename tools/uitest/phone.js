@@ -21,7 +21,7 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
     window.roninPhone={postMessage(s){const m=JSON.parse(s);window.__log.push(m);let d=null;
       switch(m.op){case 'state':d=Object.assign({},ST,window.__sos||{});break;case 'save':window.__sos=Object.assign(window.__sos||{},{contacts:m.contacts,name:m.name});d=true;break;
       case 'start':d=!!(window.__sos&&window.__sos.contacts&&window.__sos.contacts.length);if(d)window.__sos.running=true;break;case 'stop':window.__sos.running=false;d=true;break;case 'threads':d=T;break;case 'messages':d=M[m.thread]||[];break;case 'makeDefault':d={ok:ST.grant};if(ST.grant)ST.isDefault=true;break;
-      case 'send':d=true;break;case 'block':d=true;break;case 'blocked':d=['+91999'];break;case 'watcher':d=false;break;case 'thread':d=9;break;
+      case 'savedSms':d=window.__saved||[];break;case 'saveSms':window.__saved=(window.__saved||[]).concat([m.msg]);d=window.__saved;break;case 'unsaveSms':window.__saved=(window.__saved||[]).filter(x=>x.id!==m.sid);d=window.__saved;break;case 'send':d=true;break;case 'block':d=true;break;case 'blocked':d=['+91999'];break;case 'watcher':d=false;break;case 'thread':d=9;break;
       case 'recent':d=[{number:'+923001234567',name:'',date:Date.now(),type:3,label:'🌍 विदेश का नंबर'},{number:'+919800000000',name:'माँ',date:Date.now(),type:1,label:''}];break;
       case 'contacts':d=[{name:'माँ',number:'+919800000000'},{name:'Ramesh',number:'+919811111111'}];break;case 'label':d='👤 अनजान नंबर';break;
       case 'rec':d={auto:false,access:false,skip:window.__skip||[],mic:true};break;case 'skip':window.__skip=(window.__skip||[]).filter(x=>x!==m.number);if(m.on)window.__skip.push(m.number);d=window.__skip;break;
@@ -40,6 +40,9 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   const p2 = await b.newPage({ viewport: { width: 412, height: 860 } });
   await serve(p2); await p2.addInitScript(phone({ isDefault: true, read: true, contacts: true }));
   await p2.goto('https://ronin.home/tools/messages.html'); await p2.waitForSelector('.th');
+  if (!await p2.$('#readAll')) bad('Mark all read missing');
+  await p2.click('#readAll'); await p2.waitForTimeout(100);
+  if (!(await p2.evaluate(() => window.__log.some(m => m.op === 'readAll')))) bad('Mark all read not asked');
   const work = await p2.$$eval('.th', a => a.map(x => x.dataset.thread));
   if (!(await p2.$eval('.th[data-thread="2"] b', e => e.textContent)).startsWith('State Bank of India')) bad('SBI name');
   if (work.join() !== '2,4') bad('काम के tab: ' + work);
@@ -62,6 +65,15 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   const lnks = await p2.$$('a.lnk'); if (lnks.length !== 2) bad('links not tappable: ' + lnks.length);
   else { await lnks[1].click(); await p2.waitForTimeout(100); if (!(await p2.evaluate(() => window.__log.some(m => m.op === 'open' && m.url === 'https://kotk.in/x')))) bad('link open'); }
   await p2.screenshot({ path: path.join(out, 'messages-otp.png') });
+  // ⭐ save an SMS: it shows in Saved, and is removed only there
+  await p2.click('[data-star="5"]'); await p2.waitForTimeout(100);
+  if (!(await p2.$('[data-star="5"].on'))) bad('star not on');
+  await p2.click('#back'); await p2.click('[data-tab=saved]'); await p2.waitForSelector('#savedList');
+  if ((await p2.$$('[data-saved]')).length !== 1) bad('Saved list');
+  await p2.screenshot({ path: path.join(out, 'messages-saved.png') });
+  await p2.click('[data-unsave="5"]'); await p2.waitForTimeout(200);
+  if ((await p2.$$('[data-saved]')).length !== 0) bad('remove from Saved');
+  await p2.click('[data-tab=work]'); await p2.waitForSelector('.th[data-thread="2"]'); await p2.click('.th[data-thread="2"]'); await p2.waitForSelector('.b');
   // the phone's Back: conversation -> list
   if (!(await p2.evaluate(() => window.__roninBack()))) bad('Back inside Messages');
   await p2.waitForSelector('.nav');
