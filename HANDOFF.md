@@ -74,6 +74,10 @@ Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + tes
 - 3.8.0 PDF/Photo tools (cmd/ronin/ui/tools/, pdf.js 4.10 legacy + pdf-lib 1.17): https://ronin.home/tools/
   served from memory (Windows serveTools in WebResourceRequested; Android shouldInterceptRequest from assets).
   Save hand-over: page -> https://ronin.data/save?k=toolsKey -> native reads window.__roninSave.part(i).
+- Data Match is generic: no name column -> matched on the shared most-unique column (code/number); same-column
+  unlabelled files join only when their rows do not overlap (pieces), else compared (versions).
+- Windows updates: checks at start + every 6 h, never installs silently: "नया Ronin X आया है [Update करें]" -> install ->
+  "[अभी Restart करें]"; Menu "Check for updates". (Owner: no hourly checks, ask before updating.)
 - Tests: tools/uitest/merge.js (fixtures in tools/uitest/fixtures, made-up), pdftools.js (fixtures from
   make_tool_fixtures.py), DeviceTest merge + tools self-test.
 - Owner's real Prerna file checked locally only (never committed): fake UDISE with 6 planted changes -> all 6 found.

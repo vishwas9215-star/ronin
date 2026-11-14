@@ -337,7 +337,7 @@ function home() {
     h('p', { cls: 'sub' }, '🔒 सब कुछ इसी device पर होता है: कोई file internet पर नहीं जाती। बनी हुई file Downloads में save होती है।'),
     h('h2', {}, '📊 Data'),
     h('div', { cls: 'grid' },
-      tile('datamatch', '🔀', 'Data Match', 'Prerna + UDISE+, या शिक्षकों के forms: अंतर और छूटे हुए')),
+      tile('datamatch', '🔀', 'Data Match', 'कोई भी 2 या ज़्यादा Excel / CSV: अंतर और छूटे हुए')),
     h('h2', {}, '📄 PDF'),
     h('div', { cls: 'grid' },
       tile('pdfsmall', '📉', 'Compress PDF', '50 KB, 100 KB... जितनी चाहिए'),
@@ -414,7 +414,7 @@ function sizePicker(state, def) {
 // ---- Data Match: Prerna + UDISE+ lists, or teachers' forms + seniority list (merge.js)
 T.datamatch = {
   title: '🔀 Data Match',
-  sub: 'Prerna, UDISE+ या किसी भी portal की Excel / CSV files, या शिक्षकों के Google Form + seniority list एक साथ चुनें। हर व्यक्ति एक पंक्ति में आएगा; जहाँ अंतर है वह रंग और कारण के साथ, और जो किसी file में नहीं है (form नहीं भरा) वह भी दिखेगा।',
+  sub: 'कोई भी 2 या ज़्यादा Excel / CSV files चुनें: दो portal की lists, पुराना और नया form, इस महीने और पिछले महीने की list... कुछ भी। एक जैसी चीज़ एक पंक्ति में आएगी (नाम, code या number से मिलाकर); जहाँ अंतर है वह रंग और कारण के साथ, और जो किसी file में नहीं है वह भी दिखेगा।',
   show(body) {
     const read = [];
     const box = h('ul', { cls: 'files' });
@@ -424,7 +424,7 @@ T.datamatch = {
       result = RoninMerge.merge(read.filter(f => f.data).map(f => f.data));
       window.__lastMerge = result;
       const lines = result.info.map(x => x[0] + ': ' + x[1]).join('\n');
-      msg((result.sources.length < 2 ? '⚠ अभी सब files एक ही तरह की लगती हैं। दूसरे portal / form की file भी जोड़ें तो अंतर दिखेगा।\n\n' : '') + lines + '\n\n📊 Excel + PDF बन रही है... (Downloads में save होगी)');
+      msg((result.sources.length < 2 ? '⚠ अभी सब files एक ही list के हिस्से लगती हैं, इसलिए सब एक साथ जोड़ दी हैं। तुलना के लिए दूसरी list की file भी जोड़ें।\n\n' : '') + lines + '\n\n📊 Excel + PDF बन रही है... (Downloads में save होगी)');
       if (KEY) location.href = 'https://ronin.data/merge?k=' + KEY;
     });
     const draw = () => {

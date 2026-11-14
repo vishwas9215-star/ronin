@@ -133,17 +133,14 @@ func TestDueAndState(t *testing.T) {
 	if !Due(State{}, now) {
 		t.Fatal("first check should be due")
 	}
-	if Due(State{LastCheck: now.Add(-20 * time.Minute)}, now) {
-		t.Fatal("checked 20 min ago, not due")
+	if Due(State{LastCheck: now.Add(-2 * time.Hour)}, now) {
+		t.Fatal("checked 2h ago, not due")
 	}
-	if !Due(State{LastCheck: now.Add(-2 * time.Hour)}, now) {
-		t.Fatal("checked 2h ago: due (checks every hour)")
+	if !Due(State{LastCheck: now.Add(-7 * time.Hour)}, now) {
+		t.Fatal("checked 7h ago: due (every 6 hours)")
 	}
 	if !Due(State{LastCheck: now.Add(-25 * time.Hour)}, now) {
 		t.Fatal("checked 25h ago, due")
-	}
-	if !Due(State{LastCheck: now.Add(-2 * time.Hour), LastError: "offline"}, now) {
-		t.Fatal("after an error, retry after one hour")
 	}
 
 	p := filepath.Join(t.TempDir(), "state.json")

@@ -202,13 +202,13 @@ func Rollback(dst string) error {
 	return nil
 }
 
-// Due reports whether a check is due: every hour (the check is one small
-// signed file), so a new Ronin arrives the same hour it is published.
+// Due reports whether a check is due: every 6 hours (Ronin also checks once
+// each time it starts). The check is one small signed file.
 func Due(st State, now time.Time) bool {
 	if st.LastCheck.IsZero() {
 		return true
 	}
-	return now.Sub(st.LastCheck) >= 55*time.Minute
+	return now.Sub(st.LastCheck) >= 6*time.Hour
 }
 
 // State is saved to disk so the check runs once a day and the Health bar

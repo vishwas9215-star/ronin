@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -37,56 +36,80 @@ func backgroundUpdater() {
 	time.Sleep(60 * time.Second) // let the browser start first
 	for {
 		checkForUpdate()
-		time.Sleep(15 * time.Minute)
+		time.Sleep(time.Hour) // each part keeps its own timetable; most hours nothing happens
 	}
+}
+
+// A new Ronin is never installed behind the owner's back: Ronin asks once ("नया Ronin आया है")
+// and installs only when he taps Update. The check itself is one small signed file, at start and
+// then every 6 hours.
+
+var (
+	offeredVersion string // already shown in this run
+	checkedThisRun bool
+	updating       bool
+)
+
+// offerUpdate shows "new Ronin - Update" in every window.
+func offerUpdate(version string) {
+	runOnUI(func() {
+		for _, w := range windowsByHwnd {
+			if !w.closing {
+				w.bar(nil, "ok", "🆕 नया Ronin "+version+" आया है।", []map[string]string{{"label": "Update करें", "cmd": "updatenow"}})
+			}
+		}
+	})
 }
 
 // checkUpdateNow is Menu -> "Check for updates": checks at once and says what happened.
 func checkUpdateNow(w *Window) {
-	runOnUI(func() { w.bar(nil, "info", "⟳ नया Ronin देख रहा हूँ... (Checking for updates)", nil) })
+	runOnUI(func() {
+		w.bar(nil, "info", "⟳ नया Ronin देख रहा हूँ... (Checking for updates)", nil)
+	})
 	go func() {
-		channel := store.Get().UpdateChannel
-		if channel == "" {
-			runOnUI(func() { w.bar(nil, "info", "Updates बंद हैं (Settings).", nil) })
-			return
-		}
-		stateMu.Lock()
-		st := updater.LoadState(statePath())
-		stateMu.Unlock()
-		err := tryUpdate(channel, &st)
-		stateMu.Lock()
-		fresh := updater.LoadState(statePath())
-		fresh.LastCheck = time.Now()
-		fresh.AppVersion = Version
-		fresh.PendingNote = st.PendingNote
-		fresh.LastError = ""
-		if err != nil {
-			fresh.LastError = err.Error()
-		}
-		_ = updater.SaveState(statePath(), fresh)
-		stateMu.Unlock()
+		m, err := latestRelease()
 		runOnUI(func() {
 			switch {
 			case err != nil:
-				w.bar(nil, "error", "Update नहीं हो सका: "+err.Error(), nil)
-			case st.PendingNote != "":
-				w.bar(nil, "ok", "✔ "+st.PendingNote, []map[string]string{{"label": "अभी Restart करें", "cmd": "restart"}})
-			default:
+				w.bar(nil, "error", "Update नहीं देख सका: "+err.Error(), nil)
+			case m == nil:
 				w.bar(nil, "ok", "✔ Ronin "+Version+" सबसे नया है (up to date).", nil)
+			default:
+				w.bar(nil, "ok", "🆕 नया Ronin "+m.Version+" आया है।", []map[string]string{{"label": "Update करें", "cmd": "updatenow"}})
 			}
 		})
 	}()
 }
 
-// tellRestart shows "new Ronin is ready - Restart" in every window (after a background update).
-func tellRestart(note string) {
-	runOnUI(func() {
-		for _, w := range windowsByHwnd {
-			if !w.closing {
-				w.bar(nil, "ok", "✔ "+note, []map[string]string{{"label": "अभी Restart करें", "cmd": "restart"}})
-			}
+// installUpdateNow is the "Update करें" button: download, check, install, then offer the restart.
+func installUpdateNow(w *Window) {
+	if updating {
+		return
+	}
+	updating = true
+	w.bar(nil, "info", "⬇ नया Ronin download हो रहा है... (कुछ मिनट, आप काम करते रहें)", nil)
+	go func() {
+		defer func() { updating = false }()
+		m, err := latestRelease()
+		if err == nil && m != nil {
+			err = installRelease(m)
 		}
-	})
+		runOnUI(func() {
+			switch {
+			case err != nil:
+				w.bar(nil, "error", "Update नहीं हो सका: "+err.Error(), []map[string]string{{"label": "फिर कोशिश", "cmd": "updatenow"}})
+			case m == nil:
+				w.bar(nil, "ok", "✔ Ronin "+Version+" सबसे नया है.", nil)
+			default:
+				for _, x := range windowsByHwnd {
+					if !x.closing {
+						x.bar(nil, "ok", "✔ नया Ronin "+m.Version+" तैयार है। Restart करते ही खुलेगा, आपके tabs वैसे ही रहेंगे।",
+							[]map[string]string{{"label": "अभी Restart करें", "cmd": "restart"}})
+					}
+				}
+			}
+		})
+	}()
 }
 
 func checkForUpdate() {
@@ -97,27 +120,27 @@ func checkForUpdate() {
 		buildSmartVPN() // fresh lists take effect from the next start of the engine
 	}
 	updateTools()
-	channel := store.Get().UpdateChannel
-	if channel == "" {
+	if store.Get().UpdateChannel == "" {
 		return
 	}
 	stateMu.Lock()
 	st := updater.LoadState(statePath())
 	stateMu.Unlock()
-	if !updater.Due(st, time.Now()) {
-		return
+	if checkedThisRun && !updater.Due(st, time.Now()) {
+		return // once when Ronin starts, then every 6 hours
 	}
-	before := st.PendingNote
-	err := tryUpdate(channel, &st)
-	if err == nil && st.PendingNote != "" && st.PendingNote != before {
-		tellRestart(st.PendingNote)
+	checkedThisRun = true
+	m, err := latestRelease()
+	if err == nil && m != nil && m.Version != offeredVersion {
+		offeredVersion = m.Version
+		offerUpdate(m.Version)
 	}
 	stateMu.Lock()
 	defer stateMu.Unlock()
 	fresh := updater.LoadState(statePath())
 	fresh.LastCheck = time.Now()
 	fresh.AppVersion = Version
-	fresh.PendingNote = st.PendingNote
+	fresh.PendingNote = ""
 	fresh.LastError = ""
 	if err != nil {
 		fresh.LastError = err.Error()
@@ -126,30 +149,36 @@ func checkForUpdate() {
 	_ = updater.SaveState(statePath(), fresh)
 }
 
-func tryUpdate(channel string, st *updater.State) error {
+// latestRelease reads the signed release note; nil when this Ronin is already the newest.
+func latestRelease() (*updater.Manifest, error) {
+	channel := store.Get().UpdateChannel
+	if channel == "" {
+		return nil, errors.New("updates are off in Settings")
+	}
 	pub, err := base64.StdEncoding.DecodeString(releasePublicKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	manifest, err := fetch(channel, 1<<20)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	sig, err := fetch(channel+".sig", 4096)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	m, err := updater.VerifyManifest(manifest, string(sig), ed25519.PublicKey(pub))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if m.App != "ronin" || !updater.Newer(m.Version, Version) {
-		st.PendingNote = ""
-		return nil
+		return nil, nil
 	}
-	if strings.Contains(st.PendingNote, " "+m.Version+" ") {
-		return nil // already installed, waiting for a restart
-	}
+	return m, nil
+}
+
+// installRelease downloads, checks and installs the files of a release next to this Ronin.
+func installRelease(m *updater.Manifest) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -168,7 +197,6 @@ func tryUpdate(channel string, st *updater.State) error {
 			return err
 		}
 	}
-	st.PendingNote = fmt.Sprintf("नया Ronin %s आ गया (installed). Restart करते ही खुल जाएगा, आपके tabs वैसे ही रहेंगे।", m.Version)
 	logf("updated to %s", m.Version)
 	return nil
 }

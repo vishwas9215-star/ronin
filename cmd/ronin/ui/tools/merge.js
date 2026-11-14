@@ -393,13 +393,19 @@
       // a Google Form download (has "Timestamp") is its own source: old form and new form stay apart
       const form = keys.has('time');
       const sig = t.head.map(fieldOf).filter(k => k !== 'serial').join('|');
-      let src = form ? null : sources.find(s => !s.form && (label ? s.label === label : !s.fromLabel && s.sigs.has(sig)));
+      // the same columns: pieces of one list (class 3, class 4...) join; two versions of one list
+      // (March and April, old and new) stay apart so they can be compared
+      const idCol = Math.max(0, t.head.findIndex(h => fieldOf(h) === 'name')) || t.head.findIndex(h => fieldOf(h) !== 'serial');
+      const ids = t.rows.map(r => norm('', r[idCol] || '')).filter(Boolean);
+      let src = form ? null : sources.find(s => !s.form && (label ? s.label === label : !s.fromLabel && s.sigs.has(sig) &&
+        ids.filter(v => s.ids.has(v)).length < Math.max(1, ids.length * 0.2)));
       if (!src) {
-        src = { label: label || f.name.replace(/\.[a-z0-9]+$/i, '').replace(/\s*\((responses|form responses[^)]*|उत्तर|जवाब)\)\s*/ig, ' ').replace(/\s+/g, ' ').trim().slice(0, 30), form, fromLabel: !!label, sigs: new Set(), keys: new Set(), head: [], fieldIndex: {}, rows: [], files: new Set(), skipped: 0, seen: new Set() };
+        src = { label: label || f.name.replace(/\.[a-z0-9]+$/i, '').replace(/\s*\((responses|form responses[^)]*|उत्तर|जवाब)\)\s*/ig, ' ').replace(/\s+/g, ' ').trim().slice(0, 30), form, fromLabel: !!label, sigs: new Set(), ids: new Set(), keys: new Set(), head: [], fieldIndex: {}, rows: [], files: new Set(), skipped: 0, seen: new Set() };
         sources.push(src);
       }
       keys.forEach(k => src.keys.add(k));
       src.sigs.add(sig);
+      ids.forEach(v => src.ids.add(v));
       if (f.dmy === false) src.mdy = true;
       src.files.add(f.name);
       const map = t.head.map(h => {
@@ -436,6 +442,30 @@
       recs.push({ si, row, f });
     }));
 
+    // Lists without names (stock, marks, anything): rows are matched on the column(s) that
+    // all files share and that are (nearly) different in every row, like a code or a number.
+    const people = recs.some(r => r.f.name);
+    let genericKeys = null;
+    if (!people) {
+      const common = sources[0].head.map(h => h.key).filter(k => k !== 'time' && sources.every(s => s.head.some(h => h.key === k)));
+      const uniq = k => {
+        let tot = 0;
+        sources.forEach(s => {
+          const i = s.head.findIndex(h => h.key === k);
+          const vals = s.rows.map(r => norm(k.startsWith('key:') ? '' : k, r[i] || '', s.mdy)).filter(Boolean);
+          tot += vals.length ? new Set(vals).size / s.rows.length : 0;
+        });
+        return tot / sources.length;
+      };
+      const ranked = common.map(k => [k, uniq(k)]).sort((a, b) => b[1] - a[1]);
+      if (ranked.length) genericKeys = ranked[0][1] >= 0.9 ? [ranked[0][0]] : ranked.length > 1 && ranked[1][1] > 0 ? [ranked[0][0], ranked[1][0]] : common;
+      recs.forEach(r => {
+        const s = sources[r.si];
+        r.gk = (genericKeys || []).map(k => { const i = s.head.findIndex(h => h.key === k); return norm(k.startsWith('key:') ? '' : k, r.row[i] || '', s.mdy); }).join('|');
+        if (!r.gk.replace(/\|/g, '')) r.gk = ''; // nothing to match on: stays on its own
+      });
+    }
+
     // 3. children: the first source's rows, then every other source matched in
     const children = [];
     const childFeat = c => c.feat;
@@ -463,7 +493,16 @@
       f.name && f.mobile ? f.name + '|m' + f.mobile + '|' + (f.class || '') : f.name && f.email ? f.name + '|' + f.email : '';
     const latestFirst = g => g.sort((a, b) => (b.f.time || '').localeCompare(a.f.time || ''));
 
-    sources.forEach((s, si) => {
+    if (genericKeys) {
+      const byKey = new Map();
+      sources.forEach((s, si) => recs.filter(r => r.si === si).forEach(r => {
+        const c = r.gk && byKey.get(r.gk);
+        if (c) { c.recs.push(r); return; } // the same code in another file (or twice in this one)
+        const n = { recs: [r], feat: Object.assign({}, r.f), weak: '' };
+        children.push(n);
+        if (r.gk) byKey.set(r.gk, n);
+      }));
+    } else sources.forEach((s, si) => {
       const mine = recs.filter(r => r.si === si);
       // the same child twice inside one portal
       const groups = [], byKey = new Map();
@@ -521,8 +560,13 @@
 
     // 5. rows and marks
     const multi = sources.length > 1;
+    // the words follow the data: teachers, children, people, or just rows
     const teachers = allKeys.some(k => k === 'empid' || k === 'designation' || k === 'joining' || k === 'pran');
-    const who = teachers ? 'शिक्षक' : 'बच्चा', whoMany = teachers ? 'शिक्षक' : 'बच्चे';
+    const students = !teachers && people && allKeys.some(k => ['class', 'admno', 'admdate', 'pen', 'guardian', 'section'].includes(k));
+    const who = teachers ? 'शिक्षक' : students ? 'बच्चा' : people ? 'व्यक्ति' : 'entry';
+    const whoMany = teachers ? 'शिक्षक' : students ? 'बच्चे' : people ? 'व्यक्ति' : 'entries';
+    const whoEn = teachers ? 'Teachers' : students ? 'Children' : people ? 'People' : 'Entries';
+    const notFound = people ? ' नहीं मिला' : ' नहीं मिली';
     const head = ['क्रम', 'किसमें मिला / Found in'].concat(cols.map(c => c.title));
     const out = [];
     let nDiff = 0, nBoth = 0, nWeak = 0, nDup = 0;
@@ -541,7 +585,7 @@
       const row = ['', present.map(si => sources[si].label).join(' + ')];
       if (multi && present.length < sources.length) {
         const missing = sources.filter((_, si) => !inSrc[si].length).map(s => s.label).join(', ');
-        mark(1, 'only', 'धूसर: सिर्फ़ ' + present.map(si => sources[si].label).join(' + ') + ' में है, ' + missing + ' में यह ' + who + ' नहीं मिला' + (sources.some((s, si) => !inSrc[si].length && s.form) ? ' (form नहीं भरा)' : ''));
+        mark(1, 'only', 'धूसर: सिर्फ़ ' + present.map(si => sources[si].label).join(' + ') + ' में है, ' + missing + ' में यह ' + who + notFound + (sources.some((s, si) => !inSrc[si].length && s.form) ? ' (form नहीं भरा)' : ''));
         if (present.length === 1) only[present[0]]++;
       } else if (multi) nBoth++;
       if (c.weak) { mark(1, 'similar', c.weak); nWeak++; }
@@ -610,7 +654,8 @@
       ['Files / फ़ाइलें', files.length + ' (' + sources.map(s => s.label + ' ' + s.files.size).join(', ') + ')'],
     ];
     sources.forEach(s => info.push([s.label + ' में पंक्तियाँ', String(s.rows.length)]));
-    info.push(['कुल ' + whoMany + ' / ' + (teachers ? 'Teachers' : 'Children'), String(rows.length)]);
+    info.push(['कुल ' + whoMany + ' / ' + whoEn, String(rows.length)]);
+    if (genericKeys && multi) info.push(['किस कॉलम से मिलाया / Matched on', genericKeys.map(k => (cols.find(c => c.key === k) || { title: k }).title).join(' + ')]);
     if (multi) {
       info.push(['सब में मिले / Found in all', String(nBoth)]);
       info.push(['अंतर वाले ' + whoMany + ' / With differences', String(nDiff)]);

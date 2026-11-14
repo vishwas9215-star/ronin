@@ -41,6 +41,18 @@ if (r.info.some(x => /CWSN/.test(x[0])) || !r.head.includes('CWSN')) bad('CWSN r
 r = M.merge([F('Seniority.xlsx', ['Teacher Name', 'Employee Code', 'Date of Birth'], [['Sunita Devi', 'EH1', '03/03/1980']]),
   F('Form (Responses).csv', ['Timestamp', 'Name of Teacher', 'Employee Code', 'Date of Birth'], [['11/30/2026 09:00:00', 'Sunita Devi', 'EH1', '03/03/1981'], ['12/1/2026 10:00:00', 'Sunita Devi', 'EH1', '03/03/1980']], { dmy: false })]);
 if (!/12\/1\/2026/.test(notes(r, 0)) || r.check.cells.some(c => c[2] === 'diff')) bad('newest form answer: ' + notes(r, 0));
+// anything, not only people: two stock lists matched on the item code
+r = M.merge([F('march.xlsx', ['Item Code', 'Item', 'Qty', 'Rate'], [['A1', 'Chalk box', '10', '25'], ['A2', 'Duster', '4', '40'], ['A3', 'Register', '12', '60']]),
+  F('april.xlsx', ['Item Code', 'Item', 'Qty', 'Rate'], [['A1', 'Chalk box', '8', '25'], ['A2', 'Duster', '4', '40'], ['A4', 'Pen', '50', '5']])]);
+const qtyCol = r.head.findIndex(h => /Qty/.test(h));
+const a1 = r.rows.findIndex(x => /Chalk/.test(x.join('|')));
+if (r.rows.length !== 4 || !r.check.cells.some(c => c[0] === a1 && c[1] === qtyCol && c[2] === 'diff')) bad('stock lists: ' + JSON.stringify(r.rows) + ' ' + JSON.stringify(r.check.cells));
+if (!r.check.cells.some(c => /entry/.test(c[3])) || r.check.cells.some(c => /बच्चा|शिक्षक/.test(c[3]))) bad('words for a stock list: ' + JSON.stringify(r.check.cells.map(c => c[3])));
+if (!r.info.some(x => /Matched on/.test(x[0]) && /Item Code/.test(x[1]))) bad('matched-on line: ' + JSON.stringify(r.info));
+// people that are neither children nor teachers
+r = M.merge([F('club.xlsx', ['Name', 'Mobile'], [['Ravi Kumar', '9000000001']]), F('list2.xlsx', ['Name', 'Mobile'], [['Sita Devi', '9000000002']])]);
+if (r.check.cells.some(c => /बच्चा|शिक्षक/.test(c[3]))) bad('people called children: ' + JSON.stringify(r.check.cells));
+
 // field names
 const want = { 'Father Aadhaar No': /^key:/, 'Mother Tongue': /^key:/, 'Name as per Aadhaar': /^key:/, 'Teacher Mobile Number': /^mobile$/, 'Teacher Residential Address': /^address$/, 'Teacher Aadhaar No': /^aadhaar$/, 'Employee Code': /^empid$/, 'Manav Sampada ID': /^empid$/ };
 Object.entries(want).forEach(([h, re]) => { if (!re.test(M.fieldOf(h))) bad(h + ' -> ' + M.fieldOf(h)); });
