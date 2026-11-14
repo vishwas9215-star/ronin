@@ -1,0 +1,22 @@
+#!/bin/sh
+# Builds Ronin.exe and RoninSetup.exe for 64-bit Windows.
+set -e
+cd "$(dirname "$0")"
+VERSION="${1:-3.0.0}"
+export GOOS=windows GOARCH=amd64 CGO_ENABLED=0 GOFLAGS=-mod=mod GOPROXY=off
+
+GOOS= GOARCH= go test ./internal/...
+go vet ./internal/...
+node tools/jstest/scam_test.js
+node tools/jstest/adblock_test.js
+NODE_PATH=$(npm root -g) node tools/uitest/passwords.js
+NODE_PATH=$(npm root -g) node tools/uitest/voice.js /tmp/ronin-voice.png
+NODE_PATH=$(npm root -g) node tools/uitest/listen.js /tmp/ronin-listen.png
+mkdir -p /tmp/ronin-ui && NODE_PATH=$(npm root -g) node tools/uitest/extras.js /tmp/ronin-ui
+go build -trimpath -ldflags "-H=windowsgui -s -w -X main.Version=$VERSION" -o build/Ronin.exe ./cmd/ronin
+mkdir -p cmd/setup/payload
+cp build/Ronin.exe cmd/setup/payload/Ronin.exe
+cp cmd/ronin/res/ronin.ico cmd/setup/payload/ronin.ico
+go build -trimpath -ldflags "-H=windowsgui -s -w -X main.Version=$VERSION" -o build/RoninSetup.exe ./cmd/setup
+sha256sum build/Ronin.exe build/RoninSetup.exe > build/SHA256SUMS.txt
+ls -la build

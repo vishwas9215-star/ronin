@@ -1,0 +1,848 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ronin</title>
+<style>
+:root{
+  --bg:#14171f; --bg2:#1c2029; --bg3:#262b36; --line:#2e3441; --text:#e8eaf0; --muted:#9aa3b2;
+  --accent:#3b82f6; --accent-ink:#fff; --ok:#16a34a; --warn:#d97706; --danger:#dc2626;
+}
+body.BANKING{ --accent:#16a34a; --bg:#0f1a14; --bg2:#13231a; --bg3:#1b3124; --line:#24452f; }
+body.TRADING{ --accent:#f59e0b; --accent-ink:#1a1204; }
+body.KIDS{ --accent:#ec4899; --accent-ink:#fff; }
+body.CALLS{ --accent:#06b6d4; --accent-ink:#04212a; }
+.tool{height:32px;padding:0 10px;border-radius:8px;display:flex;align-items:center;gap:6px;font-weight:600;font-size:12px;flex:none;background:var(--bg3)}
+.tool:hover{filter:brightness(1.2)}
+.tool svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2}
+.hide{display:none!important}
+.vpn{height:24px;padding:0 8px;border-radius:12px;font-size:11px;font-weight:700;display:flex;align-items:center;flex:none}
+.vpn.connected{background:#14532d;color:#bbf7d0}.vpn.direct{background:#334155;color:#cbd5e1}.vpn.starting,.vpn.problem{background:#78350f;color:#fde68a}
+.ai-out{white-space:pre-wrap;background:var(--bg);padding:14px;border-radius:10px;max-height:52vh;overflow:auto;user-select:text;line-height:1.6}
+textarea,input.txt,select.txt{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;user-select:text}
+.section{margin-top:22px;padding-top:14px;border-top:1px solid var(--line)}
+.section h2{font-size:15px;margin:0 0 8px}
+.dlname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}.dlst{white-space:nowrap}
+.prog{height:6px;border-radius:3px;background:var(--bg);overflow:hidden;margin-top:6px}.prog i{display:block;height:100%;background:var(--accent)}
+.grid4{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:10px}
+body.PRIVATE{ --accent:#8b5cf6; --bg:#16131f; --bg2:#1d1929; --bg3:#272236; --line:#352e48; }
+/* Day mode */
+body.light{ --bg:#eef0f4; --bg2:#ffffff; --bg3:#e3e6ec; --line:#d3d8e1; --text:#151922; --muted:#5a6375; }
+body.light.BANKING{ --bg:#e9f5ee; --bg2:#ffffff; --bg3:#d7ecdf; --line:#b5d9c2; }
+body.light.PRIVATE{ --bg:#f1eef9; --bg2:#ffffff; --bg3:#e4def3; --line:#cfc5ea; }
+body.light #msg.info{background:#dbeafe}body.light #msg.ok{background:#dcfce7}
+body.light #msg.warn,body.light #msg.protect{background:#fef3c7}
+body.light #msg.danger,body.light #msg.block,body.light #msg.error{background:#fee2e2}
+body.light #msg .act{background:#151922;color:#fff}
+body.light .vpn.connected{background:#dcfce7;color:#14532d}body.light .vpn.direct{background:#e2e8f0;color:#334155}
+body.light .vpn.starting,body.light .vpn.problem{background:#fef3c7;color:#78350f}
+body.light .tab .up{color:#15803d}body.light .tab .down{color:#dc2626}
+#themeBtn svg{width:18px;height:18px}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+  font:13px/1.35 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;overflow:hidden;user-select:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+#bar{background:var(--bg)}
+/* tabs */
+#tabs{display:flex;align-items:flex-end;gap:2px;height:36px;padding:6px 8px 0;overflow:hidden}
+.tab{display:flex;align-items:center;gap:6px;min-width:60px;max-width:220px;flex:1 1 200px;height:30px;
+  padding:0 6px 0 10px;border-radius:8px 8px 0 0;background:transparent;color:var(--muted);position:relative}
+.tab:hover{background:var(--bg2)}
+.tab.active{background:var(--bg2);color:var(--text)}
+.tab .up{color:#22c55e;font-weight:600}.tab .down{color:#ef4444;font-weight:600}
+.tab .t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tab .x{width:20px;height:20px;border-radius:5px;display:grid;place-items:center;font-size:14px;color:var(--muted)}
+.tab .x:hover{background:var(--bg3);color:var(--text)}
+.spin{width:10px;height:10px;border-radius:50%;border:2px solid var(--muted);border-top-color:var(--accent);animation:s .8s linear infinite;flex:none}
+@keyframes s{to{transform:rotate(360deg)}}
+#plus{width:28px;height:28px;border-radius:7px;font-size:18px;color:var(--muted);flex:none;margin-bottom:1px}
+#plus:hover{background:var(--bg2);color:var(--text)}
+/* nav row */
+#nav{display:flex;align-items:center;gap:4px;height:46px;padding:0 8px;background:var(--bg2);border-bottom:1px solid var(--line)}
+.ib{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;color:var(--text);flex:none}
+.ib:hover:not(:disabled){background:var(--bg3)}
+.ib:disabled{opacity:.35;cursor:default}
+.ib svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#addrwrap{flex:1;display:flex;align-items:center;gap:8px;height:34px;padding:0 12px;border-radius:17px;background:var(--bg);border:1px solid var(--line);min-width:0}
+#addrwrap:focus-within{border-color:var(--accent)}
+#addrwrap .mic{width:28px;height:28px;margin-right:-8px}
+.zoompill{height:22px;padding:0 8px;border-radius:11px;background:var(--bg3);color:var(--text);font-size:11px;font-weight:700;flex:none}
+.zoomrow{display:flex;align-items:center;gap:4px;padding:2px 4px}.zoomrow span{flex:1;padding-left:8px}
+.zoomrow button{width:40px!important;text-align:center!important;font-size:17px;font-weight:700}
+.hist .when{color:var(--muted);font-size:11px;flex:none;width:86px}
+.hist .row .btn{width:auto!important;display:inline-block!important;text-align:center!important}
+#addrwrap.listening{border-color:#ef4444;box-shadow:0 0 0 2px #ef444455}
+#addrwrap.listening .mic svg{stroke:#ef4444}
+#lock{width:14px;height:14px;flex:none;stroke:var(--muted);fill:none;stroke-width:2}
+#lock.secure{stroke:var(--ok)}
+#addr{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--text);font:inherit;font-size:14px;user-select:text}
+#badge{height:28px;padding:0 10px;border-radius:14px;display:flex;align-items:center;gap:6px;font-weight:600;font-size:12px;
+  letter-spacing:.02em;background:var(--accent);color:var(--accent-ink);flex:none;white-space:nowrap}
+#badge svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.2}
+/* message bar */
+#msg{display:none;align-items:center;gap:10px;min-height:34px;padding:6px 12px;font-size:13px;border-bottom:1px solid var(--line)}
+#msg.show{display:flex}
+#msg .txt{flex:1}
+#msg.info{background:#172554}#msg.ok{background:#12301d}#msg.warn,#msg.protect{background:#3a2a0b}#msg.danger,#msg.block,#msg.error{background:#3b1215}
+#msg .act{padding:4px 12px;border-radius:6px;background:var(--text);color:#111;font-weight:600}
+#msg .close{color:var(--muted);font-size:16px;padding:0 4px}
+/* overlay */
+#ov{display:none;position:fixed;inset:0;background:var(--bg);overflow:auto}
+#ov.show{display:block}
+#ov.clear{background:transparent}
+/* side panel mode: the same page, shown at the right of the window */
+body.panel #bar,body.panel #msg{display:none!important}
+body.panel{border-left:1px solid var(--line)}
+body.panel #ov{background:var(--bg2)}
+body.panel .card{max-width:none;margin:0;border:0;border-radius:0;padding:18px 18px 24px;background:var(--bg2)}
+body.panel .card h1{font-size:18px;padding-right:28px}
+body.panel .pclose{position:fixed;top:10px;right:10px;width:28px;height:28px;border-radius:8px;color:var(--muted);font-size:18px;z-index:5}
+body.panel .pclose:hover{background:var(--line);color:var(--text)}
+.card{max-width:560px;margin:56px auto;padding:28px;border-radius:14px;background:var(--bg2);border:1px solid var(--line)}
+.card h1{margin:0 0 10px;font-size:22px;line-height:1.25}
+.card p{margin:8px 0;color:var(--text)}
+.card .muted{color:var(--muted)}
+.card .host{font-family:Consolas,monospace;background:var(--bg);padding:2px 6px;border-radius:5px;word-break:break-all}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+.btn{padding:9px 16px;border-radius:8px;background:var(--bg3);font-weight:600}
+.btn:hover{filter:brightness(1.15)}
+.btn.primary{background:var(--accent);color:var(--accent-ink)}
+.btn.red{background:var(--danger);color:#fff}
+.link{color:var(--muted);text-decoration:underline;padding:0;font-size:12px}
+.danger-ico{width:44px;height:44px;border-radius:50%;background:var(--danger);display:grid;place-items:center;margin-bottom:14px}
+.danger-ico svg{width:24px;height:24px;stroke:#fff;fill:none;stroke-width:2.5}
+ul.list{list-style:none;margin:8px 0;padding:0}
+ul.list li{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--bg);border-radius:7px;margin-bottom:4px}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:8px 14px;margin-top:12px}
+.kv b{color:var(--muted);font-weight:500}
+.menu{position:fixed;top:84px;right:10px;width:260px;padding:6px;border-radius:12px;background:var(--bg2);border:1px solid var(--line);box-shadow:0 12px 40px #0008}
+.menu button{display:block;width:100%;text-align:left;padding:9px 12px;border-radius:7px}
+.menu button:hover{background:var(--bg3)}
+.menu hr{border:0;border-top:1px solid var(--line);margin:5px 0}
+label.chk{display:flex;gap:8px;align-items:center;margin:10px 0}
+select{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font:inherit}
+html:has(body.light){background:#eef0f4}html:has(body.light.BANKING){background:#e9f5ee}html:has(body.light.PRIVATE){background:#f1eef9}
+</style>
+</head>
+<body>
+<div id="bar">
+  <div id="tabs"></div>
+  <div id="nav">
+    <button class="ib" id="back" title="Back (Alt+Left)"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <button class="ib" id="fwd" title="Forward (Alt+Right)"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
+    <button class="ib" id="reload" title="Reload (F5)"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></button>
+    <button class="ib" id="home" title="New Tab page"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></button>
+    <div id="addrwrap">
+      <svg id="lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+      <input id="addr" spellcheck="false" autocomplete="off" placeholder="Search Google or type a web address">
+      <button class="zoompill hide" id="zoomPill" title="Page size - click for normal size (Ctrl+0)"></button>
+      <button class="ib mic" id="micBtn" title="Speak to search (Hindi or English)"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    </div>
+    <button class="tool hide" id="dlBtn" title="Download this video"><svg viewBox="0 0 24 24"><path d="M12 3v12M6 11l6 6 6-6M4 21h16"/></svg>Download</button>
+    <button class="tool hide" id="gridBtn" title="Show 1, 2 or 4 charts"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg><span>1</span></button>
+    <button class="tool hide" id="aiBtn" title="AI: summary, Hindi, questions"><svg viewBox="0 0 24 24"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg>AI</button>
+    <span class="vpn hide" id="vpnTag">VPN</span>
+    <div id="badge"></div>
+    <button class="ib" id="themeBtn" title="Day / Night mode"></button>
+    <button class="ib" id="menuBtn" title="Menu"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+  </div>
+  <div id="msg"><span class="txt"></span><span class="acts"></span><button class="close" title="Close">&#x2715;</button></div>
+</div>
+<div id="ov"></div>
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const post = o => window.chrome.webview.postMessage(JSON.stringify(o));
+const CONTAINER = "{{CONTAINER}}";
+const PANEL = "{{PANEL}}" === "1";
+if (PANEL) document.body.classList.add("panel");
+let THEME = "{{THEME}}";
+document.body.className = CONTAINER + (PANEL ? " panel" : "") + (THEME === "light" ? " light" : "");
+const SUN = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>';
+const MOON = '<svg viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>';
+function applyTheme(t){
+  THEME = t; document.body.classList.toggle("light", t === "light");
+  const b = document.getElementById("themeBtn");
+  if (b) { b.innerHTML = t === "light" ? MOON : SUN; b.title = t === "light" ? "Switch to Night mode" : "Switch to Day mode"; }
+}
+let S = {tabs: []}, bars = {}, editing = false, ovOpen = false;
+
+const badgeText = {PERSONAL:"Ronin", BANKING:"Ronin Safe Money", TRADING:"Trading", PRIVATE:"Private", KIDS:"Ronin Kids", CALLS:"Video call"};
+const shield = '<svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>';
+$("#badge").innerHTML = (CONTAINER === "BANKING" ? shield : "") + '<span></span>';
+$("#badge span").textContent = badgeText[CONTAINER] || "Ronin";
+
+function el(tag, cls, text){ const e = document.createElement(tag); if(cls) e.className = cls; if(text !== undefined) e.textContent = text; return e; }
+function active(){ return S.tabs.find(t => t.active); }
+
+function reportLayout(){
+  if (PANEL) return;
+  post({cmd:"layout", h: Math.ceil($("#bar").getBoundingClientRect().height), full: ovOpen});
+}
+new ResizeObserver(reportLayout).observe($("#bar"));
+
+function renderTabs(){
+  const box = $("#tabs"); box.textContent = "";
+  for (const t of S.tabs){
+    const d = el("div", "tab" + (t.active ? " active" : ""));
+    d.title = t.title + (t.url ? "\n" + t.url : "");
+    if (t.loading) d.appendChild(el("span", "spin"));
+    const tt = el("span", "t");
+    const title = t.title || "New Tab";
+    // price titles like "NIFTY 25,360 ▲ +1.2%": green when up, red when down
+    const m = title.match(/^(.*?)([\u25B2\u25BC\u2191\u2193])\s*([+\-\u2212]?\s*[\d.,]+\s*%?)(.*)$/);
+    if (m) {
+      const up = m[2] === "\u25B2" || m[2] === "\u2191";
+      tt.appendChild(document.createTextNode(m[1]));
+      const c = el("span", up ? "up" : "down", m[2] + " " + m[3].trim());
+      tt.appendChild(c);
+    } else {
+      const m2 = title.match(/^(.*?\s)([+\-\u2212]\d[\d.,]*\s*%)(.*)$/);
+      if (m2) {
+        tt.appendChild(document.createTextNode(m2[1]));
+        tt.appendChild(el("span", m2[2][0] === "+" ? "up" : "down", m2[2]));
+      } else tt.textContent = title;
+    }
+    d.appendChild(tt);
+    const x = el("button", "x", "✕"); x.title = "Close tab (Ctrl+W)";
+    x.onclick = e => { e.stopPropagation(); post({cmd:"close", id:t.id}); };
+    d.appendChild(x);
+    d.onmousedown = e => { if (e.button === 1){ e.preventDefault(); post({cmd:"close", id:t.id}); } };
+    d.onclick = () => post({cmd:"select", id:t.id});
+    box.appendChild(d);
+  }
+  const p = el("button", "", "+"); p.id = "plus"; p.title = "New tab (Ctrl+T)";
+  p.onclick = () => post({cmd:"newtab"}); box.appendChild(p);
+}
+
+function renderNav(){
+  const a = active();
+  $("#dlBtn").classList.toggle("hide", !(a && a.video));
+  const g = $("#gridBtn"); g.classList.toggle("hide", CONTAINER !== "TRADING" || S.mini);
+  g.querySelector("span").textContent = String(S.grid > 1 ? S.grid : 1);
+  $("#aiBtn").classList.toggle("hide", CONTAINER !== "PERSONAL" && CONTAINER !== "PRIVATE");
+  const v = $("#vpnTag");
+  v.classList.toggle("hide", !S.vpn);
+  v.className = "vpn " + (S.vpn || "") + (S.vpn ? "" : " hide");
+  if (S.vpn === "connected" && S.vpnSmart && !S.vpnHere) {
+    v.className = "vpn direct"; v.textContent = "No VPN";
+    v.title = "This is a trusted site, so it opens directly (faster). Unknown and sensitive sites use the VPN.";
+  } else {
+    v.textContent = S.vpn === "connected" ? "VPN on" : (S.vpn ? "VPN..." : "");
+    v.title = S.vpnSmart ? "This site uses the VPN (unknown or sensitive site)." : "Every site in this window uses the VPN.";
+  }
+  $("#back").disabled = !(a && a.canBack);
+  $("#fwd").disabled = !(a && a.canFwd);
+  $("#lock").classList.toggle("secure", !!(a && a.secure));
+  if (!editing) $("#addr").value = a ? a.url : "";
+  renderBar();
+  const zp = $("#zoomPill"), z = (active() || {}).zoom || 100;
+  zp.textContent = z + "%"; zp.classList.toggle("hide", z === 100);
+  const zl = document.querySelector("#ov.show .zoomrow span"); if (zl) zl.textContent = "Page size  " + z + "%";
+}
+
+function renderBar(){
+  const a = active(), m = $("#msg");
+  const b = (a && bars[a.id]) || bars[0];
+  if (!b){ m.className = ""; reportLayout(); return; }
+  m.className = "show " + b.kind;
+  m.querySelector(".txt").textContent = b.text;
+  const acts = m.querySelector(".acts"); acts.textContent = "";
+  for (const ac of (b.actions || [])){
+    const btn = el("button", "act", ac.label);
+    btn.onclick = () => { post({cmd: ac.cmd, id: b.tab, url: ac.url || ""}); delete bars[b.tab]; renderBar(); };
+    acts.appendChild(btn);
+  }
+  reportLayout();
+}
+$("#msg .close").onclick = () => { const a = active(); if (a && bars[a.id]) delete bars[a.id]; else delete bars[0]; renderBar(); };
+
+const addr = $("#addr");
+addr.addEventListener("focus", () => { editing = true; setTimeout(() => addr.select(), 0); });
+addr.addEventListener("blur", () => { if (voice.on) return; editing = false; renderNav(); });
+// ---- speak to search: Windows voice typing writes into the address box;
+// when the words stop for a moment Ronin opens them by itself (no Enter needed).
+const voice = {on:false, settle:null, stop:null};
+function voiceEnd(){
+  voice.on = false; clearTimeout(voice.settle); clearTimeout(voice.stop);
+  $("#addrwrap").classList.remove("listening"); addr.placeholder = "Search Google or type a web address";
+}
+function voiceGo(){
+  const v = addr.value.trim().replace(/[\s.,!?\u0964]+$/u, "");
+  voiceEnd();
+  if (v){ post({cmd:"go", text:v}); editing = false; addr.blur(); }
+}
+function voiceStart(){
+  voice.on = true; editing = true; addr.value = ""; addr.focus();
+  $("#addrwrap").classList.add("listening"); addr.placeholder = "Speak now - Hindi or English...";
+  post({cmd:"voice"});
+  clearTimeout(voice.stop); voice.stop = setTimeout(voiceEnd, 25000);
+}
+addr.addEventListener("input", () => {
+  if (!voice.on) return;
+  clearTimeout(voice.settle); voice.settle = setTimeout(voiceGo, 1800);
+});
+$("#zoomPill").onclick = () => post({cmd:"zoom", number:0});
+$("#micBtn").onclick = e => { e.preventDefault(); voice.on ? voiceEnd() : voiceStart(); };
+$("#micBtn").onmousedown = e => e.preventDefault(); // keep the focus in the address box
+if (CONTAINER === "BANKING") $("#micBtn").classList.add("hide"); // Safe Money: nothing leaves the PC
+addr.addEventListener("keydown", e => {
+  if (e.key === "Enter"){ voiceEnd(); post({cmd:"go", text: addr.value}); editing = false; addr.blur(); }
+  if (e.key === "Escape"){ voiceEnd(); editing = false; addr.blur(); }
+});
+$("#back").onclick = () => post({cmd:"back"});
+$("#fwd").onclick = () => post({cmd:"fwd"});
+$("#reload").onclick = () => { const a = active(); post({cmd: a && a.loading ? "stop" : "reload"}); };
+$("#home").onclick = () => post({cmd:"home"});
+$("#menuBtn").onclick = () => showMenu();
+$("#dlBtn").onclick = () => post({cmd:"downloadmenu"});
+$("#gridBtn").onclick = () => { const n = S.grid === 2 ? 4 : (S.grid === 4 ? 1 : 2); post({cmd:"grid", number:n}); };
+$("#aiBtn").onclick = () => post({cmd:"aimenu"});
+
+/* ---------- overlays ---------- */
+function openOv(card, clear){
+  const ov = $("#ov"); ov.textContent = ""; ov.appendChild(card);
+  ov.classList.toggle("clear", !!clear);
+  if (PANEL) { const x = el("button", "pclose", "\u2715"); x.title = "Close (Esc)"; x.onclick = closeOv; ov.appendChild(x); }
+  ov.classList.add("show"); ovOpen = true; reportLayout();
+}
+function closeOv(){ $("#ov").classList.remove("show", "clear"); $("#ov").textContent = ""; ovOpen = false;
+  if (PANEL) { post({cmd:"panelclose"}); return; }
+  reportLayout(); }
+function card(){ return el("div", "card"); }
+function btn(text, cls, fn){ const b = el("button", "btn " + (cls||""), text); b.onclick = fn; return b; }
+function row(...btns){ const r = el("div", "row"); btns.forEach(b => r.appendChild(b)); return r; }
+const dangerIcon = () => { const d = el("div", "danger-ico"); d.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 6v8M12 18v.5" stroke-linecap="round"/></svg>'; return d; };
+
+function tabSearch(){
+  if (PANEL) return;
+  const wrap = el("div"); wrap.style.cssText = "position:fixed;inset:0";
+  wrap.onclick = e => { if (e.target === wrap) closeOv(); };
+  const top = Math.ceil($("#nav").getBoundingClientRect().bottom) + 4;
+  const box = el("div", "menu"); box.style.cssText = "top:" + top + "px;left:50%;right:auto;transform:translateX(-50%);width:min(560px,92vw);max-height:calc(100vh - " + (top + 12) + "px);overflow:auto";
+  const inp = el("input"); inp.placeholder = "Type to find a tab..."; inp.style.cssText = "width:100%;box-sizing:border-box;margin:4px 0 6px;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit";
+  const list = el("div"); box.appendChild(inp); box.appendChild(list);
+  const draw = () => {
+    const q = inp.value.trim().toLowerCase(); list.textContent = "";
+    const hits = (S.tabs || []).filter(t => !q || (t.title || "").toLowerCase().includes(q) || (t.url || "").toLowerCase().includes(q));
+    if (!hits.length) list.appendChild(el("div", "muted", "No tab found."));
+    hits.forEach(t => { const b = el("button", "", (t.title || t.url || "New tab")); b.title = t.url || "";
+      b.onclick = () => { closeOv(); post({cmd:"select", id: t.id}); }; list.appendChild(b); });
+    return hits;
+  };
+  inp.oninput = draw;
+  inp.onkeydown = e => { if (e.key === "Enter") { const h = draw(); if (h.length) { closeOv(); post({cmd:"select", id: h[0].id}); } } };
+  wrap.appendChild(box); openOv(wrap, true); draw(); setTimeout(() => inp.focus(), 30);
+}
+
+function showMenu(){
+  const wrap = el("div"); wrap.style.cssText = "position:fixed;inset:0";
+  wrap.onclick = e => { if (e.target === wrap) closeOv(); };
+  const m = el("div", "menu"); const top = Math.ceil($("#nav").getBoundingClientRect().bottom) + 4;
+  m.style.top = top + "px"; m.style.maxHeight = "calc(100vh - " + (top + 12) + "px)"; m.style.overflow = "auto";
+  const item = (t, fn) => { const b = el("button", "", t); b.onclick = () => { closeOv(); fn(); }; m.appendChild(b); };
+  const hr = () => m.appendChild(el("hr"));
+  const a = active();
+  const web = a && /^https?:/.test(a.url || "");
+  item("New tab   (Ctrl+T)", () => post({cmd:"newtab"}));
+  if (CONTAINER === "KIDS") {
+    hr(); item("Parent settings", () => post({cmd:"settings"}));
+    wrap.appendChild(m); openOv(wrap, true); return;
+  }
+  item("New window   (Ctrl+N)", () => post({cmd:"openwin", container:"PERSONAL"}));
+  item("Ronin Safe Money (banking)", () => post({cmd:"openwin", container:"BANKING"}));
+  item("New Trading window", () => post({cmd:"openwin", container:"TRADING"}));
+  item("Private window   (Ctrl+Shift+N)", () => post({cmd:"openwin", container:"PRIVATE"}));
+  item("Video call window (best quality)", () => post({cmd:"openwin", container:"CALLS"}));
+  if (CONTAINER === "TRADING" && web) {
+    hr();
+    item("Mini chart (always on top)", () => post({cmd:"mini"}));
+    item("Charts: 1 / 2 / 4 in this window", () => post({cmd:"grid", number: S.grid === 2 ? 4 : (S.grid === 4 ? 1 : 2)}));
+  }
+  if (web && CONTAINER !== "BANKING") {
+    hr();
+    if (CONTAINER === "PERSONAL" && a.bankHint) item("This is my bank (always open in Safe Money)", () => post({cmd:"mybank"}));
+    if (CONTAINER === "PERSONAL") item("This is a trading site (keep charts live)", () => post({cmd:"tradingsite"}));
+    item("Download video from this page", () => post({cmd:"downloadmenu"}));
+    item("Reader mode", () => post({cmd:"reader"}));
+    item("\u{1F50A} Read this page aloud", () => post({cmd:"listen"}));
+    item(a.adPaused ? "Turn ad-block back on for this site" : "Pause ad-block on this site", () => post({cmd:"adpause", value: !a.adPaused}));
+    if (CONTAINER === "PERSONAL" || CONTAINER === "PRIVATE") {
+      item("Is this a scam? (check this page)", () => post({cmd:"ai", text:"scam"}));
+      item("AI tools (summary, Hindi, ask)", () => post({cmd:"aimenu"}));
+    }
+  }
+  if (web) {
+    const z = (a && a.zoom) || 100, zr = el("div", "zoomrow");
+    const zb = (t, n, tip) => { const b = el("button", "", t); b.title = tip; b.onclick = () => post({cmd:"zoom", number:n}); return b; };
+    const lbl = el("span", "", "Page size  " + z + "%");
+    zr.append(lbl, zb("\u2212", -1, "Smaller (Ctrl -)"), zb("+", 1, "Bigger (Ctrl +)"), zb("\u21BA", 0, "Normal size (Ctrl 0)"));
+    hr(); m.appendChild(zr);
+  }
+  if (CONTAINER === "PERSONAL" || CONTAINER === "PRIVATE") {
+    const f = S.focus || {};
+    if (f.on) item("\u23F0 Study time until " + f.until + (f.manual ? " - stop now" : " (change in Settings)"), () => { if (f.manual) post({cmd:"focusnow", number:0}); else post({cmd:"settings"}); });
+    else item("\u23F0 Study time: pause time-wasting sites for 1 hour", () => post({cmd:"focusnow", number:60}));
+  }
+  hr();
+  item("Downloads   (Ctrl+J)", () => post({cmd:"downloads"}));
+  item("Find a tab   (Ctrl+Shift+A)", () => tabSearch());
+  item(THEME === "light" ? "\u263E Night mode" : "\u2600 Day mode", () => post({cmd:"theme"}));
+  if (web && THEME !== "light" && (CONTAINER === "PERSONAL" || CONTAINER === "PRIVATE")) {
+    item("Night mode looks wrong on this site? Turn it off here", () => post({cmd:"darkoff", value: true}));
+    item("Night mode on this site again", () => post({cmd:"darkoff", value: false}));
+  }
+  if (web && CONTAINER !== "BANKING") {
+    item("Save page as PDF   (Ctrl+P)", () => post({cmd:"savepdf"}));
+    item("Picture of this page (screenshot)", () => post({cmd:"screenshot"}));
+  }
+  if (CONTAINER !== "BANKING") item("Reopen closed tab   (Ctrl+Shift+T)", () => post({cmd:"reopentab"}));
+  if (CONTAINER === "PERSONAL" || CONTAINER === "TRADING") {
+    hr();
+    if (web) item(S.bookmarked ? "\u2605 Remove this bookmark   (Ctrl+D)" : "\u2606 Bookmark this page   (Ctrl+D)", () => post({cmd:"bookmark"}));
+    item("Bookmarks   (Ctrl+Shift+B)", () => post({cmd:"bookmarks"}));
+  }
+  if (CONTAINER === "PERSONAL" || CONTAINER === "TRADING" || CONTAINER === "CALLS") item("History   (Ctrl+H)", () => post({cmd:"history"}));
+  if (CONTAINER !== "BANKING" && CONTAINER !== "KIDS") item("\u{1F511} Passwords (saved, import, export)", () => post({cmd:"passwords"}));
+  item("Settings", () => post({cmd:"settings"}));
+  item("System health", () => post({cmd:"health"}));
+  wrap.appendChild(m); openOv(wrap, true);
+}
+
+function aiMenu(){
+  const c = card(); c.appendChild(el("h1", "", "AI tools"));
+  c.appendChild(el("p", "muted", "Ronin first shows you exactly what will be sent. Personal numbers (PAN, Aadhaar, card, account, phone, OTP, email) are hidden automatically. Bank, payment and sign-in pages are never sent."));
+  const g = el("div", "grid4");
+  const opt = (t, task) => { const b = btn(t, "", () => post({cmd:"ai", text:task})); g.appendChild(b); };
+  opt("Summary in Hindi", "summary"); opt("Explain simply (Hindi)", "explain");
+  opt("Translate to Hindi", "translate"); opt("Is this a scam?", "scam");
+  c.appendChild(g);
+  const q = el("textarea"); q.rows = 3; q.placeholder = "Ask a question about this page (Hindi or English)";
+  c.appendChild(el("p", "muted", "Or ask your own question:")); c.appendChild(q);
+  c.appendChild(row(btn("Ask", "primary", () => { if (q.value.trim()) post({cmd:"ai", text:"ask", question:q.value}); }), btn("Close", "", closeOv)));
+  return c;
+}
+
+// ---- downloads: text helpers and in-place update ----
+function dlKey(j){ return [j.id, j.state, j.canPause ? 1 : 0, j.vpn ? 1 : 0, j.scan || "", j.error || ""].join("|"); }
+function dlState(j){
+  if (j.state === "downloading" && j.stalled) return "Waiting...";
+  return {preparing:"Getting ready", downloading: (j.percent >= 0 ? Math.round(j.percent) + "%" : "Downloading"), paused:"Paused", needlink:"Link expired", scanning:"Checking for viruses", done:"Saved", failed:"Failed", cancelled:"Cancelled", blocked:"Virus removed"}[j.state] || j.state;
+}
+function dlInfo(j){
+  const parts = [];
+  if (j.size) parts.push(j.size);
+  if (j.state === "paused") parts.push("paused");
+  else if (j.stalled) parts.push(j.note || "nothing is arriving - Ronin keeps trying");
+  else { if (j.speed) parts.push(j.speed); if (j.eta) parts.push(j.eta + " left"); if (j.note) parts.push(j.note); }
+  return parts.join("  ·  ");
+}
+function dlPatch(o){
+  const c = document.querySelector('#ov.show [data-dl="1"]'); if (!c) return false;
+  const lis = c.querySelectorAll("li[data-key]"), jobs = o.jobs || [];
+  if (lis.length !== jobs.length) return false;
+  for (let i = 0; i < jobs.length; i++) if (lis[i].dataset.key !== dlKey(jobs[i])) return false;
+  jobs.forEach((j, i) => {
+    const li = lis[i], st = li.querySelector(".dlst"), bar = li.querySelector(".prog i"), info = li.querySelector(".dlinfo");
+    if (st) st.textContent = dlState(j);
+    if (bar) bar.style.width = Math.max(j.percent, 0) + "%";
+    if (info) info.textContent = dlInfo(j);
+  });
+  return true;
+}
+
+const overlays = {
+  aimenu(){ return aiMenu(); },
+  bookmarks(o){
+    const wrap = el("div"); wrap.style.cssText = "position:fixed;inset:0"; wrap.dataset.clear = "1";
+    wrap.onclick = e => { if (e.target === wrap) closeOv(); };
+    const top = Math.ceil($("#nav").getBoundingClientRect().bottom) + 4;
+    const box = el("div", "menu"); box.style.cssText = "top:" + top + "px;right:8px;width:min(460px,92vw);max-height:calc(100vh - " + (top + 12) + "px);overflow:auto";
+    box.appendChild(el("div", "muted", "Bookmarks")).style.cssText = "padding:6px 10px 2px;font-weight:600";
+    const inp = el("input"); inp.placeholder = "Search bookmarks..."; inp.style.cssText = "width:100%;box-sizing:border-box;margin:4px 0 6px;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit";
+    const list = el("div"); box.appendChild(inp); box.appendChild(list);
+    const draw = () => {
+      const q = inp.value.trim().toLowerCase(); list.textContent = "";
+      const hits = (o.list || []).filter(b => !q || b.title.toLowerCase().includes(q) || b.url.toLowerCase().includes(q));
+      if (!hits.length) list.appendChild(el("div", "muted", (o.list || []).length ? "Nothing found." : "No bookmarks yet. Open a page and press Ctrl+D.")).style.padding = "6px 10px";
+      hits.forEach(b => {
+        const r = el("div"); r.style.cssText = "display:flex;align-items:center;gap:4px";
+        const go = el("button", "", b.title); go.title = b.url; go.style.cssText = "flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+        go.onclick = () => { closeOv(); post({cmd:"go", text: b.url}); };
+        const x = el("button", "", "\u2715"); x.title = "Remove this bookmark"; x.style.cssText = "width:34px;flex:none;text-align:center;color:var(--muted)";
+        x.onclick = () => post({cmd:"removebookmark", url: b.url});
+        r.appendChild(go); r.appendChild(x); list.appendChild(r);
+      });
+    };
+    const io = el("div", "row"); io.style.cssText = "gap:6px;padding:6px 4px";
+    const ib = (t, c) => { const b = btn(t, "", () => post({cmd:c})); b.style.cssText = "width:auto;display:inline-block;text-align:center"; io.appendChild(b); };
+    ib("Export bookmarks file", "bmexport"); ib("Import from a file", "bmimport");
+    box.appendChild(io);
+    inp.oninput = draw; wrap.appendChild(box); draw(); setTimeout(() => inp.focus(), 30);
+    return wrap;
+  },
+  fake(o){
+    const c = card(); c.appendChild(dangerIcon());
+    c.appendChild(el("h1", "", "Warning: fake bank website"));
+    const p = el("p"); p.append("This address looks like ", el("b", "", o.brand || "a bank"), " but it is NOT a real bank address:");
+    c.appendChild(p); c.appendChild(el("p", "host", o.host));
+    c.appendChild(el("p", "", "Criminals make sites like this to steal passwords, card numbers and OTPs. Ronin did not open it."));
+    c.appendChild(el("p", "muted", "Real Indian banks use addresses ending in .bank.in. Never enter an OTP or PIN on a site you reached from a message or call."));
+    const more = el("div");
+    const sure = btn("I know this site, open it", "", () => {
+      more.textContent = "";
+      more.appendChild(el("p", "", "Are you completely sure? Banks never ask you to log in through links in SMS, WhatsApp, Telegram or Instagram."));
+      more.appendChild(row(btn("Yes, I trust this site", "red", () => { closeOv(); post({cmd:"trust", id:o.tab, url:o.url}); })));
+    });
+    sure.className = "link";
+    c.appendChild(row(btn("Go back to safety", "primary", closeOv)));
+    const r2 = el("div", "row"); r2.appendChild(sure); c.appendChild(r2); c.appendChild(more);
+    return c;
+  },
+  history(o){
+    const wrap = el("div"); wrap.style.cssText = "position:fixed;inset:0"; wrap.dataset.clear = "1";
+    wrap.onclick = e => { if (e.target === wrap) closeOv(); };
+    const top = Math.ceil($("#nav").getBoundingClientRect().bottom) + 4;
+    const box = el("div", "menu hist"); box.style.cssText = "top:" + top + "px;right:8px;width:min(620px,94vw);max-height:calc(100vh - " + (top + 12) + "px);overflow:auto";
+    box.appendChild(el("div", "muted", "History - pages you opened (last 90 days, on this computer only)")).style.cssText = "padding:6px 10px 2px;font-weight:600";
+    const inp = el("input"); inp.placeholder = "Search history (Hindi or English)..."; inp.style.cssText = "width:100%;box-sizing:border-box;margin:4px 0 6px;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit";
+    const list = el("div"); list.dataset.hist = "1";
+    const acts = el("div", "row"); acts.style.cssText = "flex-wrap:wrap;gap:6px;padding:6px 4px";
+    const clr = (t, k) => { const b = btn(t, "", () => post({cmd:"histclear", text:k})); acts.appendChild(b); };
+    clr("Delete last hour", "hour"); clr("Delete today", "day");
+    const all = btn("Delete all", "", () => { if (all.dataset.sure) post({cmd:"histclear", text:"all"}); else { all.dataset.sure = "1"; all.textContent = "Tap again: delete ALL history"; } });
+    acts.appendChild(all);
+    const off = btn(o.off ? "Keep history again" : "Stop keeping history", "", () => post({cmd:"nohistory", value: !o.off}));
+    acts.appendChild(off);
+    box.append(inp, list, acts);
+    let timer = null;
+    inp.oninput = () => { clearTimeout(timer); timer = setTimeout(() => post({cmd:"histsearch", text: inp.value}), 150); };
+    histDraw(list, o, () => inp.value);
+    wrap.appendChild(box); setTimeout(() => inp.focus(), 30);
+    return wrap;
+  },
+  passwords(o){
+    const c = card(); c.appendChild(el("h1", "", "\u{1F511} Passwords"));
+    if (o.error) { c.appendChild(el("p", "", o.error)); c.appendChild(row(btn("Close", "", closeOv))); return c; }
+    c.appendChild(el("p", "muted", "Kept on this computer only, encrypted with your Windows account. Ronin offers \"Fill\" only on the exact same site, and never in Safe Money - type your bank password yourself."));
+    const reveal = (o.list || []).some(e => e.pass !== undefined);
+    if (!reveal) {
+      c.appendChild(el("p", "", (o.count || 0) + " saved password" + (o.count === 1 ? "" : "s") + "."));
+      c.appendChild(row(btn("Show passwords", "primary", () => post({cmd:"pwshow"})), btn("Close", "", closeOv)));
+      c.appendChild(el("p", "muted", "Windows asks for your PIN or fingerprint first."));
+      return c;
+    }
+    const q = el("input", "txt"); q.placeholder = "Search sites..."; c.appendChild(q);
+    const ul = el("ul", "list"); c.appendChild(ul);
+    const draw = () => {
+      ul.textContent = ""; const s = q.value.trim().toLowerCase();
+      const hits = (o.list || []).filter(e => !s || (e.origin + " " + e.user).toLowerCase().includes(s));
+      if (!hits.length) ul.appendChild(el("li", "muted", (o.list || []).length ? "Nothing found." : "No passwords saved yet. Log in to a site and press Save, or import a CSV file."));
+      hits.forEach(e => {
+        const li = el("li"); const t = el("span", "", e.origin.replace(/^https:\/\//, "") + "  \u2014  " + (e.user || "(no name)"));
+        const pw = el("span", "muted", "\u2022\u2022\u2022\u2022\u2022\u2022"); pw.style.cssText = "margin-left:auto;margin-right:8px;user-select:text";
+        const sh = el("button", "link", "Show"); sh.onclick = () => { const on = sh.textContent === "Show"; pw.textContent = on ? e.pass : "\u2022\u2022\u2022\u2022\u2022\u2022"; sh.textContent = on ? "Hide" : "Show"; };
+        const x = el("button", "link", "Remove"); x.onclick = () => post({cmd:"pwremove", url: e.origin + "\n" + e.user}); x.style.marginLeft = "14px";
+        li.append(t, pw, sh, x); ul.appendChild(li);
+      });
+    };
+    q.oninput = draw; draw();
+    c.appendChild(row(btn("Import CSV file", "", () => post({cmd:"pwimport"})), btn("Export CSV file", "", () => post({cmd:"pwexport"})), btn("Close", "", closeOv)));
+    c.appendChild(el("p", "muted", "CSV = the common format other password apps use (name, url, username, password). An exported file is NOT encrypted - delete it after use."));
+    return c;
+  },
+  focus(o){
+    const c = card(); c.appendChild(el("h1", "", "\u23F0 Study time"));
+    c.appendChild(el("p", "", o.host + " is paused until " + o.until + ". Keep going - you are doing well!"));
+    c.appendChild(el("p", "muted", "Ronin pauses time-wasting sites during your study time. Change the time or the sites in Settings."));
+    c.appendChild(row(btn("OK, back to study", "primary", closeOv),
+      btn("Open for 5 minutes", "", () => { closeOv(); post({cmd:"focusallow", id:o.tab, url:o.url}); })));
+    return c;
+  },
+  blocked(o){
+    const c = card(); c.appendChild(el("h1", "", o.mode === "KIDS" ? "Not for Kids mode" : "Not available here"));
+    c.appendChild(el("p", "", o.reason || ((o.mode === "KIDS" ? "Kids mode" : "This window") + " cannot open " + o.host + ".")));
+    if (o.host) c.appendChild(el("p", "host", o.host));
+    c.appendChild(row(btn("OK", "primary", closeOv))); return c;
+  },
+  download(o){
+    const c = card(); c.appendChild(el("h1", "", "Download video"));
+    c.appendChild(el("p", "muted", o.title || ""));
+    const g = el("div", "grid4");
+    [["Best quality (MP4)","best"],["1080p (MP4)","1080"],["720p (MP4)","720"],["480p - small file","480"],["Audio only (MP3)","mp3"]].forEach(([t,q]) => {
+      g.appendChild(btn(t, q === "best" ? "primary" : "", () => { closeOv(); post({cmd:"download", text:q}); }));
+    });
+    c.appendChild(g);
+    c.appendChild(el("p", "muted", "Saved in Downloads \u2192 Ronin Videos. The first download also gets the free video tools (about 150 MB, once). For your personal use only."));
+    c.appendChild(row(btn("Cancel", "", closeOv))); return c;
+  },
+  downloads(o){
+    const c = card(); c.dataset.dl = "1"; c.appendChild(el("h1", "", o.float ? "Ronin downloads" : "Downloads"));
+    const ul = el("ul", "list");
+    if (!(o.jobs||[]).length) ul.appendChild(el("li", "muted", "No downloads yet."));
+    (o.jobs||[]).forEach(j => {
+      const li = el("li"); li.style.display = "block"; li.dataset.key = dlKey(j);
+      const top = el("div"); top.style.cssText = "display:flex;justify-content:space-between;gap:8px;align-items:baseline";
+      const nm = el("span", "dlname", (j.kind === "file" ? "📄 " : "🎬 ") + j.title); nm.title = j.title;
+      top.appendChild(nm);
+      top.appendChild(el("b", "dlst", dlState(j))); li.appendChild(top);
+      const live = j.state === "downloading" || j.state === "paused";
+      if (live) {
+        const p = el("div", "prog"); const i = el("i"); i.style.width = Math.max(j.percent, 0) + "%"; p.appendChild(i); li.appendChild(p);
+        li.appendChild(el("div", "muted dlinfo", dlInfo(j)));
+        const acts = el("div"); acts.style.cssText = "display:flex;gap:14px;flex-wrap:wrap";
+        const lk = (t, cmd, tip) => { const x = el("button", "link", t); if (tip) x.title = tip; x.onclick = () => post({cmd, url:String(j.id)}); acts.appendChild(x); };
+        if (j.canPause && j.state === "downloading") lk("Pause", "dlpause");
+        if (j.state === "paused") lk("Resume", "dlresume");
+        lk("Cancel", "dlcancel");
+        if (j.vpn && j.state === "downloading") lk("Faster: without VPN", "dldirect", "The VPN is slow for big files. Without it the download is much faster, but the file server sees your real internet address.");
+        li.appendChild(acts);
+      }
+      if (j.state === "done" && j.scan === "clean") li.appendChild(el("div", "muted", "✔ Checked by Windows Defender - no virus"));
+      if (j.state === "done") { const x = el("button", "link", "Show in folder"); x.onclick = () => post({cmd:"dlshow", url:String(j.id)}); li.appendChild(x); }
+      if (j.error) li.appendChild(el("div", "muted", j.error));
+      ul.appendChild(li);
+    });
+    c.appendChild(ul);
+    if (o.float) {
+      c.appendChild(el("p", "muted", "Ronin is closed. Downloads go on in this small window."));
+      c.appendChild(row(btn("Open Ronin", "primary", () => post({cmd:"openronin"})), btn("Downloads folder", "", () => post({cmd:"dlfiles"}))));
+    } else {
+      c.appendChild(row(btn("Downloads folder", "", () => post({cmd:"dlfiles"})), btn("Ronin Videos folder", "", () => post({cmd:"dlfolder"}))));
+      if (!PANEL) c.appendChild(row(btn("Close", "primary", closeOv)));
+    }
+    return c;
+  },
+  ai(o){
+    const c = card();
+    const names = {summary:"Summary in Hindi", explain:"Explain simply", translate:"Translate to Hindi", ask:"Your question", scam:"Is this a scam?"};
+    c.appendChild(el("h1", "", names[o.task] || "AI"));
+    if (o.step === "blocked" || o.step === "error") {
+      c.appendChild(el("p", "", o.text)); c.appendChild(row(btn("OK", "primary", closeOv))); return c;
+    }
+    if (o.step === "working") { c.appendChild(el("p", "", "Asking the AI... (a few seconds)")); return c; }
+    if (o.step === "nokey") {
+      c.appendChild(el("p", "", "Add a free Gemini key once, in Settings \u2192 AI. It takes 2 minutes and costs nothing."));
+      c.appendChild(row(btn("Get free Gemini key", "primary", () => post({cmd:"aigetkey"})), btn("Open Settings", "", () => post({cmd:"settings"})), btn("Close", "", closeOv)));
+      return c;
+    }
+    if (o.task === "scam" && typeof o.scam === "number" && o.scam >= 0) {
+      const v = o.scam >= 4 ? "Ronin's own check: DANGER - this looks like an investment scam." : (o.scam >= 2 ? "Ronin's own check: some warning signs found." : "Ronin's own check: no common scam words found.");
+      const p = el("p", ""); p.appendChild(el("b", "", v)); c.appendChild(p);
+      if (o.scam >= 2) c.appendChild(el("p", "", "Never send money for 'fixed profit' or a 'fee to withdraw'. If you already paid: call 1930 now, or report at cybercrime.gov.in."));
+    }
+    if (o.step === "preview") {
+      c.appendChild(el("p", "muted", (o.selection ? "Your selected text" : "The page text") + " (" + o.chars + " characters, private numbers hidden) will be sent to " +
+        ({gemini:"Google Gemini (free)", claude:"Claude (paid)", custom:"your AI service"}[o.provider] || o.provider) + ". Beginning:"));
+      c.appendChild(el("div", "ai-out", o.sample));
+      if (o.cost) c.appendChild(el("p", "", o.cost));
+      if (!o.haveKey) { c.appendChild(el("p", "", "No AI key yet: add a free Gemini key in Settings \u2192 AI."));
+        c.appendChild(row(btn("Get free Gemini key", "primary", () => post({cmd:"aigetkey"})), btn("Close", "", closeOv))); return c; }
+      c.appendChild(row(btn("Send", "primary", () => post({cmd:"aisend"})), btn("Cancel", "", closeOv))); return c;
+    }
+    if (o.step === "answer") {
+      c.appendChild(el("div", "ai-out", String(o.text || "").replace(/\*\*(.+?)\*\*/g, "$1").replace(/^\s*\*\s+/gm, "\u2022 ")));
+      if (o.task === "scam") c.appendChild(el("p", "muted", "Fraud help: call 1930 (National Cyber Crime Helpline) or report at cybercrime.gov.in."));
+      c.appendChild(el("p", "muted", "AI can make mistakes. Check important facts."));
+      c.appendChild(row(btn("Close", "primary", closeOv)));
+    }
+    return c;
+  },
+  pin(o){
+    const c = card(); c.appendChild(el("h1", "", "Parent PIN"));
+    if (o && o.error) c.appendChild(el("p", "", o.error));
+    const i = el("input", "txt"); i.type = "password"; i.inputMode = "numeric"; i.maxLength = 8; i.placeholder = "PIN";
+    c.appendChild(i);
+    c.appendChild(row(btn("Open settings", "primary", () => post({cmd:"kidspin", pin:i.value})), btn("Cancel", "", closeOv)));
+    setTimeout(() => i.focus(), 50); return c;
+  },
+  remote(o){
+    const c = card(); c.appendChild(dangerIcon());
+    c.appendChild(el("h1", "", "Someone may be able to see your screen"));
+    c.appendChild(el("p", "", "These remote-control programs are running on this computer:"));
+    const ul = el("ul", "list"); (o.tools || []).forEach(t => ul.appendChild(el("li", "", t))); c.appendChild(ul);
+    c.appendChild(el("p", "", "Close them before using net banking. Bank staff, police and customer care never ask you to install AnyDesk, TeamViewer or Quick Assist."));
+    c.appendChild(row(btn("I understand", "primary", closeOv))); return c;
+  },
+  locked(o){
+    const c = card(); c.appendChild(el("h1", "", "Bank session closed for your safety"));
+    c.appendChild(el("p", "", "Ronin Safe Money logged you out after " + o.mins + " minutes without use. Please log in to your bank again."));
+    c.appendChild(row(btn("Start again", "primary", () => { closeOv(); post({cmd:"unlock"}); }))); return c;
+  },
+  settings(o){
+    const c = card(); c.appendChild(el("h1", "", "Settings"));
+    c.appendChild(el("p", "muted", "My Banks (always open in Ronin Safe Money)"));
+    const ul = el("ul", "list");
+    if (!(o.banks||[]).length) ul.appendChild(el("li", "muted", "None added. Open your bank, then Menu → This is my bank."));
+    (o.banks||[]).forEach(h => { const li = el("li", "", h); const x = el("button", "link", "Remove"); x.onclick = () => post({cmd:"removebank", host:h}); li.appendChild(x); ul.appendChild(li); });
+    c.appendChild(ul);
+    c.appendChild(el("p", "muted", "Sites you trusted after a warning"));
+    const ul2 = el("ul", "list");
+    if (!(o.trusted||[]).length) ul2.appendChild(el("li", "muted", "None."));
+    (o.trusted||[]).forEach(h => { const li = el("li", "", h); const x = el("button", "link", "Remove"); x.onclick = () => post({cmd:"untrust", host:h}); li.appendChild(x); ul2.appendChild(li); });
+    c.appendChild(ul2);
+    const lab = el("label", "chk"); const cb = el("input"); cb.type = "checkbox"; cb.checked = !!o.remember;
+    cb.onchange = () => post({cmd:"remember", value: cb.checked});
+    lab.append(cb, "Remember my bank login on this computer (less private)"); c.appendChild(lab);
+    const lab2 = el("label", "chk"); const sel = el("select");
+    [3,5,10,15].forEach(n => { const op = el("option", "", n + " minutes"); op.value = n; if (n === o.idle) op.selected = true; sel.appendChild(op); });
+    sel.onchange = () => post({cmd:"idlemins", number: parseInt(sel.value, 10)});
+    lab2.append("Close bank session after", sel, "without use"); c.appendChild(lab2);
+    const list = (title, items, cmd, empty) => {
+      c.appendChild(el("p", "muted", title));
+      const u = el("ul", "list");
+      if (!(items||[]).length) u.appendChild(el("li", "muted", empty));
+      (items||[]).forEach(h => { const li = el("li", "", h); const x = el("button", "link", "Remove"); x.onclick = () => post({cmd, host:h}); li.appendChild(x); u.appendChild(li); });
+      c.appendChild(u);
+    };
+    list("Trading sites you added (charts stay live)", o.tradingSites, "removetrading", "None. Known brokers and chart sites are already included.");
+    list("Sites where ad-block is paused", o.adblockOff, "removeadoff", "None.");
+
+    // ---- tabs ----
+    const ts = el("div", "section"); ts.appendChild(el("h2", "", "New tabs"));
+    ts.appendChild(el("p", "muted", o.newTabFront ? "A link that opens a new tab takes you to that tab at once." : "A link that opens a new tab stays behind: you remain on the page you are reading."));
+    ts.appendChild(row(btn(o.newTabFront ? "Open new tabs behind (recommended)" : "Jump to new tabs at once", "", () => post({cmd:"newtabfront", value: !o.newTabFront}))));
+    c.appendChild(ts);
+
+    // ---- site permissions ----
+    const ps = el("div", "section"); ps.appendChild(el("h2", "", "Site permissions (camera, microphone, location)"));
+    ps.appendChild(el("p", "muted", "Ronin asks before a site may use these. Your answers are kept here; remove one and the site will ask again."));
+    const pl = el("ul", "list");
+    if (!(o.sitePerms||[]).length) pl.appendChild(el("li", "muted", "No answers kept yet."));
+    (o.sitePerms||[]).sort((a, b) => a.host.localeCompare(b.host)).forEach(p => {
+      const li = el("li"); li.appendChild(el("span", "", p.host + " \u2014 " + p.kind + ": " + (p.answer === "allow" ? "allowed" : "blocked")));
+      const x = el("button", "link", "Remove"); x.onclick = () => post({cmd:"removeperm", url: p.id}); li.appendChild(x); pl.appendChild(li);
+    });
+    ps.appendChild(pl); c.appendChild(ps);
+
+    // ---- Study time ----
+    const f = o.focus || {};
+    const fs = el("div", "section"); fs.appendChild(el("h2", "", "\u23F0 Study time (Focus)"));
+    fs.appendChild(el("p", "muted", "Every day in these hours, time-wasting sites are paused in normal and private windows. YouTube stays open for study videos; only YouTube Shorts are paused."));
+    const fon = el("label", "chk"); const fcb = el("input"); fcb.type = "checkbox"; fcb.checked = !!f.on;
+    fon.append(fcb, "Study time every day"); fs.appendChild(fon);
+    const tf = el("input", "txt"); tf.type = "time"; tf.value = f.from || "18:00"; tf.style.width = "130px";
+    const tt = el("input", "txt"); tt.type = "time"; tt.value = f.to || "21:00"; tt.style.width = "130px";
+    const tr = el("label", "chk"); tr.append("From", tf, "to", tt); fs.appendChild(tr);
+    const fsites = el("textarea"); fsites.rows = 4; fsites.value = f.sites || "";
+    fs.appendChild(el("p", "muted", "Paused sites (one per line; site.com/path pauses only that part):")); fs.appendChild(fsites);
+    fs.appendChild(row(btn("Save study time", "primary", () => post({cmd:"focusset", value: fcb.checked, text: tf.value + "|" + tt.value + "|" + fsites.value}))));
+    c.appendChild(fs);
+
+    // ---- VPN ----
+    const v = o.vpn || {};
+    const vs = el("div", "section"); vs.appendChild(el("h2", "", "VPN (normal and private windows only)"));
+    vs.appendChild(el("p", "muted", "Safe Money and Trading never use the VPN. Get a free WireGuard config from Proton VPN (account.protonvpn.com \u2192 Downloads \u2192 WireGuard), then import it here."));
+    vs.appendChild(el("p", "", v.haveConf ? ("Config: " + (v.name || "imported")) : "No VPN config imported yet."));
+    if (v.active) vs.appendChild(el("p", "", "Status: " + (v.state === "connected" ? "Connected" : v.state) + (v.problem ? " - " + v.problem : "")));
+    const vrow = el("div", "row");
+    vrow.appendChild(btn("Import config (.conf)", "", () => post({cmd:"vpnimport"})));
+    if (v.haveConf) vrow.appendChild(btn(v.on ? "Turn VPN off" : "Turn VPN on", v.on ? "" : "primary", () => post({cmd:"vpnon", value: !v.on})));
+    if (v.active) vrow.appendChild(btn("Check my IP", "", () => post({cmd:"vpncheck"})));
+    vs.appendChild(vrow);
+    if (v.haveConf && v.on) {
+      vs.appendChild(el("p", "muted", v.all ? "Every site in normal windows uses the VPN." :
+        "Smart: only unknown and sensitive sites (adult, betting, piracy, sites you have never heard of) use the VPN. Well-known trusted sites open directly and fast. Private windows always use the VPN."));
+      vs.appendChild(row(btn(v.all ? "Use VPN only where needed (recommended)" : "Use VPN for every site", "", () => post({cmd:"vpnall", value: !v.all}))));
+    }
+    if (v.needRestart) { vs.appendChild(el("p", "", "Restart Ronin to apply the VPN change. Your tabs will come back."));
+      vs.appendChild(row(btn("Restart Ronin now", "primary", () => post({cmd:"restart"})))); }
+    c.appendChild(vs);
+
+    // ---- AI ----
+    const a = o.ai || {}; const keys = a.keys || {};
+    const as = el("div", "section"); as.appendChild(el("h2", "", "AI"));
+    const prov = el("select", "txt");
+    [["gemini","Google Gemini - free (recommended)"],["claude","Claude - paid, uses your daily limit"],["custom","Other (OpenAI-compatible)"]].forEach(([v2,t]) => { const op = el("option", "", t); op.value = v2; if (a.provider === v2) op.selected = true; prov.appendChild(op); });
+    as.appendChild(prov);
+    const model = el("input", "txt"); model.placeholder = "Model (leave empty for automatic)"; model.value = a.model || "";
+    const base = el("input", "txt"); base.placeholder = "Service address, e.g. https://api.groq.com/openai/v1"; base.value = a.baseUrl || "";
+    const cap = el("input", "txt"); cap.type = "number"; cap.min = 0; cap.max = 500; cap.value = a.cap;
+    const extra = el("div"); extra.style.cssText = "display:grid;gap:6px;margin-top:6px";
+    extra.append(model, base);
+    const capRow = el("label", "chk"); capRow.append("Daily limit for paid AI (₹):", cap);
+    as.appendChild(extra); as.appendChild(capRow);
+    const showFor = () => { base.style.display = prov.value === "custom" ? "" : "none"; capRow.style.display = prov.value === "claude" ? "" : "none"; };
+    prov.onchange = showFor; showFor();
+    as.appendChild(el("p", "muted", "Saved key: " + (keys[a.provider] || "none") + (a.provider === "claude" ? "   |   Spent today: ₹" + a.spent : "")));
+    const key = el("input", "txt"); key.type = "password"; key.placeholder = "Paste API key here (stored in Windows Credential Manager)";
+    as.appendChild(key);
+    as.appendChild(row(
+      btn("Save", "primary", () => { post({cmd:"aiprovider", provider: prov.value, model: model.value, baseUrl: base.value, number: parseInt(cap.value || "0", 10)}); if (key.value.trim()) post({cmd:"aikey", provider: prov.value, key: key.value}); }),
+      btn("Test key", "", () => post({cmd:"aitest"})),
+      btn("Get free Gemini key", "", () => post({cmd:"aigetkey"}))));
+    c.appendChild(as);
+
+    // ---- Kids ----
+    const k = o.kids || {};
+    const ks = el("div", "section"); ks.appendChild(el("h2", "", "Kids mode"));
+    if (CONTAINER === "KIDS") {
+      ks.appendChild(el("p", "", "This Windows account is in Kids mode (" + k.level + ")."));
+      list("Extra sites allowed for Junior mode", k.sites, "removekidssite", "None.");
+      const pin = el("input", "txt"); pin.type = "password"; pin.placeholder = "Parent PIN";
+      const site = el("input", "txt"); site.placeholder = "Allow a site, e.g. myschool.edu.in";
+      ks.append(site, pin);
+      ks.appendChild(row(btn("Allow site", "", () => post({cmd:"kidsadd", host: site.value, pin: pin.value})),
+        btn("Turn Kids mode off", "red", () => post({cmd:"kidsoff", pin: pin.value}))));
+    } else {
+      ks.appendChild(el("p", "muted", "Do this inside your child's own Windows account (a Standard account, not admin). Ronin will then open only Kids windows there: SafeSearch is forced, adult and gambling sites are blocked, no downloads, no private windows."));
+      const lvl = el("select", "txt");
+      [["junior","Junior - only chosen learning sites (small children)"],["teen","Teen - all sites except adult, gambling and dangerous ones"]].forEach(([v2,t]) => { const op = el("option", "", t); op.value = v2; lvl.appendChild(op); });
+      const pin = el("input", "txt"); pin.type = "password"; pin.placeholder = "New parent PIN (4-8 digits)";
+      ks.append(lvl, pin);
+      ks.appendChild(row(btn("Make this Windows account a Kids account", "", () => post({cmd:"kidson", text: lvl.value, pin: pin.value}))));
+    }
+    c.appendChild(ks);
+
+    c.appendChild(el("p", "muted", "Ronin Browser " + o.version));
+    c.appendChild(row(btn("Done", "primary", closeOv))); return c;
+  },
+  health(o){
+    const c = card(); c.appendChild(el("h1", "", "System health"));
+    const kv = el("div", "kv");
+    const add = (k, v) => { kv.appendChild(el("b", "", k)); kv.appendChild(el("span", "", v)); };
+    add("Ronin Browser", o.version);
+    add("Browser engine", (o.engine || "not found") + " — " + o.engineNote);
+    add("Ronin updates", o.updates);
+    add("VPN", o.vpn || "Off");
+    (o.parts || []).forEach(p => add(p.name, (p.ok ? "OK" : "Problem") + (p.when ? " - updated " + p.when : "") + (p.problem ? " - " + p.problem : "")));
+    c.appendChild(kv); c.appendChild(row(btn("Close", "primary", closeOv))); return c;
+  }
+};
+
+function histDraw(list, o, q){
+  list.textContent = "";
+  if (o.off) { list.appendChild(el("div", "muted", "Ronin is not keeping history.")).style.padding = "6px 10px"; return; }
+  if (!(o.list || []).length) { list.appendChild(el("div", "muted", q() ? "Nothing found." : "No pages yet.")).style.padding = "6px 10px"; return; }
+  o.list.forEach(h => {
+    const r = el("div"); r.style.cssText = "display:flex;align-items:center;gap:4px";
+    const w = el("span", "when", h.when);
+    const go = el("button", "", h.title || h.url); go.title = h.url; go.style.cssText = "flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+    go.onclick = () => post({cmd:"histopen", url: h.url});
+    const x = el("button", "", "\u2715"); x.title = "Remove from history"; x.style.cssText = "width:34px;flex:none;text-align:center;color:var(--muted)";
+    x.onclick = () => post({cmd:"histremove", url: h.url, text: q()});
+    r.append(w, go, x); list.appendChild(r);
+  });
+}
+window.ronin = {
+  historyList(o){ const l = document.querySelector('#ov.show [data-hist="1"]'); const i = document.querySelector("#ov.show .hist input");
+    if (l) histDraw(l, o, () => i ? i.value : ""); },
+  state(s){ S = s; renderTabs(); renderNav(); },
+  overlay(o){
+    if (o.kind === "downloads" && dlPatch(o)) return; // only numbers changed: no redraw (buttons stay clickable)
+    const f = overlays[o.kind]; if (f) { const c = f(o); openOv(c, c.dataset && c.dataset.clear === "1"); }
+  },
+  bar(b){ if (b.text) bars[b.tab || 0] = b; else delete bars[b.tab || 0]; renderBar(); },
+  focusAddress(){ if (!ovOpen){ addr.focus(); } },
+  closeOverlay(){ closeOv(); },
+  tabSearch(){ tabSearch(); },
+  theme(t){ applyTheme(t); }
+};
+document.addEventListener("keydown", e => { if (e.key === "Escape" && ovOpen) closeOv(); });
+applyTheme(THEME);
+$("#themeBtn").onclick = () => post({cmd:"theme"});
+if (PANEL) post({cmd:"panelready"});
+else { post({cmd:"ready"}); reportLayout(); }
+</script>
+</body>
+</html>
