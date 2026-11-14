@@ -50,8 +50,20 @@
     }
     return seen > 0 && light * 2 > seen;
   }
+  // A page's security rules (CSP) may forbid <style> tags (UDISE+ sign-in does):
+  // a constructed style sheet is always allowed, so it is used when the engine has it.
+  var sheetAdded = false;
   function ensureStyle() {
-    if (document.getElementById(STYLE_ID)) return;
+    if (sheetAdded || document.getElementById(STYLE_ID)) return;
+    try {
+      if (window.CSSStyleSheet && "adoptedStyleSheets" in document) {
+        var sh = new CSSStyleSheet();
+        sh.replaceSync(CSS);
+        document.adoptedStyleSheets = document.adoptedStyleSheets.concat([sh]);
+        sheetAdded = true;
+        return;
+      }
+    } catch (e) {}
     var s = document.createElement("style");
     s.id = STYLE_ID; s.textContent = CSS;
     (document.head || document.documentElement).appendChild(s);

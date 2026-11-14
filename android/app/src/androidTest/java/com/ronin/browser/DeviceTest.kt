@@ -268,6 +268,9 @@ class DeviceTest {
             sc.onActivity { a -> phone = a.uaFor("https://mail.google.com/"); sheets = a.uaFor("https://docs.google.com/spreadsheets/d/x/edit") }
             assertTrue("Google refuses sign-in when the name says wv: $phone", !phone.contains("; wv") && phone.contains("Chrome/"))
             assertTrue("Sheets not the computer version: $sheets", sheets.contains("X11; Linux x86_64") && !sheets.contains("Mobile"))
+            var wa = ""
+            sc.onActivity { a -> wa = a.uaFor("https://web.whatsapp.com/") }
+            assertTrue("WhatsApp Web shows the phone page: $wa", wa.contains("X11; Linux x86_64"))
             assertEquals("\"" + phone + "\"", eval(sc, "navigator.userAgent"))
         }
     }

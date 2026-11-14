@@ -143,6 +143,7 @@ jobs:
           script: |
             ./gradlew --no-daemon connectedDebugAndroidTest || echo failed > ../device-tests-failed
             adb pull /data/local/tmp/qa ../qa || true
+            adb logcat -d -b crash > ../crash.txt || true
       - name: Screenshots for checking (release "qa")
         if: always() && github.event_name != 'pull_request'
         env:
@@ -158,6 +159,8 @@ jobs:
         if: always()
         run: |
           echo "## ${{ matrix.device }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -s crash.txt ]; then echo "### App crashes"; echo '```'; head -80 crash.txt; echo '```'; fi >> "$GITHUB_STEP_SUMMARY"
+          if [ -s crash.txt ]; then echo "---- crash log ----"; head -120 crash.txt; fi
           python3 - android/app/build/outputs/androidTest-results >> "$GITHUB_STEP_SUMMARY" <<'PY'
           import glob, sys, xml.etree.ElementTree as ET
           rows = []

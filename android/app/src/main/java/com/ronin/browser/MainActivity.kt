@@ -660,7 +660,8 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
 
     fun uaFor(url: String): String {
         val h = Rules.hostOf(url)
-        return if (h == "docs.google.com" || h.endsWith(".docs.google.com")) desktopUa else phoneUa
+        // WhatsApp Web shows only "use the app" to phones and tablets
+        return if (h == "docs.google.com" || h.endsWith(".docs.google.com") || h == "web.whatsapp.com") desktopUa else phoneUa
     }
 
     private fun homeBg() = Color.parseColor(if (app.store.night) "#14171F" else "#EEF0F4")

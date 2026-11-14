@@ -15,6 +15,14 @@
     css += "ytd-ad-slot-renderer,ytd-in-feed-ad-layout-renderer,ytd-promoted-sparkles-web-renderer,ytd-promoted-video-renderer,ytd-display-ad-renderer,ytd-compact-promoted-video-renderer,ytd-companion-slot-renderer,ytd-action-companion-ad-renderer,ytd-banner-promo-renderer,ytd-statement-banner-renderer,ytd-video-masthead-ad-v3-renderer,ytd-primetime-promo-renderer,ytd-merch-shelf-renderer,ytd-player-legacy-desktop-watch-ads-renderer,ytd-rich-item-renderer:has(ytd-ad-slot-renderer),#player-ads,#masthead-ad,#panels ytd-ads-engagement-panel-content-renderer,ytd-engagement-panel-section-list-renderer[target-id='engagement-panel-ads'],.ytp-ad-overlay-container,.ytp-ad-image-overlay,.ytp-featured-product,.ytp-suggested-action,ytm-promoted-sparkles-web-renderer,ad-slot-renderer{display:none!important}";
   }
   function addStyle() {
+    try { // allowed even where the page forbids <style> tags (CSP)
+      if (window.CSSStyleSheet && "adoptedStyleSheets" in document) {
+        var sh = new CSSStyleSheet();
+        sh.replaceSync(css);
+        document.adoptedStyleSheets = document.adoptedStyleSheets.concat([sh]);
+        return;
+      }
+    } catch (e) {}
     var s = document.createElement("style");
     s.id = "ronin-ab";
     s.textContent = css;
