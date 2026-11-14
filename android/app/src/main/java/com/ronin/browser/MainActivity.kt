@@ -817,9 +817,11 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                 put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
                 put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
                 put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/Ronin")
+                put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1) // hidden until the file is complete
             }
             val uri = contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv) ?: return null
             contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+            contentResolver.update(uri, android.content.ContentValues().apply { put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
             return uri
         }
         val f = java.io.File(getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS), name)

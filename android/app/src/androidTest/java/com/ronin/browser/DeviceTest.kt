@@ -293,7 +293,7 @@ class DeviceTest {
             var found = emptyList<Pair<String, Long>>()
             assertTrue("Excel + PDF not saved", waitFor(40) {
                 found = recentDownloads(before)
-                found.any { it.first.endsWith(".xlsx") } && found.any { it.first.endsWith(".pdf") }
+                found.any { it.first.endsWith(".xlsx") && it.second > 500 } && found.any { it.first.endsWith(".pdf") && it.second > 500 }
             })
             assertTrue("files are empty: $found", found.all { it.second > 500 })
             Thread.sleep(800)

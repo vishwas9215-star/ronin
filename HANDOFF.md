@@ -27,6 +27,7 @@ Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + tes
 - Publish: `gh workflow run build.yml --ref main -f publish=true` (tag pushes blocked by the git proxy).
 - Keys: keys/ronin-keys.tar.enc, password only in secret RONIN_KEYS_PASS + owner's backup txt. Never read/print.
 - lists.yml twice a day: release "lists" = adblock-domains.txt.gz + threat-domains.txt.gz (phishing/malware).
+- Never push to main while a publish run is going: the concurrency group cancels it.
 - Check YAML locally before pushing (`python3 -c "import yaml;..."`): a ": " in a step name broke CI once.
 
 ## Tablet (OnePlus Pad OPD2415, Android 16, adb 3b44b9f5)
