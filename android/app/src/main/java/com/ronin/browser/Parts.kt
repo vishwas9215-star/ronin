@@ -63,7 +63,7 @@ object Parts {
         if (!first && adultBlocked(ctx) && pinSet) {
             // turning it back on needs the PIN set by the parent
             val box = android.widget.EditText(ctx).apply { inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD; hint = "PIN" }
-            AlertDialog.Builder(ctx).setTitle("🔒 बदलने के लिए PIN").setView(box)
+            AlertDialog.Builder(ctx).setTitle("🔒 PIN to change Family Filter").setView(box)
                 .setPositiveButton("खोलें") { _, _ -> if (pinHash(box.text.toString()) == prefs(ctx).getString("adultPin", "")) askAdult(ctx, false) else Toast.makeText(ctx, "PIN ग़लत है", Toast.LENGTH_LONG).show() }
                 .setNegativeButton("रद्द करें", null).show()
             return
@@ -72,17 +72,17 @@ object Parts {
     }
 
     private fun askAdult(ctx: Context, first: Boolean) {
-        val items = arrayOf("🚫 पूरी तरह बंद (बच्चों / बुज़ुर्गों का device)", "🕶 खुल सकें, पर Private में (history नहीं, ads / virus से बचाव)")
+        val items = arrayOf("🛡 Family Filter ON: restricted sites blocked (child / elderly device)", "🕶 Family Filter OFF: they open in Private (no history)")
         var pick = if (adultBlocked(ctx)) 0 else 1
-        AlertDialog.Builder(ctx).setTitle("🔞 इस device पर गंदी / जुआ वाली साइटें")
+        AlertDialog.Builder(ctx).setTitle("🛡 Family Filter for this device")
             .setSingleChoiceItems(items, pick) { _, i -> pick = i }
             .setPositiveButton("✔ ठीक है") { _, _ ->
                 prefs(ctx).edit().putBoolean("adultAsked", true).putBoolean("adultBlock", pick == 0).apply()
                 if (pick == 0) {
-                    val box = android.widget.EditText(ctx).apply { inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD; hint = "4 अंकों का PIN (खाली = PIN नहीं)" }
-                    AlertDialog.Builder(ctx).setTitle("🔒 PIN रखें? (ताकि बच्चा इसे बदल न सके)").setView(box)
-                        .setPositiveButton("✔ रखें") { _, _ -> prefs(ctx).edit().putString("adultPin", box.text.toString().trim().let { if (it.isEmpty()) "" else pinHash(it) }).apply() }
-                        .setNegativeButton("बिना PIN", null).show()
+                    val box = android.widget.EditText(ctx).apply { inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD; hint = "4-digit PIN (empty = no PIN)" }
+                    AlertDialog.Builder(ctx).setTitle("🔒 Set a PIN? (so nobody else can change it)").setView(box)
+                        .setPositiveButton("✔ Set") { _, _ -> prefs(ctx).edit().putString("adultPin", box.text.toString().trim().let { if (it.isEmpty()) "" else pinHash(it) }).apply() }
+                        .setNegativeButton("No PIN", null).show()
                 } else prefs(ctx).edit().putString("adultPin", "").apply()
             }
             .setNegativeButton(if (first) "बाद में" else "रद्द करें") { _, _ -> if (first) prefs(ctx).edit().putBoolean("adultAsked", true).apply() }

@@ -522,7 +522,7 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 		if sensitiveSite(uri) {
 			call(args, nsSetCancel, 1)
 			runOnUI(func() {
-				t.w.overlay("blocked", map[string]any{"tab": t.id, "host": hostOf(uri), "mode": "KIDS", "reason": "गंदी / जुआ वाली साइटें इस computer पर बंद हैं (परिवार की सुरक्षा)।"})
+				t.w.overlay("blocked", map[string]any{"tab": t.id, "host": hostOf(uri), "mode": "KIDS", "reason": "Family Filter is on for this computer."})
 			})
 			return
 		}

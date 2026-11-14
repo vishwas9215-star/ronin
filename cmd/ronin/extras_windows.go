@@ -36,8 +36,8 @@ func sensitiveSite(u string) bool {
 // askAdultBlock: on this computer, adult / gambling sites fully off (children, elderly) or opened in a
 // Private window (no history). Asked once on the first start, changeable from the menu.
 func askAdultBlock(hwnd uintptr) {
-	block := askYesNo(hwnd, "Ronin: गंदी / जुआ वाली साइटें",
-		"इस computer पर गंदी (adult) और जुआ वाली साइटें:\n\nYes = पूरी तरह बंद (बच्चे / बुज़ुर्ग इस्तेमाल करते हैं)\nNo = खुल सकें, पर Private window में (history नहीं, ads / virus से बचाव)")
+	block := askYesNo(hwnd, "Ronin: Family Filter",
+		"Family Filter for this computer:\n\nYes = ON: restricted sites are blocked (children / elderly use it)\nNo = OFF: they open only in a Private window (no history)")
 	_ = store.Update(func(s *settingsT) { s.AdultBlock = block; s.AdultAsked = true })
 }
 
