@@ -1,7 +1,7 @@
 # Ronin Browser 3 — HANDOFF 8 (15 Nov 2026, 3.11.0 published 03:38 IST)
 
 Owner: Vishwas (Hindi; both hands injured: fewest taps/typing). Not a coder: explain in Hindi, technical words in English.
-Current version: **3.10.0** published 14 Nov 23:15 IST (run 43618950937). Rollback: 3.9.0 / 3.8.0 releases on GitHub; Windows
+Current version: **3.11.0** published 15 Nov 03:38 IST (run 43645549883). Rollback: 3.10.0 / 3.9.0 releases on GitHub; Windows
 RoninSetup-3.5.1 / 3.4.0 in Downloads\Ronin Browser 3 Handoff.
 Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + test history: FEATURES.md.
 
@@ -229,8 +229,9 @@ top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped p
   "satta" = power, "income tax ghar baithe", "video record ... family", "100% guarantee admission") + CTA hiding
   normal posts, re-check cost, FB hidden letters, shield polling after onDestroy/onStop, Gmail redirect loop, toolbar
   strict mode. All fixed; those sentences are now in scam_corpus.json "normal".
-- Still to do before publish: tablet (OnePlus Pad) check when he connects it; he turns on recording Accessibility
-  himself if wanted; then he names the version ("हाँ, V3.11.0 publish करो").
+- PUBLISHED 3.11.0 (run 43645549883, CI green on 13b8446). Next: his phone gets it via Ronin's own update
+  (Advanced Protection may block the install: his choice); tablet check when he connects it; recording Accessibility
+  is his choice; offer / transaction / OTP regexes still duplicated in Kotlin + JS.
 
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only
