@@ -50,6 +50,13 @@
     const p = x => String(x).padStart(2, '0');
     return p(d.getUTCDate()) + '/' + p(d.getUTCMonth() + 1) + '/' + d.getUTCFullYear();
   }
+  function excelDateTime(v) {
+    const d = excelDate(v);
+    const secs = Math.round((v % 1) * 86400);
+    if (!secs) return d;
+    const p = x => String(x).padStart(2, '0');
+    return d + ' ' + p(Math.floor(secs / 3600)) + ':' + p(Math.floor(secs / 60) % 60) + ':' + p(secs % 60);
+  }
   function plainNumber(v) {
     const x = Number(v);
     if (!isFinite(x)) return v;
@@ -78,7 +85,7 @@
         dateStyle[i] = (id >= 14 && id <= 22) || (id >= 45 && id <= 47) || (custom[id] !== undefined && /[dy]/i.test(custom[id].replace(/"[^"]*"|\[[^\]]*\]/g, '')));
       });
     }
-    const out = { tables: [], site: '', title: '' };
+    const out = { tables: [], site: '', title: '', dmy: true }; // dates Ronin writes from Excel cells are day/month
     for (const sh of tags(wb, 'sheet')) {
       const name = sh.getAttribute('name') || '';
       const rid = sh.getAttribute('r:id') || sh.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id');
@@ -101,7 +108,7 @@
           if (t === 's') val = v ? (shared[+v.textContent] || '') : '';
           else if (t === 'inlineStr') val = tags(c, 't').map(x => x.textContent).join('');
           else if (t === 'b') val = v && v.textContent === '1' ? 'TRUE' : 'FALSE';
-          else if (v) val = (t === 'str' || t === 'e') ? v.textContent : (dateStyle[+c.getAttribute('s') || 0] ? excelDate(+v.textContent) : plainNumber(v.textContent));
+          else if (v) val = (t === 'str' || t === 'e') ? v.textContent : (dateStyle[+c.getAttribute('s') || 0] ? excelDateTime(+v.textContent) : plainNumber(v.textContent));
           cells[ci] = val;
         });
       });
@@ -137,7 +144,7 @@
       } else cell += ch;
     }
     if (cell || row.length) { row.push(cell); grid.push(row); }
-    return { tables: [{ sheet: '', grid }], site: '', title: '' };
+    return { tables: [{ sheet: '', grid }], site: '', title: '', dmy: false }; // Google Form CSV: month/day
   }
 
   function readHtml(text) {
@@ -164,7 +171,7 @@
     }
     const tables = got.tables.map(t => toTable(t.grid)).filter(Boolean);
     if (!tables.length) throw new Error('इसमें कोई table नहीं मिली');
-    return { name, tables, site: got.site, title: got.title };
+    return { name, tables, site: got.site, title: got.title, dmy: got.dmy !== false };
   };
 
   // the header row is the first full-looking row with words like "name" in it
@@ -183,11 +190,13 @@
     let start = hi + 1;
     // a second header line ("Name" under "Father") has no digits at all
     const nx = grid[start];
-    if (nx && !nx.some(c => /\d/.test(c)) && nx.filter(c => String(c).trim()).length >= 2 && grid.length > start + 1) {
+    // a second header line: no digits, and it fills cells under a merged (empty) header cell
+    if (nx && !nx.some(c => /\d/.test(c)) && nx.filter(c => String(c).trim()).length >= 2 && grid.length > start + 1 &&
+        nx.some((c, i) => String(c).trim() && !head[i])) {
       head = head.map((h, i) => [h, String(nx[i] || '').trim()].filter(Boolean).join(' '));
       start++;
     }
-    const width = Math.max(head.length, ...grid.slice(start).map(r => r.length));
+    const width = grid.slice(start).reduce((m, r) => Math.max(m, r.length), head.length);
     head = Array.from({ length: width }, (_, i) => head[i] || '');
     const hk = head.map(h => h.toLowerCase()).join('|');
     let rows = grid.slice(start)
@@ -201,11 +210,16 @@
   }
 
   // ---------------------------------------------------------------- fields
+  // order matters: the first rule that fits decides ("Father Aadhaar No" is not the father's name)
   const FIELDS = [
     ['serial', /^(s\.?\s*no|sr\.?\s*no|sl\.?\s*no|serial(\s*no)?|क्रम(\s*सं.*)?|क्र\.?\s*सं\.?|#)\.?$/i],
-    ['skip', /status|verif|request|change|remark|action|edit|delete|view/i],
+    ['skip', /status|verif|request|change|remark|action|edit|delete|view|tongue|भाषा|as per|अनुसार|bank|ifsc|account|खाता/i],
     ['time', /^(timestamp|time ?stamp|टाइमस्टैम्प|समय)$/i],
     ['email', /e-?mail|ईमेल/i],
+    ['skip', /(father|mother|guardian|parent|husband|पिता|माता|अभिभावक|पति).*(aadha?a?r|आधार|mobile|phone|मोबाइल|फ़ोन|फोन|email|occupation|income|व्यवसाय|आय|education|शिक्षा)/i],
+    ['aadhaar', /aadha?a?r|आधार/i],
+    ['mobile', /mobile|phone|contact|मोबाइल|फ़ोन|फोन/i],
+    ['address', /address|पता|village|ग्राम/i],
     ['father', /father|husband|पिता|पति/i],
     ['mother', /mother|माता/i],
     ['guardian', /guardian|अभिभावक|संरक्षक/i],
@@ -214,17 +228,14 @@
     ['admno', /ad+mis+ion.*(no|number|num)|प्रवेश.*(सं|क्रमांक)/i],
     ['pen', /^(student\s*)?pen(\s*(no|number|id))?$/i],
     ['pran', /\bpran\b|प्रान/i],
-    ['empid', /(employee|emp|teacher|staff|ehrms|e-hrms|कर्मचारी|शिक्षक|मानव\s*सम्पदा|मानव\s*संपदा).*(id|code|कोड|आईडी|no\b|number|संख्या)|^(ehrms|manav sampada)/i],
+    ['empid', /(employee|emp|teacher|staff|ehrms|e-hrms|कर्मचारी|शिक्षक|मानव\s*सम्पदा|मानव\s*संपदा)\b.*(\bid\b|code|कोड|आईडी|\bno\.?$|\bnumber\b|संख्या)|^(ehrms|e-hrms|manav sampada)(\s*(id|code|no))?$/i],
     ['joining', /joining|appointment|नियुक्ति|कार्यभार|\bdoj\b/i],
     ['designation', /designation|^post$|^पद(नाम)?$/i],
-    ['aadhaar', /aadha?a?r|आधार/i],
-    ['mobile', /mobile|phone|contact|मोबाइल|फ़ोन|फोन/i],
     ['gender', /gender|^sex$|लिंग/i],
     ['class', /^(student\s*|current\s*)?(class|grade|std|standard|कक्षा)(\s*(name|no))?$/i],
     ['section', /^(section|sec|अनुभाग)$/i],
     ['religion', /religion|धर्म/i],
     ['category', /^(social\s*)?category$|जाति|वर्ग/i],
-    ['address', /address|पता|village|ग्राम/i],
     ['name', /(student|child|pupil|teacher|employee|staff|छात्र|विद्यार्थी|बच्चे|बालक|शिक्षक|अध्यापक|कर्मचारी).*(name|नाम)|name of (the )?(student|child|teacher|employee)|^(full name|name|नाम|पूरा नाम|student|teacher)$/i],
   ];
   const ORDER = ['name', 'empid', 'father', 'mother', 'guardian', 'dob', 'gender', 'designation', 'joining', 'class', 'section', 'admno', 'admdate', 'pen', 'pran', 'aadhaar', 'mobile', 'email', 'category', 'religion', 'address', 'time'];
@@ -234,7 +245,6 @@
     const x = h.trim();
     for (const [f, re] of FIELDS) {
       if (re.test(x)) {
-        if (f === 'aadhaar' && /father|mother|guardian|पिता|माता|अभिभावक/i.test(x)) return 'key:' + x.toLowerCase();
         return f === 'skip' ? 'key:' + x.toLowerCase().replace(/[^a-z0-9ऀ-ॿ]+/g, ' ').trim() : f;
       }
     }
@@ -263,13 +273,13 @@
     return s;
   }
   const ROMAN = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10, XI: 11, XII: 12 };
-  function norm(field, v) {
+  function norm(field, v, mdy) {
     v = String(v || '').replace(/\s+/g, ' ').trim();
     if (!v || EMPTY.test(v)) return '';
     switch (field) {
       case 'name': case 'father': case 'mother': case 'guardian': return personName(v);
       case 'dob': case 'admdate': case 'joining': return dateOf(v);
-      case 'time': { const d = dateOf(v), t = (v.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i) || []); let h = +(t[1] || 0); if (/pm/i.test(t[4] || '') && h < 12) h += 12; return d + ' ' + String(h).padStart(2, '0') + ':' + (t[2] || '00') + ':' + (t[3] || '00'); }
+      case 'time': { const d = dateOf(mdy ? v.replace(/^(\d{1,2})([-\/.])(\d{1,2})\2/, '$3$2$1$2') : v), t = (v.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i) || []); let h = +(t[1] || 0); if (/pm/i.test(t[4] || '') && h < 12) h += 12; return d + ' ' + String(h).padStart(2, '0') + ':' + (t[2] || '00') + ':' + (t[3] || '00'); }
       case 'email': return v.toLowerCase().replace(/\s/g, '');
       case 'designation': return v.toUpperCase().replace(/[^A-Z\u0900-\u097f]+/g, ' ').trim();
       case 'gender': {
@@ -288,7 +298,8 @@
         return c.replace(/\s+/g, ' ');
       }
       case 'mobile': { const d = v.replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : d; }
-      case 'aadhaar': case 'pen': case 'admno': case 'empid': case 'pran': return v.toUpperCase().replace(/[^0-9A-Z]/g, '');
+      case 'aadhaar': return v.toUpperCase().replace(/[*•#]/g, 'X').replace(/[^0-9X]/g, '');
+      case 'pen': case 'admno': case 'empid': case 'pran': return v.toUpperCase().replace(/[^0-9A-Z]/g, '');
       case 'address': return v.toUpperCase().replace(/[^A-Z0-9ऀ-ॿ]+/g, ' ').trim();
       default: return v.toUpperCase().replace(/[^A-Z0-9ऀ-ॿ]+/g, ' ').trim();
     }
@@ -300,13 +311,19 @@
     if (a === b) return true;
     if (field === 'aadhaar' && (/X/.test(a) || /X/.test(b))) return a.slice(-4) === b.slice(-4); // masked numbers
     if (field === 'address') {
-      const ta = new Set(a.split(' ')), tb = new Set(b.split(' '));
+      // "BARSOMA" and "VILLAGE BARSOMA POST JAISINGHPUR" are the same place; another village is not
+      const words = x => new Set(x.split(' ').filter(t => t && !ADDRESS_WORDS.has(t)));
+      const ta = words(a), tb = words(b);
+      if (!ta.size || !tb.size) return true;
       let both = 0;
       ta.forEach(t => { if (tb.has(t)) both++; });
-      return both / Math.min(ta.size, tb.size) >= 0.6; // "BARSOMA" and "VILLAGE BARSOMA POST ..." are the same place
+      if (both === Math.min(ta.size, tb.size)) return true;
+      return both / (ta.size + tb.size - both) >= 0.6;
     }
     return false;
   }
+
+  const ADDRESS_WORDS = new Set(['VILLAGE', 'VILL', 'VIL', 'GRAM', 'GRAAM', 'PANCHAYAT', 'POST', 'PO', 'P', 'O', 'TEHSIL', 'TAHSIL', 'TEH', 'BLOCK', 'DISTRICT', 'DIST', 'DISTT', 'JILA', 'JANPAD', 'THANA', 'PS', 'WARD', 'NO', 'UP', 'U', 'UTTAR', 'PRADESH', 'INDIA', 'MOHALLA', 'PIN', 'ग्राम', 'पोस्ट', 'तहसील', 'जिला', 'ब्लॉक', 'जनपद', 'थाना', 'वार्ड', 'मोहल्ला']);
 
   function lev(a, b) {
     if (a === b) return 0;
@@ -340,17 +357,25 @@
   function score(a, b) {
     const n = nameSim(a.name, b.name);
     const sameId = a.empid && a.empid === b.empid;
+    // a full Aadhaar / PEN / employee code that differs: never the same person (twins!)
+    const fullAadhaar = x => x && x.length === 12 && !/X/.test(x);
+    if (fullAadhaar(a.aadhaar) && fullAadhaar(b.aadhaar) && a.aadhaar !== b.aadhaar) return null;
+    if (a.pen && b.pen && a.pen !== b.pen) return null;
+    if (a.empid && b.empid && a.empid !== b.empid) return null;
     if (n < 0.6 && !sameId) return null;
     let s = n * 50, max = 50;
     if (a.father && b.father) { const f = nameSim(a.father, b.father); max += 25; s += f * 25 - (f < 0.5 ? 20 : 0); }
     if (a.mother && b.mother) { const f = nameSim(a.mother, b.mother); max += 10; s += f * 10 - (f < 0.5 ? 8 : 0); }
     if (a.dob && b.dob) { max += 20; s += a.dob === b.dob ? 20 : dobNear(a.dob, b.dob) ? 8 : -20; }
     if (a.gender && b.gender) { max += 5; s += a.gender === b.gender ? 5 : -10; }
-    if (a.class && b.class) { max += 3; s += a.class === b.class ? 3 : 0; }
+    if (a.class && b.class) { max += 3; s += a.class === b.class ? 3 : -15; }
     if (a.empid && b.empid) { max += 40; s += a.empid === b.empid ? 40 : -30; }
     if (a.mobile && b.mobile && a.mobile.length === 10) { max += 10; s += a.mobile === b.mobile ? 10 : 0; }
     if (a.email && b.email) { max += 10; s += a.email === b.email ? 10 : 0; }
-    return { s, ratio: s / max };
+    // same parents but the child's name differs: could be a brother or sister, never "sure"
+    const sibling = n < 1 && a.father && b.father && nameSim(a.father, b.father) >= 0.9 && !(a.aadhaar && a.aadhaar === b.aadhaar) && !sameId;
+    if (sibling && a.dob && b.dob && a.dob !== b.dob) return null; // another name AND another birthday: a brother or sister
+    return { s, ratio: s / max, sibling };
   }
   const SURE = 0.78, MAYBE = 0.62;
 
@@ -367,12 +392,15 @@
       const keys = new Set(t.head.map(fieldOf));
       // a Google Form download (has "Timestamp") is its own source: old form and new form stay apart
       const form = keys.has('time');
-      let src = form ? null : sources.find(s => !s.form && (label ? s.label === label : jaccard(s.keys, keys) >= 0.7));
+      const sig = t.head.map(fieldOf).filter(k => k !== 'serial').join('|');
+      let src = form ? null : sources.find(s => !s.form && (label ? s.label === label : !s.fromLabel && s.sigs.has(sig)));
       if (!src) {
-        src = { label: label || f.name.replace(/\.[a-z0-9]+$/i, '').replace(/\s*\((responses|form responses[^)]*|उत्तर|जवाब)\)\s*/ig, ' ').replace(/\s+/g, ' ').trim().slice(0, 30), form, keys: new Set(), head: [], fieldIndex: {}, rows: [], files: new Set(), skipped: 0, seen: new Set() };
+        src = { label: label || f.name.replace(/\.[a-z0-9]+$/i, '').replace(/\s*\((responses|form responses[^)]*|उत्तर|जवाब)\)\s*/ig, ' ').replace(/\s+/g, ' ').trim().slice(0, 30), form, fromLabel: !!label, sigs: new Set(), keys: new Set(), head: [], fieldIndex: {}, rows: [], files: new Set(), skipped: 0, seen: new Set() };
         sources.push(src);
       }
       keys.forEach(k => src.keys.add(k));
+      src.sigs.add(sig);
+      if (f.dmy === false) src.mdy = true;
       src.files.add(f.name);
       const map = t.head.map(h => {
         const k = fieldOf(h);
@@ -390,13 +418,21 @@
         src.rows.push(row);
       }
     }
+    // form times: 11/30/2026 is month/day, 30/11/2026 day/month; the values decide when they can
+    sources.forEach(s => {
+      const ti = s.head.findIndex(h => h.key === 'time');
+      if (ti < 0) return;
+      const parts = s.rows.map(r => (r[ti] || '').match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.]\d{2,4}/)).filter(Boolean);
+      if (parts.some(m => +m[2] > 12)) s.mdy = true;
+      else if (parts.some(m => +m[1] > 12)) s.mdy = false;
+    });
     sources.forEach((s, i) => { if (sources.findIndex(x => x.label === s.label) !== i) s.label += ' (' + (i + 1) + ')'; });
 
     // 2. each row's comparable values
     const recs = [];
     sources.forEach((s, si) => s.rows.forEach(row => {
       const f = {};
-      s.head.forEach((h, i) => { if (!h.key.startsWith('key:') && !(h.key in f)) f[h.key] = norm(h.key, row[i]); });
+      s.head.forEach((h, i) => { if (!h.key.startsWith('key:') && !(h.key in f)) f[h.key] = norm(h.key, row[i], s.mdy); });
       recs.push({ si, row, f });
     }));
 
@@ -422,7 +458,9 @@
       keys.forEach(k => (index.get(k) || []).forEach(c => out.add(c)));
       return out;
     };
-    const strongKey = f => f.empid ? 'e' + f.empid : f.name && (f.dob || f.father) ? f.name + '|' + (f.dob || '') + '|' + (f.father || '') : f.name && f.mobile ? f.name + '|m' + f.mobile : f.name && f.email ? f.name + '|' + f.email : '';
+    const strongKey = f => f.empid ? 'e' + f.empid : f.aadhaar && f.aadhaar.length === 12 && !/X/.test(f.aadhaar) ? 'a' + f.aadhaar :
+      f.name && (f.dob || f.father) ? [f.name, f.dob, f.father, f.mother, f.class, f.gender].map(x => x || '').join('|') :
+      f.name && f.mobile ? f.name + '|m' + f.mobile + '|' + (f.class || '') : f.name && f.email ? f.name + '|' + f.email : '';
     const latestFirst = g => g.sort((a, b) => (b.f.time || '').localeCompare(a.f.time || ''));
 
     sources.forEach((s, si) => {
@@ -443,7 +481,7 @@
       groups.forEach(g => candidates(g[0].f).forEach(c => {
         if (c.recs.some(r => r.si === si)) return;
         const sc = score(childFeat(c), g[0].f);
-        if (sc && sc.ratio >= MAYBE) pairs.push({ c, g, s: sc.s, ratio: sc.ratio });
+        if (sc && sc.ratio >= MAYBE) pairs.push({ c, g, s: sc.s, ratio: sc.ratio, sibling: sc.sibling });
       }));
       pairs.sort((a, b) => b.s - a.s);
       const usedC = new Set(), usedG = new Set();
@@ -455,6 +493,7 @@
         usedC.add(p.c); usedG.add(p.g);
         p.c.recs.push(...p.g);
         if (p.ratio < SURE) p.c.weak = 'नारंगी: मिलान पक्का नहीं, जाँचें';
+        else if (p.sibling) p.c.weak = 'नारंगी: नाम अलग, माता-पिता एक: भाई-बहन तो नहीं? जाँचें';
         else if (rival) p.c.weak = 'नारंगी: एक और मिलता-जुलता नाम है, मिलान जाँचें';
         Object.keys(p.g[0].f).forEach(k => { if (!p.c.feat[k]) p.c.feat[k] = p.g[0].f[k]; });
         addIndex(p.c, p.g[0].f);
@@ -514,7 +553,7 @@
       });
       let differs = false;
       cols.forEach((col, ci) => {
-        const vals = col.has.filter(([si]) => inSrc[si].length).map(([si, hi]) => ({ si, raw: inSrc[si][0].row[hi] || '', n: norm(col.key.startsWith('key:') ? '' : col.key, inSrc[si][0].row[hi] || '') }));
+        const vals = col.has.filter(([si]) => inSrc[si].length).map(([si, hi]) => ({ si, raw: inSrc[si][0].row[hi] || '', n: norm(col.key.startsWith('key:') ? '' : col.key, inSrc[si][0].row[hi] || '', sources[si].mdy) }));
         const filled = vals.filter(v => v.n);
         let shown = filled.length ? filled[0].raw : (vals[0] ? vals[0].raw : '');
         if (col.key === 'time') { // when each form was filled: shown, never a "difference"
@@ -546,9 +585,11 @@
     const sameForAll = [];
     const keepCol = head.map((h, c) => {
       if (c < 2 || out.some(o => o.issues[c])) return true;
-      const vals = new Set(out.map(o => o.row[c]).filter(Boolean));
-      if (vals.size === 1) sameForAll.push([h, [...vals][0]]);
-      return vals.size > 1;
+      const all = out.map(o => o.row[c]);
+      const vals = new Set(all.filter(Boolean));
+      if (!vals.size) return false; // empty for everyone
+      if (vals.size === 1 && all.every(Boolean)) { sameForAll.push([h, [...vals][0]]); return false; }
+      return true;
     });
     const newIndex = [];
     let ni = 0;
@@ -581,7 +622,7 @@
     sameForAll.forEach(([h, v]) => info.push([h + ' (सभी के लिए)', v.length > 60 ? v.slice(0, 57) + '...' : v]));
     info.push(['एक जैसी पंक्ति दोबारा थी, छोड़ी / Same row repeated, skipped', String(sources.reduce((a, s) => a + s.skipped, 0))]);
     return {
-      title: multi ? sources.map(s => s.label).join(' + ') + ' मिलान' : sources[0].label + ' (सब files एक साथ)',
+      title: multi ? sources.map(s => s.label).join(' + ') + ' Match' : sources[0].label + ' (all files)',
       site: '',
       head: finalHead, rows, partial: '', printCols,
       printNote: printCols.length < finalHead.length ? 'PDF में जगह कम है; ये कॉलम सिर्फ़ Excel में: ' + finalHead.filter((_, c) => !printCols.includes(c)).join(', ') : '',

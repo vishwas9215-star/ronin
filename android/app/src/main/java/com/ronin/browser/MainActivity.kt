@@ -95,6 +95,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabsButton: Button
     private lateinit var tabStrip: LinearLayout
     private lateinit var newTabButton: Button
+    private lateinit var toolsButton: Button
     private var lastStripTab: Tab? = null
     private lateinit var progress: ProgressBar
     private lateinit var holder: FrameLayout
@@ -159,8 +160,9 @@ class MainActivity : AppCompatActivity() {
                 val t = current
                 when {
                     fullView != null -> fullCallback?.onCustomViewHidden()
+                    t != null && t.isTools -> leaveTools()
                     t != null && t.web.canGoBack() -> t.web.goBack()
-                    tabs.size > 1 && t != null -> closeTab(t)
+                    browsingTabs().size > 1 && t != null -> closeTab(t)
                     else -> moveTaskToBack(true) // the song keeps playing
                 }
             }
@@ -177,8 +179,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(out: Bundle) {
         super.onSaveInstanceState(out)
-        out.putStringArrayList("tabs", ArrayList(tabs.map { it.url.ifEmpty { HOME } }))
-        out.putInt("active", tabs.indexOf(current).coerceAtLeast(0))
+        val list = browsingTabs() // Ronin Tools is not kept as a tab
+        out.putStringArrayList("tabs", ArrayList(list.map { it.url.ifEmpty { HOME } }))
+        out.putInt("active", list.indexOf(current).coerceAtLeast(0))
     }
 
     private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
@@ -261,11 +264,24 @@ class MainActivity : AppCompatActivity() {
                 (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(address, InputMethodManager.SHOW_IMPLICIT)
             }
         }
+        // Ronin Tools (Data Match, PDF, Photo): a tool, not a tab
+        toolsButton = Button(this).apply {
+            text = "🧰 Tools"
+            textSize = 14f
+            isAllCaps = false
+            contentDescription = "Ronin Tools"
+            tag = "tools"
+            setTextColor(Color.parseColor("#E8EAF0"))
+            setBackgroundColor(Color.TRANSPARENT)
+            minWidth = 0; minimumWidth = 0
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(50))
+            setOnClickListener { openTools() }
+        }
         val stripRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(Color.parseColor("#0E1016"))
-            addView(stripScroll); addView(newTabButton)
+            addView(stripScroll); addView(newTabButton); addView(toolsButton)
         }
         root.addView(stripRow)
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -363,16 +379,19 @@ class MainActivity : AppCompatActivity() {
         if (t == mediaTab) { mediaTab = null; mediaPlaying = false }
         t.web.destroy()
         if (exporting) { exporting = false; readBar.visibility = View.GONE }
-        if (tabs.isEmpty()) newTab(HOME) else if (current == t) select(tabs[(i - 1).coerceAtLeast(0)])
+        val rest = browsingTabs()
+        if (rest.isEmpty()) newTab(HOME) else if (current == t) select(rest[(minOf(i, rest.size) - 1).coerceAtLeast(0)])
         updateTabsButton()
     }
 
     private fun updateTabsButton() {
-        tabsButton.text = tabs.size.toString()
+        val list = browsingTabs()
+        tabsButton.text = list.size.toString()
         if (!::tabStrip.isInitialized) return
+        toolsButton.setBackgroundColor(Color.parseColor(if (current?.isTools == true) "#2563EB" else "#00000000"))
         tabStrip.removeAllViews()
         val wide = resources.configuration.smallestScreenWidthDp >= 600
-        for (t in tabs) {
+        for (t in list) {
             val on = t == current
             val chip = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -408,7 +427,7 @@ class MainActivity : AppCompatActivity() {
             chip.addView(name); chip.addView(x)
             tabStrip.addView(chip)
         }
-        val i = tabs.indexOf(current)
+        val i = list.indexOf(current)
         if (current == lastStripTab) return // a title changed: do not jump while the user is swiping the tabs
         lastStripTab = current
         if (i >= 0) tabStrip.post { (tabStrip.parent as? android.widget.HorizontalScrollView)?.smoothScrollTo(tabStrip.getChildAt(i)?.left ?: 0, 0) }
@@ -420,10 +439,11 @@ class MainActivity : AppCompatActivity() {
     fun exportDataForTest() { current?.let { exportData(it) } }
 
     private fun showTabs() {
-        val names = tabs.map { (if (it == current) "▶ " else "") + it.title.ifBlank { display(it.url) } }.toMutableList()
+        val list = browsingTabs()
+        val names = list.map { (if (it == current) "▶ " else "") + it.title.ifBlank { display(it.url) } }.toMutableList()
         names.add("+ New tab")
         AlertDialog.Builder(this).setTitle("Tabs")
-            .setItems(names.toTypedArray()) { _, i -> if (i == tabs.size) newTab(HOME) else select(tabs[i]) }
+            .setItems(names.toTypedArray()) { _, i -> if (i == list.size) newTab(HOME) else { select(list[i]); updateTabsButton() } }
             .setNeutralButton("Close this tab") { _, _ -> current?.let { closeTab(it) } }
             .show()
     }
@@ -443,12 +463,6 @@ class MainActivity : AppCompatActivity() {
             t.url = TOOLS
             t.title = "PDF / Photo tools"
             t.web.loadUrl(TOOLS + "?k=" + toolsKey + "&dark=" + (if (app.store.night) "1" else "0"))
-            return
-        }
-        if (url == MERGE) {
-            t.url = MERGE
-            t.title = "डेटा मिलाओ"
-            t.web.loadDataWithBaseURL(MERGE, mergeHtml(), "text/html", "utf-8", null)
             return
         }
         if (url == HOME) {
@@ -522,8 +536,12 @@ class MainActivity : AppCompatActivity() {
                 if (req.url.getQueryParameter("k") == toolsKey && t.isTools) saveToolFile(t)
                 return true
             }
+            if (url.startsWith("https://ronin.data/close")) {
+                if (req.url.getQueryParameter("k") == toolsKey && tab().isTools) leaveTools()
+                return true
+            }
             if (url.startsWith("https://ronin.data/merge")) {
-                if (req.url.getQueryParameter("k") == mergeKey && tab().url == MERGE && !exporting) {
+                if (req.url.getQueryParameter("k") == toolsKey && tab().isTools && !exporting) {
                     exporting = true
                     view.evaluateJavascript("window.__roninMerge?window.__roninMerge.result():''") { res ->
                         val json = jsString(res)
@@ -773,13 +791,25 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
 
     // ---- Data -> Excel + PDF ---------------------------------------------------------------
 
-    /** "डेटा मिलाओ": Ronin's own page that merges several Excel files (Prerna + UDISE+, teachers' forms). */
-    private fun mergeHtml(): String = assets.open("ronin/merge.html").bufferedReader().readText()
-        .replace("{{MERGEJS}}", assets.open("ronin/merge.js").bufferedReader().readText())
-        .replace("{{NONCE}}", pageKey).replace("{{KEY}}", mergeKey).replace("{{DARK}}", if (app.store.night) "1" else "0")
+    // ---- Ronin Tools: not a browsing tab; the 🧰 button and "Back to browser" switch to and from it
+    private var beforeTools: Tab? = null
+    private fun browsingTabs() = tabs.filter { !it.isTools }
 
-    fun openMergeForTest() = newTab(MERGE)
-    fun openToolsForTest() = newTab(TOOLS)
+    fun openTools() {
+        val t = tabs.firstOrNull { it.isTools }
+        if (t == current) return
+        beforeTools = current
+        if (t != null) select(t) else newTab(TOOLS)
+        updateTabsButton()
+    }
+
+    private fun leaveTools() {
+        val back = beforeTools?.takeIf { it in tabs && !it.isTools } ?: browsingTabs().lastOrNull()
+        if (back != null) select(back) else newTab(HOME)
+        updateTabsButton()
+    }
+
+    fun openToolsForTest() = openTools()
 
     /** A file of the tools page, from inside the app (only for a tab Ronin opened the tools in). */
     private fun toolsFile(t: Tab, path: String): WebResourceResponse {
@@ -802,7 +832,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     private fun saveToolFile(t: Tab) {
         t.web.evaluateJavascript("window.__roninSave?JSON.stringify({name:window.__roninSave.name,mime:window.__roninSave.mime,n:window.__roninSave.n}):''") { raw ->
             val head = try { JSONObject(jsString(raw)) } catch (e: Exception) { return@evaluateJavascript }
-            val n = head.optInt("n"); val name = head.optString("name").replace(Regex("[\\\\/:*?\"<>|]+"), " ").trim().ifEmpty { "Ronin file" }
+            val n = head.optInt("n"); val name = head.optString("name").replace(Regex("[\\\\/:*?\"<>|]+"), " ").trim().ifEmpty { "Ronin file" }.let { if (Regex("(?i).*\\.(pdf|jpe?g|png)$").matches(it)) it else "$it.pdf" } // the tools only ever make these
             val mime = head.optString("mime").ifEmpty { "application/octet-stream" }
             if (n <= 0 || n > 400) return@evaluateJavascript
             val b64 = StringBuilder()
@@ -1078,8 +1108,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                 } else t.web.evaluateJavascript("(function(){var b=document.getElementById('ronin-data-btn');if(b)b.remove()})()", null)
             }
         }
-        items["🧰 PDF / Photo tools (छोटा करो, जोड़ो, sign, collage...)"] = { newTab(TOOLS) }
-        items["🔀 डेटा मिलाओ (Prerna + UDISE+ / शिक्षक forms)"] = { newTab(MERGE) }
+        items["🧰 Ronin Tools (Data Match, PDF, Photo)"] = { openTools() }
         items["🛡 Safe sites / ग़लती से रुकी साइटें"] = { showSafeSites() }
         items["🏦 Ronin Safe Money (banking)"] = { startActivity(Intent(this, SafeMoneyActivity::class.java)) }
         items["⟳ Update देखें / Check for updates"] = { Updater.check(this, quiet = false) }
@@ -1181,12 +1210,10 @@ h1{margin:0 0 4px;font-size:24px}p.sub{margin:0 0 6px;opacity:.7}p.note{margin-t
         const val HOME = "ronin://home"
         const val BACK_TO_SAFETY = "https://ronin.home/back"
         const val TRUST_PREFIX = "https://ronin.home/trust"
-        const val MERGE = "https://ronin.home/merge"
         const val TOOLS = "https://ronin.home/tools/"
         /** Proves "save this file" came from the tools page. */
         val toolsKey: String = java.util.UUID.randomUUID().toString().replace("-", "")
-        /** Proves "save the merged table" came from Ronin's own merge page. */
-        val mergeKey: String = java.util.UUID.randomUUID().toString().replace("-", "")
+
         /** Proves a link came from Ronin's own page (new tab page, red page). New each start. */
         val pageKey: String = java.util.UUID.randomUUID().toString().replace("-", "")
         /** A separate key for the Data button (it sits inside web pages; it can only start an export). */

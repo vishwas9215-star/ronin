@@ -103,6 +103,33 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   await tool('whatsapp'); await choose(['photo1.jpg']); await chip('Status'); r = await run();
   if (r.w !== 1080 || r.h !== 1920) bad('Status: ' + JSON.stringify(r));
 
+  // a turned page (/Rotate 90): the signature lands where tapped, upright
+  await tool('pdfsign');
+  const rot = await p.evaluate(async () => {
+    const { PDFDocument, degrees } = window.PDFLib;
+    const d = await PDFDocument.create(); d.addPage([595, 842]).setRotation(degrees(90));
+    return Array.from(await d.save());
+  });
+  const [fr] = await Promise.all([p.waitForEvent('filechooser'), p.click('button.big >> nth=0')]);
+  await fr.setFiles({ name: 'rot.pdf', mimeType: 'application/pdf', buffer: Buffer.from(rot) });
+  await p.waitForTimeout(800);
+  await p.click('button.chip:has-text("नया sign")').catch(() => {});
+  await p.fill('input[type=text]', 'TESTSIGN'); await p.waitForTimeout(400);
+  r = await run();
+  const ink = await p.evaluate(async () => {
+    const pdfjs = await import('/tools/lib/pdf.min.mjs');
+    pdfjs.GlobalWorkerOptions.workerSrc = '/tools/lib/pdf.worker.min.mjs';
+    const doc = await pdfjs.getDocument({ data: window.__lastSaved.bytes.slice() }).promise;
+    const page = await doc.getPage(1), vp = page.getViewport({ scale: 0.5 });
+    const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height; const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    const d = ctx.getImageData(0, 0, c.width, c.height).data; let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+    for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) { const i = (y * c.width + x) * 4; if (d[i] < 128) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); } }
+    return { cx: (x0 + x1) / 2 / c.width, cy: (y0 + y1) / 2 / c.height, wide: x1 - x0 > y1 - y0 };
+  });
+  if (Math.abs(ink.cx - 0.78) > 0.05 || Math.abs(ink.cy - 0.88) > 0.05 || !ink.wide) bad('turned page sign: ' + JSON.stringify(ink));
+
   // the hand-over to Ronin, as Ronin does it: read the pieces, say "saved"
   await p.route('https://ronin.data/**', r => r.fulfill({ status: 204, body: '' }));
   await p.goto('https://ronin.home/tools/?k=TESTKEY'); await p.waitForSelector('.tile');

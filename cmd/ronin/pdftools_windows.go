@@ -35,18 +35,63 @@ var toolsKey = func() string {
 	return hex.EncodeToString(b)
 }()
 
+// showTools opens Ronin Tools over the page. It is not a browsing tab: the tab strip
+// does not list it; the Tools button and "Back to browser" switch between them.
 func (w *Window) showTools() {
+	for _, t := range w.tabs {
+		if t.isTools {
+			if w.active != t {
+				w.beforeTools = w.active
+				w.selectTab(t)
+			}
+			return
+		}
+	}
+	before := w.active
 	t := w.newTab("", true)
 	if t == nil {
 		return
 	}
+	w.beforeTools = before
 	dark := "1"
 	if themeName() == "light" {
 		dark = "0"
 	}
 	t.isNewTab = false
 	t.isTools = true
+	t.title = "Ronin Tools"
 	_ = t.wv.Navigate(toolsPrefix + "?k=" + toolsKey + "&dark=" + dark)
+	w.sendState()
+}
+
+// leaveTools goes back to the page that was open before Tools (Tools keeps its place).
+func (w *Window) leaveTools() {
+	for _, t := range w.tabs {
+		if t == w.beforeTools && !t.isTools {
+			w.selectTab(t)
+			return
+		}
+	}
+	for i := len(w.tabs) - 1; i >= 0; i-- {
+		if !w.tabs[i].isTools {
+			w.selectTab(w.tabs[i])
+			return
+		}
+	}
+	w.newTab("", true)
+}
+
+// saveMerge takes Data Match's table from the page and saves Excel + PDF.
+func (t *Tab) saveMerge() {
+	if t.destroyed || !t.isTools || t.exporting {
+		return
+	}
+	t.exporting = true
+	t.runScript("window.__roninMerge?window.__roninMerge.result():''", func(res string) {
+		var body string
+		_ = json.Unmarshal([]byte(res), &body)
+		t.saveData(body)
+	})
 }
 
 // serveTools answers a request for one of the tools page's files. It returns false
@@ -120,6 +165,11 @@ func (t *Tab) saveToolFile() {
 				name := downloadguard.SanitizeName(head.Name)
 				if name == "" || name == "." {
 					name = "Ronin file"
+				}
+				switch strings.ToLower(filepath.Ext(name)) { // the tools only ever make these
+				case ".pdf", ".jpg", ".jpeg", ".png":
+				default:
+					name += ".pdf"
 				}
 				p := uniquePath(filepath.Join(downloadsDir(), name))
 				if err := os.WriteFile(p, data, 0o644); err != nil {

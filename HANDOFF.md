@@ -64,7 +64,9 @@ Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + tes
 ## 3.7.1 (published) / 3.8.0 (built, waiting for "हाँ, V3.8.0 publish करो")
 - 3.7.1: Data export marks: no lowercase mark; child repeated only by name + father/DOB; reason in the first
   column "जाँच" (colour-prefixed); PDF drops constant columns (owner's Prerna list 29 -> 3 pages).
-- 3.8.0 डेटा मिलाओ (cmd/ronin/ui/merge.js + merge.html; Windows merge_windows.go, Android MERGE page):
+- 3.8.0 Ronin Tools = a 🧰 Tools button (NOT a tab: hidden from the tab strip, "✕ Back to browser" ->
+  https://ronin.data/close?k=toolsKey). Categories Data / PDF / Photo, English tool names (owner asked).
+- Data Match (cmd/ronin/ui/tools/merge.js, inside the tools page; saves via ronin.data/merge?k=toolsKey):
   several Excel/CSV files -> one row per child/teacher. Kinds: diff (blue), only (grey, "form नहीं भरा"),
   similar (orange, match not sure), dup (yellow, newest form answer used). Google Form files (Timestamp) are
   separate sources; 2-of-3 agreement -> "शायद सही". PDF input NOT supported (asks for Excel).

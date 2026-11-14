@@ -113,7 +113,7 @@ func (t *Tab) saveData(body string) {
 		w.bar(t, "error", "📊 Excel file नहीं बन सकी: "+err.Error(), nil)
 		return
 	}
-	if t.isMerge {
+	if t.isTools {
 		t.title = d.Title // the file is named after what was merged
 	}
 	base := strings.TrimSuffix(pageFileName(t, ".xlsx"), ".xlsx")

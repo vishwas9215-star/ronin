@@ -84,7 +84,7 @@ async function openPdf(file, password) {
     return await pdfjs.getDocument({ data: data.slice(), password, useSystemFonts: true, isEvalSupported: false }).promise;
   } catch (e) {
     if (e && e.name === 'PasswordException') {
-      const err = new Error(password ? 'Password ग़लत है' : 'इस PDF पर password है: पहले "🔓 Password हटाओ" से खोलें');
+      const err = new Error(password ? 'Password ग़लत है' : 'इस PDF पर password है: पहले "🔓 Unlock PDF" से खोलें');
       err.needPassword = true;
       throw err;
     }
@@ -95,7 +95,7 @@ async function loadLib(file) {
   try {
     return await PDFDocument.load(await file.arrayBuffer());
   } catch (e) {
-    if (/encrypt/i.test(String(e && e.message))) throw new Error(file.name + ': इस PDF पर password है, पहले "🔓 Password हटाओ" से खोलें');
+    if (/encrypt/i.test(String(e && e.message))) throw new Error(file.name + ': इस PDF पर password है, पहले "🔓 Unlock PDF" से खोलें');
     throw new Error(file.name + ': PDF खुल नहीं रही');
   }
 }
@@ -301,36 +301,65 @@ async function makeStamp(sign, text, date) {
   return c;
 }
 
+// where to draw a picture so that it shows upright at (fx, fy) of the page as seen (0..1 from the
+// top left), w x h points as seen: turned pages (/Rotate) and the crop box are taken care of
+function placeOnPage(pg, fx, fy, w, hh) {
+  const box = pg.getCropBox ? pg.getCropBox() : Object.assign({ x: 0, y: 0 }, pg.getSize());
+  const rot = ((pg.getRotation().angle % 360) + 360) % 360;
+  const W = box.width, H = box.height;
+  let cx, cy;
+  if (rot === 90) { cx = fy * W; cy = fx * H; } else if (rot === 180) { cx = W - fx * W; cy = fy * H; } else if (rot === 270) { cx = W - fy * W; cy = H - fx * H; } else { cx = fx * W; cy = H - fy * H; }
+  const t = rot * Math.PI / 180, cos = Math.cos(t), sin = Math.sin(t);
+  // drawImage turns around its corner: move the corner so the centre lands on (cx, cy)
+  const x = box.x + cx - (w / 2) * cos + (hh / 2) * sin, y = box.y + cy - (w / 2) * sin - (hh / 2) * cos;
+  return { x, y, width: w, height: hh, rotate: degrees(rot) };
+}
+function seenSize(pg) {
+  const box = pg.getCropBox ? pg.getCropBox() : pg.getSize();
+  const rot = ((pg.getRotation().angle % 360) + 360) % 360;
+  return rot % 180 ? { width: box.height, height: box.width } : { width: box.width, height: box.height };
+}
+
 // ------------------------------------------------------------------ screens
+function closeTools() { if (KEY) location.href = 'https://ronin.data/close?k=' + KEY; }
+function topBar(back) {
+  return h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px' },
+    back ? h('button', { cls: 'back', on: { click: home } }, '‹ All tools') : h('span'),
+    h('button', { cls: 'chip', on: { click: closeTools } }, '✕ Back to browser'));
+}
 function home() {
   msgEl = null;
   app.innerHTML = '';
   const tile = (id, icon, name, sub) => h('button', { cls: 'tile', on: { click: () => open(id) } }, h('span', {}, icon), name, h('small', {}, sub));
   app.append(
-    h('h1', {}, '🧰 PDF / Photo tools'),
+    topBar(false),
+    h('h1', {}, '🧰 Ronin Tools'),
     h('p', { cls: 'sub' }, '🔒 सब कुछ इसी device पर होता है: कोई file internet पर नहीं जाती। बनी हुई file Downloads में save होती है।'),
-    h('h2', {}, 'PDF'),
+    h('h2', {}, '📊 Data'),
     h('div', { cls: 'grid' },
-      tile('pdfsmall', '📉', 'PDF छोटी करो', '50 KB, 100 KB... जितनी चाहिए'),
-      tile('merge', '➕', 'PDF जोड़ो', 'कई PDF / photo एक PDF में'),
-      tile('pages', '📄', 'पेज चुनो / हटाओ', 'निकालो, क्रम बदलो, घुमाओ'),
-      tile('numbers', '🔢', 'पेज नंबर', 'हर पेज पर नंबर'),
-      tile('pdfsign', '✍️', 'PDF पर sign / लिखो', 'sign, नाम, तारीख'),
-      tile('unlock', '🔓', 'Password हटाओ', 'जिसका password आपको पता है'),
-      tile('topdf', '🖼️', 'Photo से PDF', 'कई photo, एक PDF')),
-    h('h2', {}, 'Photo'),
+      tile('datamatch', '🔀', 'Data Match', 'Prerna + UDISE+, या शिक्षकों के forms: अंतर और छूटे हुए')),
+    h('h2', {}, '📄 PDF'),
     h('div', { cls: 'grid' },
-      tile('photosmall', '📉', 'Photo छोटी करो', '20 KB, 50 KB... form के लिए'),
-      tile('photosign', '✍️', 'Photo पर sign', 'sign, नाम, तारीख'),
+      tile('pdfsmall', '📉', 'Compress PDF', '50 KB, 100 KB... जितनी चाहिए'),
+      tile('merge', '➕', 'Merge PDF', 'कई PDF / photo एक PDF में'),
+      tile('pages', '📄', 'Organize Pages', 'पेज हटाओ, क्रम बदलो, घुमाओ'),
+      tile('numbers', '🔢', 'Page Numbers', 'हर पेज पर नंबर'),
+      tile('pdfsign', '✍️', 'Sign PDF', 'sign, नाम, तारीख'),
+      tile('unlock', '🔓', 'Unlock PDF', 'जिसका password आपको पता है'),
+      tile('topdf', '🖼️', 'Photos to PDF', 'कई photo, एक PDF')),
+    h('h2', {}, '🖼️ Photo'),
+    h('div', { cls: 'grid' },
+      tile('photosmall', '📉', 'Compress Photo', '20 KB, 50 KB... form के लिए'),
+      tile('photosign', '✍️', 'Sign Photo', 'sign, नाम, तारीख'),
       tile('collage', '🧩', 'Collage', '2-4 photo एक में'),
-      tile('whatsapp', '📱', 'WhatsApp size', 'DP और Status')));
+      tile('whatsapp', '📱', 'WhatsApp Size', 'DP और Status')));
   window.scrollTo(0, 0);
 }
 function open(id) {
   const t = T[id];
   app.innerHTML = '';
   msgEl = h('div', { id: 'msg' });
-  app.append(h('button', { cls: 'back', on: { click: home } }, '‹ सब tools'), h('h1', {}, t.title), h('p', { cls: 'sub' }, t.sub));
+  app.append(topBar(true), h('h1', {}, t.title), h('p', { cls: 'sub' }, t.sub));
   const body = h('div');
   app.append(body, msgEl);
   t.show(body);
@@ -382,9 +411,47 @@ function sizePicker(state, def) {
   return h('div', {}, h('label', { cls: 'opt' }, 'कितनी बड़ी (ज़्यादा से ज़्यादा)'), chips(SIZES, def, v => { state.kb = v; custom.value = ''; }), custom);
 }
 
+// ---- Data Match: Prerna + UDISE+ lists, or teachers' forms + seniority list (merge.js)
+T.datamatch = {
+  title: '🔀 Data Match',
+  sub: 'Prerna, UDISE+ या किसी भी portal की Excel / CSV files, या शिक्षकों के Google Form + seniority list एक साथ चुनें। हर व्यक्ति एक पंक्ति में आएगा; जहाँ अंतर है वह रंग और कारण के साथ, और जो किसी file में नहीं है (form नहीं भरा) वह भी दिखेगा।',
+  show(body) {
+    const read = [];
+    const box = h('ul', { cls: 'files' });
+    let result = null;
+    window.__roninMerge = { result: () => JSON.stringify(result) };
+    const run = runButton('🔀 Match and make Excel + PDF', async () => {
+      result = RoninMerge.merge(read.filter(f => f.data).map(f => f.data));
+      window.__lastMerge = result;
+      const lines = result.info.map(x => x[0] + ': ' + x[1]).join('\n');
+      msg((result.sources.length < 2 ? '⚠ अभी सब files एक ही तरह की लगती हैं। दूसरे portal / form की file भी जोड़ें तो अंतर दिखेगा।\n\n' : '') + lines + '\n\n📊 Excel + PDF बन रही है... (Downloads में save होगी)');
+      if (KEY) location.href = 'https://ronin.data/merge?k=' + KEY;
+    });
+    const draw = () => {
+      box.innerHTML = '';
+      read.forEach((f, i) => box.append(h('li', {}, h('b', {}, f.name + ' · ' + (f.error ? '⚠ ' + f.error : f.data ? f.data.tables.reduce((a, t) => a + t.rows.length, 0) + ' पंक्तियाँ' + (f.data.site ? ' · ' + f.data.site : '') : 'पढ़ रहा हूँ...')),
+        h('button', { title: 'हटाओ', on: { click: () => { read.splice(i, 1); draw(); } } }, '✕'))));
+      run.disabled = !read.some(f => f.data) || read.some(f => !f.data && !f.error);
+      pick.textContent = read.length ? '📂 और files जोड़ें' : '📂 Excel / CSV files चुनें';
+    };
+    const pick = h('button', { cls: 'big', on: { click: async () => {
+      const got = await pickFiles('.xlsx,.xlsm,.csv,.xls,.htm,.html,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv', true);
+      for (const file of got) {
+        if (read.some(f => f.name === file.name && f.size === file.size)) continue;
+        const f = { name: file.name, size: file.size };
+        read.push(f); draw();
+        try { f.data = await RoninMerge.readFile(file.name, await file.arrayBuffer()); } catch (e) { f.error = e.message || String(e); }
+        draw();
+      }
+    } } });
+    body.append(pick, box, run);
+    draw();
+  },
+};
+
 // ---- PDF smaller: every page becomes a picture, as sharp as the size allows
 T.pdfsmall = {
-  title: '📉 PDF छोटी करो', sub: 'Portal पर upload के लिए PDF को चुने हुए KB में लाता है।',
+  title: '📉 Compress PDF', sub: 'Portal पर upload के लिए PDF को चुने हुए KB में लाता है।',
   show(body) {
     const st = {};
     const run = runButton('📉 छोटी करो और save करो', async () => {
@@ -392,9 +459,10 @@ T.pdfsmall = {
       const limit = st.kb * 1024;
       if (f.size <= limit) { msg('यह PDF पहले से ' + kb(f.size) + ' की है, छोटी करने की ज़रूरत नहीं।'); return; }
       const orig = new Uint8Array(await f.arrayBuffer());
+      const signedNote = /\/ByteRange/.test(new TextDecoder('latin1').decode(orig)) ? '\n⚠ इस PDF पर digital signature था (जैसे e-Aadhaar): नई PDF में वह मान्य नहीं रहेगा।' : '';
       const done = async (bytes, how) => {
         await save(baseName(f.name) + ' (' + kb(bytes.length).replace(' ', '') + ').pdf', 'application/pdf', bytes);
-        msg('✔ बन गई: ' + kb(f.size) + ' → ' + kb(bytes.length) + '। Downloads में save है।\n' + how);
+        msg('✔ बन गई: ' + kb(f.size) + ' → ' + kb(bytes.length) + '। Downloads में save है।\n' + how + signedNote);
       };
       // 1. the same PDF written more tightly: nothing changes
       let lib = null;
@@ -436,7 +504,7 @@ T.pdfsmall = {
         }
       }
       const need = Math.ceil((smallest + 2000 + n * 400) / 1024 / 50) * 50;
-      throw new Error(st.kb + ' KB में यह PDF (' + n + ' पेज) पढ़ने लायक नहीं बन सकती: अक्षर धुंधले हो जाते। लगभग ' + need + ' KB तक साफ़ बनेगी। या "📄 पेज चुनो / हटाओ" से ज़रूरी पेज ही रखें।');
+      throw new Error(st.kb + ' KB में यह PDF (' + n + ' पेज) पढ़ने लायक नहीं बन सकती: अक्षर धुंधले हो जाते। लगभग ' + need + ' KB तक साफ़ बनेगी। या "📄 Organize Pages" से ज़रूरी पेज ही रखें।');
     });
     const list = fileList('application/pdf,.pdf', false, fs => { run.disabled = !fs.length; });
     body.append(list, sizePicker(st, 200), run);
@@ -445,7 +513,7 @@ T.pdfsmall = {
 
 // ---- join PDFs (and photos) in the order shown
 T.merge = {
-  title: '➕ PDF जोड़ो', sub: 'कई PDF और photo एक PDF में, ऊपर से नीचे के क्रम में। ↑ से क्रम बदलें।',
+  title: '➕ Merge PDF', sub: 'कई PDF और photo एक PDF में, ऊपर से नीचे के क्रम में। ↑ से क्रम बदलें।',
   show(body) {
     const run = runButton('➕ जोड़ो और save करो', async () => {
       const out = await PDFDocument.create();
@@ -468,6 +536,13 @@ T.merge = {
 // make the photos inside a PDF (JPEG scans) lighter until the file fits; the text is not touched
 async function shrinkImages(orig, limit) {
   const { PDFName, PDFNumber, PDFRawStream } = window.PDFLib;
+  const probe = await PDFDocument.load(orig, { updateMetadata: false });
+  const masks = new Set(); // pictures used as see-through masks of other pictures stay as they are
+  for (const [, obj] of probe.context.enumerateIndirectObjects()) {
+    const d = obj && obj.dict;
+    if (!d || !d.get) continue;
+    for (const k of ['SMask', 'Mask']) { const m = d.get(PDFName.of(k)); if (m && m.toString) masks.add(m.toString()); }
+  }
   for (const [maxSide, q0] of [[2000, 0.75], [1600, 0.6], [1400, 0.5], [1200, 0.42], [1100, 0.35], [1000, 0.3]]) { // below ~1000 px a scanned page is hard to read
     const doc = await PDFDocument.load(orig, { updateMetadata: false });
     let changed = 0;
@@ -477,7 +552,10 @@ async function shrinkImages(orig, limit) {
       if (d.get(PDFName.of('Subtype')) !== PDFName.of('Image')) continue;
       const filter = d.get(PDFName.of('Filter'));
       if (filter !== PDFName.of('DCTDecode')) continue; // only plain JPEG pictures
-      if (obj.contents.length < 20000) continue;
+      if (obj.contents.length < 20000 || masks.has(ref.toString())) continue;
+      if (d.get(PDFName.of('Decode')) || d.get(PDFName.of('Mask')) || d.get(PDFName.of('SMask')) || d.get(PDFName.of('DecodeParms')) || d.get(PDFName.of('ImageMask'))) continue;
+      const cs = d.get(PDFName.of('ColorSpace'));
+      if (cs !== PDFName.of('DeviceRGB') && cs !== PDFName.of('DeviceGray')) continue; // CMYK, indexed, special colours: left alone
       try {
         const img = new Image();
         const url = URL.createObjectURL(new Blob([obj.contents], { type: 'image/jpeg' }));
@@ -492,8 +570,6 @@ async function shrinkImages(orig, limit) {
         nd.set(PDFName.of('Height'), PDFNumber.of(c.height));
         nd.set(PDFName.of('ColorSpace'), PDFName.of('DeviceRGB'));
         nd.set(PDFName.of('BitsPerComponent'), PDFNumber.of(8));
-        nd.delete(PDFName.of('Decode'));
-        nd.delete(PDFName.of('DecodeParms'));
         nd.set(PDFName.of('Length'), PDFNumber.of(jpg.length));
         doc.context.assign(ref, PDFRawStream.of(nd, jpg));
         changed++;
@@ -524,7 +600,7 @@ async function addPhotoPage(out, f, mode) {
 
 // ---- pages: keep / remove, move, turn
 T.pages = {
-  title: '📄 पेज चुनो / हटाओ', sub: 'जिस पेज को हटाना है उस पर ✕ दबाएँ; ◀ ▶ से क्रम बदलें, ⟳ से घुमाएँ।',
+  title: '📄 Organize Pages', sub: 'जिस पेज को हटाना है उस पर ✕ दबाएँ; ◀ ▶ से क्रम बदलें, ⟳ से घुमाएँ।',
   show(body) {
     let file = null, order = [];
     const grid = h('div', { cls: 'thumbs' });
@@ -551,17 +627,25 @@ T.pages = {
             h('button', { title: 'बाद में', on: { click: () => { if (k < order.length - 1) { [order[k + 1], order[k]] = [order[k], order[k + 1]]; draw(); } } } }, '▶')));
         grid.append(th);
       });
-      run.disabled = !order.length;
     };
+    let loading = 0;
     const list = fileList('application/pdf,.pdf', false, async fs => {
-      file = fs[0]; order = []; draw();
+      const mine = ++loading; // a newer choice stops this one
+      file = fs[0]; order = []; draw(); run.disabled = true;
       if (!file) return;
       try {
         const doc = await openPdf(file);
         msg('पेज दिखा रहा हूँ...');
-        for (let i = 1; i <= doc.numPages; i++) { order.push({ i: i - 1, on: true, rot: 0, canvas: (await renderPage(doc, i, 0.35)).canvas }); if (i % 4 === 0 || i === doc.numPages) draw(); }
+        const pages = [];
+        for (let i = 1; i <= doc.numPages; i++) {
+          const c = (await renderPage(doc, i, 0.35)).canvas;
+          if (mine !== loading) return;
+          pages.push({ i: i - 1, on: true, rot: 0, canvas: c });
+          if (i % 4 === 0 || i === doc.numPages) { order = pages.slice(); draw(); }
+        }
+        run.disabled = false;
         msg('');
-      } catch (e) { msg('⚠ ' + e.message, true); }
+      } catch (e) { if (mine === loading) msg('⚠ ' + e.message, true); }
     });
     body.append(list, grid, run);
   },
@@ -569,7 +653,7 @@ T.pages = {
 
 // ---- page numbers
 T.numbers = {
-  title: '🔢 पेज नंबर', sub: 'हर पेज पर नंबर लगाता है।',
+  title: '🔢 Page Numbers', sub: 'हर पेज पर नंबर लगाता है।',
   show(body) {
     const st = { pos: 'bc', fmt: 'n' };
     const run = runButton('🔢 नंबर लगाओ और save करो', async () => {
@@ -577,11 +661,11 @@ T.numbers = {
       for (let i = 0; i < n; i++) {
         const label = st.fmt === 'n' ? String(i + 1) : st.fmt === 'nof' ? (i + 1) + ' / ' + n : 'पृष्ठ ' + (i + 1);
         const png = await doc.embedPng(await canvasBytes(textImage(label, 48), 'image/png'));
-        const pg = doc.getPage(i), { width, height } = pg.getSize();
+        const pg = doc.getPage(i), { width, height } = seenSize(pg);
         const hh = 11, w = hh * png.width / png.height, m = 18;
-        const x = st.pos === 'br' || st.pos === 'tr' ? width - w - m : (width - w) / 2;
-        const y = st.pos === 'tr' ? height - hh - m : m;
-        pg.drawImage(png, { x, y, width: w, height: hh });
+        const cx = st.pos === 'br' || st.pos === 'tr' ? width - w / 2 - m : width / 2;
+        const cy = st.pos === 'tr' ? m + hh / 2 : height - m - hh / 2;
+        pg.drawImage(png, placeOnPage(pg, cx / width, cy / height, w, hh));
       }
       const bytes = await doc.save({ useObjectStreams: true });
       await save(baseName(f.name) + ' (पेज नंबर).pdf', 'application/pdf', bytes);
@@ -598,7 +682,7 @@ T.numbers = {
 // ---- sign / write on a PDF or a photo
 function signTool(kind) {
   return {
-    title: kind === 'pdf' ? '✍️ PDF पर sign / लिखो' : '✍️ Photo पर sign / लिखो',
+    title: kind === 'pdf' ? '✍️ Sign PDF' : '✍️ Sign Photo',
     sub: 'Sign, कोई लिखावट (जैसे नाम या पद) और आज की तारीख, जहाँ tap करें वहाँ लगती है।',
     show(body) {
       const st = { x: 0.78, y: 0.88, w: 0.25, sign: '', text: '', date: false, page: 1, all: false };
@@ -622,9 +706,9 @@ function signTool(kind) {
           const out = await loadLib(file), img = await out.embedPng(png);
           const which = st.all ? out.getPageIndices() : [st.page - 1];
           for (const i of which) {
-            const pg = out.getPage(i), { width, height } = pg.getSize();
+            const pg = out.getPage(i), { width } = seenSize(pg);
             const w = st.w * width, hh = w * stamp.height / stamp.width;
-            pg.drawImage(img, { x: st.x * width - w / 2, y: height - st.y * height - hh / 2, width: w, height: hh });
+            pg.drawImage(img, placeOnPage(pg, st.x, st.y, w, hh));
           }
           const bytes = await out.save({ useObjectStreams: true });
           await save(baseName(file.name) + ' (signed).pdf', 'application/pdf', bytes);
@@ -635,7 +719,7 @@ function signTool(kind) {
           ctx.drawImage(stamp, st.x * c.width - w / 2, st.y * c.height - hh / 2, w, hh);
           const bytes = await canvasBytes(c, 'image/jpeg', 0.9);
           await save(baseName(file.name) + ' (signed).jpg', 'image/jpeg', bytes);
-          msg('✔ Photo पर लग गया (' + kb(bytes.length) + ')। Downloads में save है। छोटी करनी हो तो "📉 Photo छोटी करो"।');
+          msg('✔ Photo पर लग गया (' + kb(bytes.length) + ')। Downloads में save है। छोटी करनी हो तो "📉 Compress Photo"।');
         }
       });
       const drawPages = () => {
@@ -671,7 +755,7 @@ T.photosign = signTool('photo');
 
 // ---- open a PDF with its password and save it without one
 T.unlock = {
-  title: '🔓 Password हटाओ', sub: 'जिस PDF का password आपको पता है, उसकी बिना password वाली copy बनाता है।',
+  title: '🔓 Unlock PDF', sub: 'जिस PDF का password आपको पता है, उसकी बिना password वाली copy बनाता है।',
   show(body) {
     const pw = h('input', { type: 'password', placeholder: 'PDF का password', autocomplete: 'off' });
     const run = runButton('🔓 खोलो और save करो', async () => {
@@ -695,14 +779,14 @@ T.unlock = {
 
 // ---- photos -> one PDF
 T.topdf = {
-  title: '🖼️ Photo से PDF', sub: 'कई photo एक PDF में, हर photo एक पेज (A4)।',
+  title: '🖼️ Photos to PDF', sub: 'कई photo एक PDF में, हर photo एक पेज (A4)।',
   show(body) {
     const run = runButton('🖼️ PDF बनाओ और save करो', async () => {
       const out = await PDFDocument.create();
       for (const f of list.files) await addPhotoPage(out, f, 'a4');
       const bytes = await out.save({ useObjectStreams: true });
       await save(baseName(list.files[0].name) + ' (' + list.files.length + ' photo).pdf', 'application/pdf', bytes);
-      msg('✔ ' + list.files.length + ' पेज की PDF (' + kb(bytes.length) + ') Downloads में save है। छोटी करनी हो तो "📉 PDF छोटी करो"।');
+      msg('✔ ' + list.files.length + ' पेज की PDF (' + kb(bytes.length) + ') Downloads में save है। छोटी करनी हो तो "📉 Compress PDF"।');
     });
     const list = fileList('image/*', true, fs => { run.disabled = !fs.length; }, '📂 Photos चुनें (कई एक साथ)');
     body.append(list, run);
@@ -711,7 +795,7 @@ T.topdf = {
 
 // ---- photo smaller
 T.photosmall = {
-  title: '📉 Photo छोटी करो', sub: 'Form / portal के लिए photo या sign को चुने हुए KB में लाता है। कई photo एक साथ चुन सकते हैं।',
+  title: '📉 Compress Photo', sub: 'Form / portal के लिए photo या sign को चुने हुए KB में लाता है। कई photo एक साथ चुन सकते हैं।',
   show(body) {
     const st = {};
     const run = runButton('📉 छोटी करो और save करो', async () => {
@@ -777,7 +861,7 @@ T.collage = {
 
 // ---- WhatsApp DP / Status
 T.whatsapp = {
-  title: '📱 WhatsApp size', sub: 'DP (गोल photo) के लिए चौकोर, Status के लिए लंबी photo, बिना कटे।',
+  title: '📱 WhatsApp Size', sub: 'DP (गोल photo) के लिए चौकोर, Status के लिए लंबी photo, बिना कटे।',
   show(body) {
     const st = { kind: 'dp' };
     const run = runButton('📱 बनाओ और save करो', async () => {

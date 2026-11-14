@@ -2,19 +2,25 @@
 // (tools/uitest/make_merge_fixtures.py): Prerna + UDISE+ children, and teachers' forms.
 const { chromium } = require('playwright'); const fs = require('fs'); const path = require('path');
 (async () => {
-  const fx = path.join(__dirname, 'fixtures'), out = process.argv[2] || '/tmp/ui';
+  const fx = path.join(__dirname, 'fixtures'), out = process.argv[2] || '/tmp/ui', dir = path.join(__dirname, '../../cmd/ronin/ui/tools');
   fs.mkdirSync(out, { recursive: true });
-  const page = fs.readFileSync('cmd/ronin/ui/merge.html', 'utf8')
-    .replace('{{MERGEJS}}', () => fs.readFileSync('cmd/ronin/ui/merge.js', 'utf8')).replace(/\{\{NONCE\}\}/g, 'n').replace('{{KEY}}', '').replace('{{DARK}}', '0');
   const b = await chromium.launch(); let fail = 0; const bad = m => { console.log('FAIL', m); fail++; };
   async function run(names, shot) {
     const p = await b.newPage({ viewport: { width: 800, height: 1000 } });
     const errs = []; p.on('pageerror', e => errs.push(e.message));
-    await p.route('**/*', r => r.fulfill({ contentType: 'text/html', body: page })); await p.goto('https://ronin.home/merge');
-    await p.setInputFiles('#pick', names.map(n => path.join(fx, n)));
-    await p.waitForFunction(() => !document.getElementById('go').disabled, null, { timeout: 15000 });
-    await p.click('#go');
-    const r = JSON.parse(await p.evaluate(() => window.__roninMerge.result()));
+    await p.route('https://ronin.home/tools/**', r => {
+      const f = path.join(dir, new URL(r.request().url()).pathname.replace('/tools/', '') || 'index.html');
+      const file = fs.existsSync(f) && fs.statSync(f).isFile() ? f : path.join(dir, 'index.html');
+      r.fulfill({ body: fs.readFileSync(file), contentType: /\.m?js$/.test(file) ? 'text/javascript' : 'text/html' });
+    });
+    await p.goto('https://ronin.home/tools/#datamatch');
+    await p.waitForSelector('button.big');
+    const [fc] = await Promise.all([p.waitForEvent('filechooser'), p.click('button.big >> nth=0')]);
+    await fc.setFiles(names.map(n => path.join(fx, n)));
+    await p.waitForFunction(() => !document.querySelector('button.big.go').disabled, null, { timeout: 15000 });
+    await p.click('button.big.go');
+    await p.waitForFunction(() => window.__lastMerge, null, { timeout: 15000 });
+    const r = await p.evaluate(() => JSON.parse(window.__roninMerge.result()));
     if (shot) await p.screenshot({ path: path.join(out, shot), fullPage: true });
     if (errs.length) bad('page error: ' + errs.join('; '));
     await p.close(); return r;

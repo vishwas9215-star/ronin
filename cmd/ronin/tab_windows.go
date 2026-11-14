@@ -49,7 +49,6 @@ type Tab struct {
 	canBack, canFwd bool
 	protect         string // "", "payment", "bank" (Payment Protect reason)
 	isNewTab        bool
-	isMerge         bool              // Ronin's own "डेटा मिलाओ" page
 	isTools         bool              // Ronin's own PDF / Photo tools page
 	userURL         string            // address the user just asked for
 	chainStart      map[uint64]string // first address of each navigation chain
@@ -221,7 +220,6 @@ func (t *Tab) hookEvents() {
 		t.adPaused = store.AdblockPaused(hostOf(t.url))
 		if !strings.HasPrefix(t.url, "about:") && !strings.HasPrefix(t.url, "data:") {
 			t.isNewTab = false
-			t.isMerge = false
 		}
 		if !strings.HasPrefix(t.url, toolsPrefix) {
 			t.isTools = false
@@ -404,6 +402,12 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 	// the page's "Data -> Excel + PDF" button
 	if strings.HasPrefix(uri, "https://ronin.data/") {
 		call(args, nsSetCancel, 1)
+		if u, err := url.Parse(uri); err == nil && u.Path == "/close" {
+			if u.Query().Get("k") == toolsKey && t.isTools {
+				runOnUI(func() { t.w.leaveTools() })
+			}
+			return
+		}
 		if u, err := url.Parse(uri); err == nil && u.Path == "/save" {
 			if u.Query().Get("k") == toolsKey && t.isTools {
 				runOnUI(func() { t.saveToolFile() })
@@ -411,7 +415,7 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 			return
 		}
 		if u, err := url.Parse(uri); err == nil && u.Path == "/merge" {
-			if u.Query().Get("k") == mergeKey && t.isMerge {
+			if u.Query().Get("k") == toolsKey && t.isTools {
 				runOnUI(func() { t.saveMerge() })
 			}
 			return

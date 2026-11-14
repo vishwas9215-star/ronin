@@ -49,6 +49,7 @@ type Window struct {
 	panelReady   bool
 	panelPending []func()
 	panelKind    string   // "" = closed
+	beforeTools  *Tab     // the page that was open when Ronin Tools came up
 	closedURLs   []string // closed tabs, for Ctrl+Shift+T (this run only, not saved)
 
 	// Safe Money
@@ -241,13 +242,18 @@ type tabState struct {
 	AdPaused bool   `json:"adPaused"`
 	InGrid   bool   `json:"inGrid"` // shown in a grid cell right now
 	Zoom     int    `json:"zoom"`   // page size in per cent
+	Tool     bool   `json:"tool"`   // Ronin Tools (not shown as a tab)
 }
 
 func (w *Window) sendState() {
 	var list []tabState
 	for _, t := range w.tabs {
+		u := omnibox.Display(t.url)
+		if t.isTools {
+			u = "" // Ronin Tools: no web address (and never its key)
+		}
 		list = append(list, tabState{
-			ID: t.id, Title: t.displayTitle(), URL: omnibox.Display(t.url), Loading: t.loading,
+			ID: t.id, Title: t.displayTitle(), URL: u, Tool: t.isTools, Loading: t.loading,
 			Active: t == w.active, Protect: t.protect, CanBack: t.canBack, CanFwd: t.canFwd,
 			Secure:   strings.HasPrefix(t.url, "https://"),
 			BankHint: w.container == containers.Personal && strings.HasPrefix(t.url, "https://"),
@@ -436,8 +442,6 @@ func (w *Window) onUIMessage(raw string) {
 		w.panelPending = nil
 	case "panelclose":
 		w.closePanel()
-	case "merge":
-		w.showMerge()
 	case "tools":
 		w.showTools()
 	case "dataexport":
