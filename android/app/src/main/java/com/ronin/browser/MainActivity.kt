@@ -274,7 +274,8 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#E8EAF0"))
             setBackgroundColor(Color.TRANSPARENT)
             minWidth = 0; minimumWidth = 0
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(50))
+            setPadding(dp(12), 0, dp(12), 0)
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)).apply { marginEnd = dp(8) }
             setOnClickListener { openTools() }
         }
         val stripRow = LinearLayout(this).apply {
@@ -388,7 +389,10 @@ class MainActivity : AppCompatActivity() {
         val list = browsingTabs()
         tabsButton.text = list.size.toString()
         if (!::tabStrip.isInitialized) return
-        toolsButton.setBackgroundColor(Color.parseColor(if (current?.isTools == true) "#2563EB" else "#00000000"))
+        toolsButton.background = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = dp(10).toFloat()
+            setColor(Color.parseColor(if (current?.isTools == true) "#2563EB" else "#1B1F29"))
+        }
         tabStrip.removeAllViews()
         val wide = resources.configuration.smallestScreenWidthDp >= 600
         for (t in list) {
