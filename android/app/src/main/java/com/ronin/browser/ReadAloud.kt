@@ -106,6 +106,7 @@ class ReadAloud(ctx: Context, private val onState: (playing: Boolean, index: Int
             val out = ArrayList<String>()
             val sb = StringBuilder()
             for (s in t.split(Regex("(?<=[.!?।])\\s+"))) {
+                if (s.isBlank()) continue
                 if (sb.length + s.length > 220 && sb.isNotEmpty()) { out.add(sb.toString()); sb.setLength(0) }
                 if (sb.isNotEmpty()) sb.append(' ')
                 sb.append(s)
