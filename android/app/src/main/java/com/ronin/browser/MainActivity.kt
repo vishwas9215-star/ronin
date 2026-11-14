@@ -161,6 +161,7 @@ class MainActivity : AppCompatActivity() {
             start != null && start.startsWith("http") -> newTab(start)
             else -> newTab(HOME)
         }
+        handleSpecial(intent)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 val t = current
@@ -182,6 +183,17 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         val u = intent.dataString
         if (u != null && u.startsWith("http")) newTab(u)
+        handleSpecial(intent)
+    }
+
+    /** "Ronin Mail" icon, and a WhatsApp / SMS message shared to Ronin ("क्या यह ठगी है?"). */
+    private fun handleSpecial(i: Intent?) {
+        i ?: return
+        if (i.component?.className?.endsWith(".MailLauncher") == true) { ui.post { openMail() }; return }
+        if (i.action == Intent.ACTION_SEND && i.type?.startsWith("text/") == true) {
+            val text = (i.getStringExtra(Intent.EXTRA_TEXT) ?: "").take(4000)
+            if (text.isNotBlank()) ui.post { openTools("scamcheck:" + Uri.encode(text)) }
+        }
     }
 
     override fun onSaveInstanceState(out: Bundle) {
@@ -370,6 +382,13 @@ class MainActivity : AppCompatActivity() {
             WebViewCompat.addDocumentStartJavaScript(w, socialBaseJs() + socialJs, setOf("*")) // Safe Social protection
             if (social) WebViewCompat.addDocumentStartJavaScript(w, "window.__roninSocialCfg&&(window.__roninSocialCfg.social=true);", setOf("*"))
         }
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            // the only thing a page may ask: "say this warning" (a fixed sentence from Ronin's own list)
+            WebViewCompat.addWebMessageListener(w, "roninNative", setOf("*")) { _, m, _, main, _ ->
+                val d = m.data ?: ""
+                if (main && d.startsWith("speak:")) speakWarning(d.removePrefix("speak:"))
+            }
+        }
         w.webViewClient = Client(t)
         w.webChromeClient = Chrome(t)
         w.setDownloadListener(downloads)
@@ -378,13 +397,45 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val adblockJs: String by lazy { assets.open("ronin/inject_adblock.js").bufferedReader().readText() }
-    private val socialJs: String by lazy { assets.open("ronin/inject_social.js").bufferedReader().readText() }
+    private val socialJs: String by lazy {
+        assets.open("ronin/tools/scamcheck.js").bufferedReader().readText() + "\n" + assets.open("ronin/inject_social.js").bufferedReader().readText()
+    }
     private fun socialSettings(): JSONObject = try { JSONObject(app.store.social) } catch (e: Exception) {
         JSONObject().put("apps", JSONArray(listOf("facebook", "instagram", "youtube", "whatsapp"))).put("ytRestrict", true)
     }
     private fun socialBaseJs(): String {
         val c = socialSettings()
-        return "window.__roninSocialCfg=" + JSONObject().put("k", toolsKey).put("family", c.optBoolean("family")).put("reels", c.optBoolean("reels")) + ";"
+        val mail = JSONArray()
+        c.optJSONArray("custom")?.let { a -> for (i in 0 until a.length()) a.optJSONObject(i)?.takeIf { it.optBoolean("mail") }?.let { x -> Uri.parse(x.optString("url")).host?.let { mail.put(it.lowercase()) } } }
+        // socialKey: websites can read it; it only allows "back to my apps" and "close"
+        return "window.__roninSocialCfg=" + JSONObject().put("k", socialKey).put("reels", c.optBoolean("reels")).put("mail", mail) + ";" +
+            "window.__roninLinkLists=" + app.rules.safeLinks.json + ";window.__roninScamRules=" + app.rules.scamRulesJson + ";"
+    }
+
+    /** Why Safe Social never opens this address ("" = it may). Checked here for every navigation of a Safe Social tab. */
+    private fun socialStop(url: String): String {
+        if (url.startsWith("https://ronin.") || url.startsWith("about:")) return ""
+        app.rules.safeLinks.check(url).let { if (it.isNotEmpty()) return it }
+        if (Sensitive.site(url)) return "adult"
+        if (url.startsWith("http") && app.rules.fakeBank(url) != null) return "fake"
+        return ""
+    }
+    private fun socialWarn(view: WebView, url: String) = view.evaluateJavascript("window.__roninSocialWarn&&window.__roninSocialWarn(" + JSONObject.quote(url) + ")", null)
+
+    private var tts: android.speech.tts.TextToSpeech? = null
+    private val warnings = mapOf(
+        "link" to "सावधान! यह लिंक खतरनाक है। रोनिन ने इसे रोक दिया है।",
+        "scam" to "सावधान! यह संदेश ठगी का हो सकता है। पैसे, ओटीपी या पिन किसी को न दें।",
+        "mail" to "सावधान! यह ईमेल ठगी का हो सकता है। इसे डिलीट कर दें, और कोई पैसा न भेजें।",
+        "call" to "अनजान व्यक्ति से वीडियो कॉल न करें।")
+    private fun speakWarning(id: String) {
+        val text = warnings[id] ?: return
+        val t = tts
+        if (t == null) {
+            tts = android.speech.tts.TextToSpeech(applicationContext) { st ->
+                if (st == android.speech.tts.TextToSpeech.SUCCESS) { tts?.language = java.util.Locale("hi", "IN"); tts?.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "w") }
+            }
+        } else t.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "w")
     }
 
     fun newTab(url: String, select: Boolean = true, private: Boolean = false, social: Boolean = false): Tab {
@@ -523,7 +574,8 @@ class MainActivity : AppCompatActivity() {
             t.isTools = true
             t.url = TOOLS
             t.title = "PDF / Photo tools"
-            t.web.loadUrl(TOOLS + "?k=" + toolsKey + "&dark=" + (if (app.store.night) "1" else "0"))
+            val frag = url.substringAfter('#', "")
+            t.web.loadUrl(TOOLS + "?k=" + toolsKey + "&dark=" + (if (app.store.night) "1" else "0") + (if (frag.isNotEmpty()) "#$frag" else ""))
             return
         }
         if (url == HOME) {
@@ -586,6 +638,10 @@ class MainActivity : AppCompatActivity() {
         override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean {
             val url = req.url.toString()
             val scheme = req.url.scheme?.lowercase() ?: ""
+            if (tab().isSocial && (req.isForMainFrame || (scheme != "http" && scheme != "https")) && socialStop(url).isNotEmpty()) {
+                socialWarn(view, url) // Telegram, group invites, UPI apps, .apk, short links, fake bank sites: never from Safe Social
+                return true
+            }
             if (scheme == "http" && req.isForMainFrame && !isLocal(req.url.host)) {
                 view.loadUrl("https" + url.substring(4)) // secure version first (HTTPS-only)
                 return true
@@ -599,7 +655,10 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
             if (url.startsWith("https://ronin.data/social")) {
-                if (req.url.getQueryParameter("k") == toolsKey && tab().isSocial) socialRequest(tab(), req.url)
+                val k = req.url.getQueryParameter("k"); val d = req.url.getQueryParameter("do")
+                // Ronin's own launcher page may do everything; a website only "my apps" / "close"
+                val launcher = k == toolsKey && (view.url ?: "").startsWith(SOCIAL)
+                if (tab().isSocial && (launcher || (k == socialKey && (d == "home" || d == "close")))) socialRequest(tab(), req.url)
                 return true
             }
             if (url.startsWith("https://ronin.newtab/social")) {
@@ -701,7 +760,7 @@ class MainActivity : AppCompatActivity() {
                 val i = Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
                 val web = i.getStringExtra("browser_fallback_url")?.takeIf { it.startsWith("https://") }
                     ?: i.data?.takeIf { it.scheme == "https" || url.contains("scheme=https") }?.let { "https://" + it.host + (it.encodedPath ?: "") + (it.encodedQuery?.let { q -> "?$q" } ?: "") }
-                if (web != null) view.loadUrl(web)
+                if (web != null) { if (socialStop(web).isNotEmpty()) socialWarn(view, web) else view.loadUrl(web) }
                 return true
             }
             if (url.startsWith("intent:")) {
@@ -879,10 +938,24 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     private val socialAppUrls = mapOf("facebook" to "https://www.facebook.com/", "instagram" to "https://www.instagram.com/", "youtube" to "https://m.youtube.com/",
         "whatsapp" to "https://web.whatsapp.com/", "x" to "https://x.com/", "threads" to "https://www.threads.net/", "sharechat" to "https://sharechat.com/",
         "moj" to "https://mojapp.in/", "linkedin" to "https://www.linkedin.com/", "pinterest" to "https://www.pinterest.com/", "snapchat" to "https://web.snapchat.com/",
-        "telegram" to "https://web.telegram.org/")
+        "telegram" to "https://web.telegram.org/", "gmail" to "https://mail.google.com/", "outlook" to "https://outlook.live.com/mail/",
+        "yahoo" to "https://mail.yahoo.com/", "rediff" to "https://mail.rediff.com/")
     private val socialAppNames = mapOf("facebook" to "Facebook", "instagram" to "Instagram", "youtube" to "YouTube", "whatsapp" to "WhatsApp", "x" to "X",
-        "threads" to "Threads", "sharechat" to "ShareChat", "moj" to "Moj", "linkedin" to "LinkedIn", "pinterest" to "Pinterest", "snapchat" to "Snapchat", "telegram" to "Telegram")
-    private fun socialUrl(app: String?) = socialAppUrls[app] ?: ""
+        "threads" to "Threads", "sharechat" to "ShareChat", "moj" to "Moj", "linkedin" to "LinkedIn", "pinterest" to "Pinterest", "snapchat" to "Snapchat", "telegram" to "Telegram",
+        "gmail" to "Gmail", "outlook" to "Outlook", "yahoo" to "Yahoo Mail", "rediff" to "Rediffmail")
+    /** The family's own apps / email sites from Safe Social settings ("c0", "c1"...). */
+    private fun customApps(): List<Pair<String, String>> {
+        val a = socialSettings().optJSONArray("custom") ?: return emptyList()
+        return (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.let { x -> x.optString("name") to x.optString("url") }?.takeIf { it.second.startsWith("https://") } }
+    }
+    private fun socialUrl(app: String?): String {
+        socialAppUrls[app]?.let { return it }
+        val i = app?.removePrefix("c")?.toIntOrNull() ?: return ""
+        return if (app.startsWith("c")) customApps().getOrNull(i)?.second ?: "" else ""
+    }
+    private fun socialName(app: String): String? = socialAppNames[app] ?: app.removePrefix("c").toIntOrNull()?.let { if (app.startsWith("c")) customApps().getOrNull(it)?.first else null }
+    /** The "Ronin Mail" icon: the family's email, full screen, Safe Mail on. */
+    fun openMail() = openSocial(socialUrl(socialSettings().optString("mailApp", "gmail")).ifEmpty { "https://mail.google.com/" })
 
     fun openSocial(open: String = "") {
         val t = tabs.firstOrNull { it.isSocial }
@@ -945,11 +1018,12 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         } catch (e: Exception) { }
     }
 
-    fun openTools() {
-        val t = tabs.firstOrNull { it.isTools }
-        if (t == current) return
-        beforeTools = current
-        if (t != null) select(t) else newTab(TOOLS)
+    fun openTools(start: String = "") {
+        val t = tabs.firstOrNull { it.isTools && !it.isSocial }
+        if (t == current && start.isEmpty()) return
+        if (t != current) beforeTools = current
+        val url = TOOLS + (if (start.isNotEmpty()) "#$start" else "")
+        if (t != null) { select(t); if (start.isNotEmpty()) load(t, url) } else newTab(url)
         updateTabsButton()
     }
 
@@ -1291,6 +1365,8 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         }
         items["🧰 Ronin Tools (Data Match, PDF, Photo)"] = { openTools() }
         items["🛡️ Safe Social (Facebook, Instagram, YouTube...)"] = { openSocial() }
+        items["📧 Safe Mail (Gmail...)"] = { openMail() }
+        items["🔎 क्या यह ठगी है? (Scam Check)"] = { openTools("scamcheck") }
         items["🔎 Search widget home screen पर लगाएँ"] = {
             if (!SearchWidget.pin(this)) Toast.makeText(this, "Home screen पर खाली जगह दबाकर रखें → Widgets → Ronin Search", Toast.LENGTH_LONG).show()
         }
@@ -1368,7 +1444,10 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         // Safe Social row first: the family's apps (opens full screen, guarded)
         val soc = JSONArray().put(JSONObject().put("n", "🛡️ सभी apps").put("u", "https://ronin.newtab/social?k=$pageKey"))
         val chosen = socialSettings().optJSONArray("apps")
-        if (chosen != null) for (i in 0 until chosen.length()) chosen.optString(i).let { id -> socialAppNames[id]?.let { soc.put(JSONObject().put("n", it).put("u", "https://ronin.newtab/social?app=$id&k=$pageKey")) } }
+        val ids = ArrayList<String>()
+        if (chosen != null) for (i in 0 until chosen.length()) ids.add(chosen.optString(i))
+        customApps().indices.forEach { ids.add("c$it") }
+        for (id in ids) socialName(id)?.let { soc.put(JSONObject().put("n", it).put("u", "https://ronin.newtab/social?app=$id&k=$pageKey")) }
         val withSocial = JSONArray().put(JSONObject().put("id", "Safe Social").put("title", "🛡️ Safe Social").put("links", soc).put("fixed", true))
         for (i in 0 until sections.length()) withSocial.put(sections.get(i))
         val data = JSONObject().put("k", pageKey).put("edit", homeEditing).put("sections", withSocial).toString().replace("</", "<\\/")
@@ -1407,6 +1486,7 @@ h1{margin:0 0 4px;font-size:24px}p.sub{margin:0 0 6px;opacity:.7}p.note{margin-t
         const val GOOGLE = "https://www.google.com/"
         /** Proves "save this file" came from the tools page. */
         val toolsKey: String = java.util.UUID.randomUUID().toString().replace("-", "")
+        val socialKey: String = java.util.UUID.randomUUID().toString().replace("-", "")
 
         /** Proves a link came from Ronin's own page (new tab page, red page). New each start. */
         val pageKey: String = java.util.UUID.randomUUID().toString().replace("-", "")

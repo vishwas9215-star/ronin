@@ -1,0 +1,203 @@
+{
+ "_note": "Scam-message rules shared by the page (scamcheck.js), Android (ScamCheck.kt) and the tests. weight 3 = heavy sign. Patterns are matched on normalised text (no nukta, lower case).",
+ "groups": [
+  [
+   "otp",
+   3,
+   "(otp|ओटीपी|upi\\s*pin|यूपीआई\\s*पिन|\\bpin\\b|पिन|cvv|password|पासवर्ड|verification\\s*code|वेरिफिकेशन\\s*कोड)\\s*.{0,25}?(बताओ|बताएं|बताए|बताइए|बता\\s*दो|बता\\s*दें|भेजो|भेजें|भेजिए|भेज\\s*दो|दे\\s*दो|दीजिए|share\\s*(karo|kare|kijiye|kar\\s*do|now)|\\bsend\\b|\\bshare\\b|\\btell\\b|batao|bata\\s*do|bhejo|bhej\\s*do|de\\s*do)|(share|send|tell|batao|bhejo|bata\\s*do|bhej\\s*do|बताइए|बताओ|भेजें|भेजो|verify|enter|confirm)\\s*(me\\s*|us\\s*)?(your\\s*|the\\s*|apna\\s*|अपना\\s*|aapka\\s*)?(atm\\s*card\\s*|debit\\s*card\\s*|card\\s*)?(otp|ओटीपी|upi\\s*pin|cvv|password|पासवर्ड)",
+   "OTP / PIN / password माँगा जा रहा है: इसे कभी किसी को न बताएँ, बैंक या पुलिस भी नहीं माँगती"
+  ],
+  [
+   "payfirst",
+   3,
+   "(पहले\\s*(पैसे|पैसा|रुपये|payment|पेमेंट|भुगतान|फीस|fees?)\\s*(जमा|भेज|दे|कर)|pehle\\s*(paise|paisa|payment|fees?)\\s*(jama|bhej|de|kar|do)|pahle\\s*payment|deposit\\s*first|pay\\s*first|pehle\\s*deposit|पहले\\s*डिपॉजिट|deposit\\s*(karo|करें|kare|first)|(charge|fee|fees|फीस|शुल्क|paise|पैसे)\\s*pehle\\s*(bhej|de|jama)|(release|withdrawal|clearance|unlock|activation)\\s*(fee|fees|charge|charges)|(निकासी|एक्टिवेशन)\\s*(फीस|शुल्क|चार्ज)|withdraw\\s*(ke\\s*liye|के\\s*लिए)\\s*.{0,10}(fee|फीस|पैसे|paise)|जमानत\\s*राशि|रकम\\s*वापस\\s*मिलेगी)",
+   "पहले पैसे / फीस माँगी जा रही है: नौकरी, इनाम, लोन या पार्सल के नाम पर \"पहले फीस\" ठगी का पक्का तरीका है"
+  ],
+  [
+   "qr",
+   3,
+   "((qr|क्यूआर|scan|स्कैन).{0,40}(पैसे|पैसा|paisa|paise|rupees|रुपये|refund|रिफंड|money|payment|cashback|कैशबैक).{0,25}(पाने|लेने|receive|lene|paane|milenge|मिलेंगे|मिलेगा|प्राप्त|aayenge|आएंगे|\\bget\\b))|((qr|क्यूआर|scan|स्कैन).{0,30}(receive|पाने|लेने|lene|\\bget\\b).{0,20}(refund|रिफंड|money|पैसे|पैसा|cashback|payment))|((पैसे|पैसा|paisa|money|payment|refund|रिफंड|cashback)\\s*.{0,25}(पाने|लेने|receive|lene|paane)\\s*.{0,30}(qr|क्यूआर|scan|स्कैन|upi\\s*pin|पिन\\s*(डाल|daal|dal)|pin\\s*(daalo|dalo|enter)))|((upi\\s*pin|यूपीआई\\s*पिन|पिन)\\s*(डालें|डालो|daalo|dalo|enter).{0,40}(cashback|कैशबैक|refund|रिफंड|पैसे|पाएं|receive|milega|मिलेगा))|enter\\s*(your\\s*)?(upi\\s*)?pin\\s*to\\s*receive",
+   "पैसा लेने के लिए QR scan / PIN: पैसा पाने के लिए कभी QR scan या UPI PIN नहीं डालना पड़ता"
+  ],
+  [
+   "arrest",
+   3,
+   "(digital\\s*arrest|डिजिटल\\s*(अरेस्ट|गिरफ्तारी)|डिजीटल\\s*अरेस्ट)",
+   "\"Digital arrest\" जैसा कोई कानून नहीं है: पुलिस / CBI कभी video call पर गिरफ्तार या पूछताछ नहीं करती"
+  ],
+  [
+   "stay",
+   3,
+   "(video\\s*call\\s*(par|पर|on)\\s*(बने\\s*)?(raho|रहो|रहें|रहिए|stay)|call\\s*mat\\s*kaat|कॉल\\s*मत\\s*काट|camera\\s*on\\s*rakh|कैमरा\\s*(चालू|ऑन)\\s*रख|किसी\\s*को\\s*(मत|न|ना)\\s*(बताना|बताएं|बताइए)\\s*.{0,20}(जांच|केस|case|पूछताछ|गिरफ्तार)|don.?t\\s*tell\\s*anyone|safe\\s*account|सेफ\\s*अकाउंट|verification\\s*transfer|rbi\\s*(safe|verification)\\s*account)",
+   "Call पर बने रहने / किसी को न बताने / \"safe account\" में पैसे डालने को कहा जा रहा है: यह digital arrest ठगी है"
+  ],
+  [
+   "need",
+   3,
+   "((need|ज़रूरत|जरूरत|zarurat|jarurat|urgent|emergency|इमरजेंसी|hospital|अस्पताल|मुसीबत|problem|फंस|phas|accident|एक्सीडेंट).{0,80}(पैसे|पैसा|paise|paisa|money|rs\\.?|₹|rupees?|रुपये|\\d{3,}).{0,80}(qr|क्यूआर|scan|स्कैन|upi|gpay|google\\s*pay|phonepe|phone\\s*pe|paytm|link|लिंक|@ybl|@ok|@paytm|@ibl|@axl|number\\s*par|नंबर\\s*पर))|((qr|क्यूआर|scan|स्कैन|upi|gpay|phonepe|paytm|link|लिंक).{0,60}(पैसे|पैसा|paise|money|₹|rs\\.?|\\d{3,}).{0,60}(need|ज़रूरत|जरूरत|zarurat|jarurat|urgent|emergency|hospital|अस्पताल|मुसीबत|accident))",
+   "किसी जानने वाले के नाम से अचानक पैसे माँगना + QR / link: उनका WhatsApp hack हो सकता है। पैसे भेजने से पहले उन्हें फ़ोन करके पक्का करें"
+  ],
+  [
+   "remote",
+   3,
+   "(anydesk|any\\s*desk|teamviewer|team\\s*viewer|rustdesk|quick\\s*support|quicksupport|airdroid|screen\\s*shar(e|ing)|स्क्रीन\\s*शेयर|remote\\s*(app|access|control)|रिमोट\\s*(ऐप|एप|एक्सेस)|accessibility\\s*(permission|setting))",
+   "Screen share / AnyDesk जैसा app डलवाना: इससे ठग आपका फ़ोन और बैंक चला लेते हैं"
+  ],
+  [
+   "linkdev",
+   3,
+   "(link\\s*(a\\s*)?device|linked\\s*devices|लिंक\\s*(डिवाइस|डिवाईस)|(scan|स्कैन)\\s*.{0,15}(code|कोड)\\s*.{0,25}(another|dusre|दूसरे)\\s*(phone|फोन|mobile|मोबाइल))",
+   "WhatsApp \"Link a device\" का code scan करवाना: इससे आपका WhatsApp दूसरे के हाथ में चला जाता है"
+  ],
+  [
+   "auth",
+   2,
+   "(cbi|सीबीआई|crime\\s*branch|क्राइम\\s*ब्रांच|narcotics|नारकोटिक्स|cyber\\s*(cell|crime|police)|साइबर\\s*(सेल|क्राइम|पुलिस)|police|पुलिस|interpol|इंटरपोल|customs|कस्टम|income\\s*tax|आयकर|supreme\\s*court|high\\s*court|सुप्रीम\\s*कोर्ट|न्यायालय|telecom\\s*department|दूरसंचार\\s*विभाग)",
+   "खुद को पुलिस / CBI / कोर्ट बताना"
+  ],
+  [
+   "threat",
+   2,
+   "(गिरफ्तार|गिरफ़्तारी|arrest\\s*(warrant|kar|कर|हो|ho|you|against)|गिरफ्तारी\\s*वारंट|warrant|वारंट|money\\s*laundering|मनी\\s*लॉन्ड्रिंग|case\\s*(darj|registered|filed|hai)|केस\\s*(दर्ज|हुआ|है)|\\bfir\\b|एफआईआर|summon|समन|court\\s*notice|legal\\s*notice|कानूनी\\s*नोटिस|\\bjail\\b|जेल|account\\s*(freeze|frozen)|seized|जब्त|penalty|जुर्माना|fine\\s*of|आपके\\s*(नाम|आधार|पैन)\\s*(से|पर)\\s*.{0,20}(केस|अपराध|शिकायत)|your\\s*(name|aadhaar|pan)\\s*.{0,20}(case|crime|complaint|misuse)|aadhaar\\s*misuse|आधार\\s*का\\s*(दुरुपयोग|गलत))",
+   "गिरफ्तारी / केस / जुर्माने की धमकी"
+  ],
+  [
+   "csam",
+   2,
+   "(child\\s*porn|pornograph|पोर्नोग्राफी|paedophil|pedophil|पीडोफाइल|pocso|पॉक्सो|obscene|indecent\\s*(content|video|material)|(बच्चों|बच्चे|child|children|minor|नाबालिग)\\s*.{0,30}(अश्लील|porn|गलत\\s*(वीडियो|फोटो|सामग्री)|sexual|यौन|abuse\\s*material)|अश्लील\\s*(वीडियो|सामग्री|फोटो|साइट)\\s*.{0,30}(देख|देखते|search|सर्च))",
+   "गंदी वीडियो / बच्चों वाली सामग्री देखने का झूठा आरोप: डराकर पैसे वसूलने की ठगी"
+  ],
+  [
+   "invest",
+   3,
+   "((guarante+d|गारंटीड|पक्का|pakka|fixed|sure\\s*shot|assured)\\s*(profit|returns?|मुनाफा|रिटर्न|प्रॉफिट|income|कमाई)|(daily|रोज|रोजाना|roz)\\s*(का\\s*)?(profit|मुनाफा|कमाई|income|return|earning)|paisa\\s*double|पैसा\\s*डबल|पैसे\\s*डबल|double\\s*(your\\s*)?(money|investment|amount)|पैसा\\s*दोगुना|upper\\s*circuit|ipo\\s*allotment\\s*guarante|institutional\\s*account|sebi\\s*registered\\s*(group|tips|advisor|expert)|high\\s*returns?\\s*guarante)",
+   "पक्का / रोज़ का मुनाफ़ा, पैसा डबल: निवेश की ठगी का सबसे आम तरीका"
+  ],
+  [
+   "tips",
+   3,
+   "((share|शेयर|stock|स्टॉक)\\s*(market|मार्केट|बाजार)?\\s*(tips?|टिप्स|group|ग्रुप|calls?)|(stock|शेयर)\\s*tips|vip\\s*(group|channel|signal|tips?|ग्रुप)|premium\\s*(signal|tips?|group)|trading\\s*(signal|tips|group|sikh)|(crypto|bitcoin|usdt|forex|क्रिप्टो)\\s*.{0,15}(invest|trading|profit|earn|कमाई|निवेश))",
+   "शेयर tips / VIP group / crypto: Telegram-WhatsApp निवेश ठगी"
+  ],
+  [
+   "task",
+   3,
+   "(prepaid\\s*task|welfare\\s*task|merchant\\s*task|recharge\\s*task|(like|लाइक)\\s*(and|&|और|karo|करो|करके|karke)\\s*.{0,12}(earn|कमा|पैसे|paise)|(rating|review|रिव्यू|रेटिंग)\\s*.{0,12}(job|task|टास्क|कमा|earn)|google\\s*maps?\\s*review|hotel\\s*rating|(part[\\s-]*time|पार्ट\\s*टाइम)\\s*(job|work|काम|नौकरी|earning|कमाई)|(घर\\s*बैठे|ghar\\s*baithe|work\\s*from\\s*home)\\s*.{0,12}(कमा|kama|earn|पैसे|paise|job|income|रोजगार)|(task|टास्क)\\s*(पूरा|complete|karo|करो|करें)|telegram\\s*(task|receptionist)|daily\\s*task)",
+   "Task / part-time / like करके कमाई: पहले थोड़ा देकर फिर बड़ा पैसा फँसाने वाली ठगी"
+  ],
+  [
+   "group",
+   1,
+   "(telegram|टेलीग्राम|whatsapp|व्हाट्सएप|व्हाट्सऐप)\\s*(group|ग्रुप|channel|चैनल)\\s*.{0,12}(join|जॉइन|ज्वाइन|जुड़|जुडें|जुड़ें|link|लिंक)",
+   "अनजान group में जोड़ना"
+  ],
+  [
+   "lottery",
+   3,
+   "((reward|रिवॉर्ड)\\s*(points?|पॉइंट).{0,30}(expire|redeem|claim|खत्म|समाप्त)|lottery|लॉटरी|lucky\\s*draw|लकी\\s*ड्रा|\\bkbc\\b|केबीसी|kaun\\s*banega|you\\s*(have\\s*)?won|आपने\\s*.{0,20}जीत|इनाम\\s*(जीत|निकल|मिल)|inaam\\s*(jeet|nikl)|prize\\s*(claim|winner|money)|claim\\s*(your\\s*)?(prize|reward|gift)|aapka\\s*number\\s*select|आपका\\s*नंबर\\s*(चुना|सेलेक्ट))",
+   "लॉटरी / इनाम जीतने का message: असली इनाम के लिए कभी पैसे नहीं माँगे जाते"
+  ],
+  [
+   "kyc",
+   2,
+   "((kyc|केवाईसी|ई-?केवाईसी|e-?kyc)\\s*.{0,15}(update|अपडेट|expire|pending|पेंडिंग|block|बंद|suspend|verify|link|लिंक)|(account|खाता|अकाउंट|card|कार्ड)\\s*.{0,15}(block|ब्लॉक|बंद\\s*(हो|कर)|band\\s*ho|suspend|freeze|फ्रीज|deactivat)|(sim|सिम|mobile\\s*number|number|नंबर)\\s*.{0,15}(block|ब्लॉक|बंद\\s*हो|deactivat)|(pan|पैन|aadhaar|आधार)\\s*.{0,10}(link|लिंक)\\s*(nahi|नहीं|karo|करें|करो|now))",
+   "KYC / खाता या SIM बंद होने की धमकी: बैंक कभी message या link से ऐसा नहीं कहता"
+  ],
+  [
+   "bill",
+   2,
+   "((बिजली|bijli|electricity|light)\\s*.{0,25}(कट|काट|kat\\s*ja|cut|disconnect|बंद\\s*हो\\s*जा)|(बिजली|electricity|bijli)\\s*(का\\s*)?(बिल|bill)\\s*.{0,15}(pending|बकाया|update|अपडेट|नहीं\\s*भरा))",
+   "बिजली कटने की धमकी: बिजली विभाग WhatsApp / SMS के link या अनजान नंबर से बिल नहीं मँगवाता"
+  ],
+  [
+   "parcel",
+   2,
+   "((parcel|पार्सल|courier|कूरियर|fedex|फेडेक्स|\\bdhl\\b|blue\\s*dart|dtdc|package)\\s*.{0,40}(drugs|ड्रग्स|नशीला|illegal|अवैध|गैरकानूनी|seized|जब्त|held|hold|रुका|रोका|customs|कस्टम|narcotics|passport|पासपोर्ट)|customs\\s*(duty|fee|clearance|charge)|कस्टम\\s*(ड्यूटी|शुल्क|चार्ज)|(address|पता)\\s*(update|अधूरा|incomplete)|redelivery|दोबारा\\s*डिलीवरी)",
+   "पार्सल रुका / उसमें ड्रग्स: कूरियर कंपनी ऐसी धमकी या फीस नहीं माँगती"
+  ],
+  [
+   "loan",
+   2,
+   "(instant\\s*loan|तुरंत\\s*लोन|turant\\s*loan|bina\\s*(kagaz|document)|बिना\\s*(कागज|डॉक्यूमेंट|सिबिल)|no\\s*cibil|loan\\s*(approved|मंजूर|in\\s*\\d+\\s*min)|लोन\\s*मंजूर|(contact\\s*list|contacts|गैलरी|gallery)\\s*(access|एक्सेस))",
+   "तुरंत / बिना कागज़ लोन: ऐसे लोन app फ़ोन का data लेकर धमकाते हैं"
+  ],
+  [
+   "sext",
+   3,
+   "((video|वीडियो|photo|फोटो|recording|रिकॉर्डिंग)\\s*.{0,25}(viral|वायरल|leak|लीक)\\s*(kar|कर|ho\\s*jayega|हो\\s*जाएगा)|make\\s*(it\\s*|your\\s*video\\s*)?viral|(सबको|sabko|family|परिवार)\\s*.{0,10}(भेज\\s*दूं|दिखा\\s*दूं|bhej\\s*dunga|send\\s*it)|(paise|पैसे)\\s*nahi\\s*diye\\s*to|(viral|वायरल)\\s*(kar|कर)\\s*(dunga|denge|दूंगा|देंगे)|badnaam|बदनाम|(nude|न्यूड|अश्लील|private|प्राइवेट|निजी)\\s*(video|वीडियो|call|कॉल|photo|फोटो)|morphed|i\\s*recorded\\s*you|delete\\s*(karne|करने)\\s*(ke|के)\\s*(paise|पैसे))",
+   "Video / फ़ोटो वायरल करने की धमकी: पैसे न दें, call काटें, block करें, 1930 पर शिकायत करें"
+  ],
+  [
+   "impers",
+   1,
+   "((army|आर्मी|सेना|फौजी|fauji|crpf|cisf|bsf)\\s*(officer|ऑफिसर|अफसर|man|jawan|जवान)?\\s*.{0,40}(transfer|posting|पोस्टिंग|ट्रांसफर|\\bcsd\\b|canteen|कैंटीन|सस्ता|sasta|selling|बेच)|gift\\s*.{0,20}(customs|कस्टम)|(विदेश|abroad|\\buk\\b|\\busa\\b|london)\\s*.{0,20}(gift|गिफ्ट|parcel|पार्सल))",
+   "Army officer / विदेश से गिफ़्ट वाली कहानी"
+  ],
+  [
+   "scheme",
+   1,
+   "((free|फ्री|मुफ्त)\\s*(laptop|लैपटॉप|scooty|स्कूटी|recharge|रिचार्ज|mobile|मोबाइल|tablet|टैबलेट|सिलाई\\s*मशीन)|(योजना|yojana|scheme)\\s*.{0,25}(registration|रजिस्ट्रेशन|पंजीकरण)\\s*(fee|फीस|शुल्क)|sarkar\\s*de\\s*rahi|सरकार\\s*दे\\s*रही|28\\s*days?\\s*free\\s*recharge|list\\s*(me|में)\\s*naam|लिस्ट\\s*में\\s*नाम\\s*आ)",
+   "मुफ़्त लैपटॉप / स्कूटी / रिचार्ज: असली योजना सिर्फ़ .gov.in वेबसाइट पर होती है"
+  ],
+  [
+   "care",
+   1,
+   "(customer\\s*care|कस्टमर\\s*केयर|helpline|हेल्पलाइन|toll\\s*free|टोल\\s*फ्री)\\s*.{0,10}(number|नंबर|no\\b)",
+   "Customer care नंबर: नंबर हमेशा official website / app से लें"
+  ],
+  [
+   "install",
+   1,
+   "(\\.apk\\b|apk\\s*(file|download)|(download|install|डाउनलोड|इंस्टॉल)\\s*(the\\s*|our\\s*|this\\s*|ये\\s*)?(app|ऐप|एप|apk)|(app|ऐप|एप)\\s*.{0,12}(download|install|डाउनलोड|इंस्टॉल)\\s*.{0,10}(kare|करें|karo|करो|kijiye|now|कीजिए))",
+   "App download करवाना: app सिर्फ़ Play Store से लें"
+  ],
+  [
+   "moneyask",
+   1,
+   "(pay\\s*(the\\s*)?.{0,15}(fee|fees|charge|charges|duty)|(fee|fees|शुल्क|फीस|charge|duty|ड्यूटी)\\s*.{0,10}(pay\\b|भरें|bharo|bharein|जमा\\s*कर|भेज|\\bdo\\b|दें)|(पैसे|पैसा|रुपये|\\brs\\.?|₹|amount|payment|भुगतान)\\s*.{0,20}(भेजो|भेजें|भेज\\s*दो|transfer|ट्रांसफर|जमा\\s*(करो|करें|कर\\s*दो)|bhejo|bhej\\s*do|pay\\s*(karo|kare|now)))",
+   "पैसे भेजने को कहा जा रहा है"
+  ],
+  [
+   "urgent",
+   1,
+   "(आज\\s*(ही|रात)|aaj\\s*(hi|raat)|tonight|in\\s*\\d+\\s*(hours?|minutes)|तुरंत|turant|abhi\\s*(click|call)|within\\s*\\d+\\s*hours|\\d+\\s*(घंटे|hours?)\\s*(में|me|के\\s*अंदर|within)|last\\s*warning|अंतिम\\s*चेतावनी|\\burgent|immediately|act\\s*now)",
+   "जल्दबाज़ी करवाना"
+  ],
+  [
+   "fee",
+   2,
+   "((processing|verification|registration|security|tax)\\s*(fee|fees|charge|charges|deposit)|(प्रोसेसिंग|रजिस्ट्रेशन|सत्यापन|पंजीकरण)\\s*(फीस|शुल्क|चार्ज))",
+   "फीस / शुल्क माँगा जा रहा है"
+  ],
+  [
+   "mistake",
+   3,
+   "(galti\\s*se|गलती\\s*से|by\\s*mistake|wrongly|mistakenly).{0,40}(aa\\s*gaya|आ\\s*गया|transfer|sent|bhej|भेज|credited|chala\\s*gaya).{0,60}(wapas|वापस|return|lauta|लौटा)",
+   "\"गलती से पैसे भेज दिए, वापस करो\": पहले अपने बैंक में असली balance देखें, screenshot पर भरोसा न करें"
+  ],
+  [
+   "callnum",
+   1,
+   "((this|is|इस)\\s*(number|नंबर)\\s*.{0,10}(call|कॉल|फोन)|(call|कॉल)\\s*(karo|करें|now|immediately|our)?\\s*.{0,10}(this\\s*number|is\\s*number|इस\\s*नंबर|officer|ऑफिसर)|(call|कॉल)\\s*.{0,8}[6-9]\\d{9})",
+   "अनजान नंबर पर call करने को कहना"
+  ],
+  [
+   "link",
+   1,
+   "(https?://|www\\.|bit\\.ly|t\\.me/)",
+   "साथ में link"
+  ]
+ ],
+ "caps": "\\b(ED|NIA|NCB|TRAI|CBI|IFSO|DoT|RBI)\\b",
+ "advice": "(सावधान|savdhan|\\balert\\b|जागरूक|awareness|beware|से\\s*बचें|से\\s*सावधान|scam\\s*(alert|से|se)|fraud\\s*(alert|से|se)|ठगी\\s*से|cyber\\s*dost|1930\\s*पर|बचने\\s*की\\s*जानकारी|(otp|pin|cvv|password|ओटीपी|पिन|पासवर्ड).{0,25}(कभी\\s*(न|ना|भी\\s*न)|मत|\\bna\\b|\\bmat\\b|never)|(never|do\\s*not|don.?t)\\s*(share|tell|give)|(कभी|never).{0,15}(otp|pin|पिन|ओटीपी)\\s*.{0,10}(नहीं|न)\\s*(माँगता|मांगता|मांगते))",
+ "done": "(आ\\s*गया|हो\\s*गया|पहुंच\\s*गया|पहुँच\\s*गया|मिल\\s*गया|जमा\\s*हो\\s*गया|aa\\s*gaya|ho\\s*gaya|mil\\s*gaya|delivered|credited|received\\s*successfully)",
+ "normal": "(happy\\s*(birthday|anniversary|diwali|holi)|जन्मदिन|शादी\\s*में\\s*(जरूर|आप)|मुंडन|भंडारा|विद्यालय|स्कूल\\s*में|udise|यूडाइस|manav\\s*sampada|मानव\\s*संपदा|prerna|प्रेरणा|nipun|निपुण|\\bbsa\\b|बीएसए|\\bbeo\\b|खंड\\s*शिक्षा|\\bbrc\\b|बीआरसी|शिक्षामित्र|mid\\s*day\\s*meal|\\bmdm\\b|एमडीएम|salary\\s*bill|da\\s*arrear)",
+ "pincode": "(pin\\s*code|पिन\\s*कोड|पिनकोड|pincode)",
+ "rumour": [
+  "(forward|फॉरवर्ड|शेयर|share)\\s*(करें|करो|kare|karo|karein|this|zaroor|जरूर|to\\s*all|in\\s*all\\s*groups)|सभी\\s*ग्रुप्स?\\s*में\\s*(भेजें|डालें)|\\d+\\s*(लोगों|groups|ग्रुप)\\s*(को|में)?\\s*(भेजें|फॉरवर्ड|forward)|sabko\\s*forward|forward\\s*to\\s*(\\d+|all)",
+  "(media|मीडिया)\\s*(नहीं\\s*दिखाएगा|यह\\s*नहीं\\s*दिखाएगी|won.?t\\s*show|will\\s*not\\s*show|is\\s*hiding|छुपा\\s*रहा|nahi\\s*dikhayega)|(viral|वायरल)\\s*(सच|truth)|100\\s*%\\s*(सच|true|confirmed|sach)",
+  "(सरकार|govt|government|pm|yojana|योजना).{0,40}(free|मुफ्त|फ्री).{0,40}(recharge|laptop|scooty|स्कूटी|लैपटॉप|पैसे|₹|rs\\.?\\s*\\d)",
+  "(कैंसर|cancer|diabetes|शुगर|corona|covid|heart\\s*attack|हार्ट\\s*अटैक).{0,40}(पक्का\\s*इलाज|cure|ठीक\\s*हो\\s*जाएगा|गायब|जड़\\s*से)|(miracle|चमत्कारी)\\s*(cure|इलाज|नुस्खा)",
+  "(breaking|ब्रेकिंग).{0,60}(अफवाह|सच\\s*जानें)|(अभी\\s*अभी|just\\s*now).{0,40}(बंद|ban|cancel)\\s*(होंगे|होगा|हो\\s*जाएंगे)|will\\s*be\\s*(banned|chargeable)|chargeable\\s*from|(nasa|unesco|who)\\s*(declared|ने\\s*घोषित)"
+ ]
+}

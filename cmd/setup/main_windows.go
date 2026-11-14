@@ -153,6 +153,8 @@ func install() {
 		{filepath.Join(startMenu, "Ronin Safe Money.lnk"), "--safemoney", "Ronin Safe Money - protected banking"},
 		{filepath.Join(desktop, "Ronin Browser.lnk"), "", "Ronin Browser"},
 		{filepath.Join(desktop, "Ronin Safe Money.lnk"), "--safemoney", "Ronin Safe Money - protected banking"},
+		{filepath.Join(startMenu, "Ronin Mail.lnk"), "--mail", "Ronin Mail - email with Safe Mail (scam / threat mails marked)"},
+		{filepath.Join(desktop, "Ronin Mail.lnk"), "--mail", "Ronin Mail - email with Safe Mail (scam / threat mails marked)"},
 	}
 	// Windows remembers a program's icon by file name, so after a logo change the
 	// old picture stays on the desktop. Each version gets its own icon file, and
@@ -324,6 +326,7 @@ func uninstall() {
 	for _, p := range []string{
 		filepath.Join(startMenu, "Ronin Browser.lnk"), filepath.Join(startMenu, "Ronin Safe Money.lnk"),
 		filepath.Join(desktopDir(), "Ronin Browser.lnk"), filepath.Join(desktopDir(), "Ronin Safe Money.lnk"),
+		filepath.Join(startMenu, "Ronin Mail.lnk"), filepath.Join(desktopDir(), "Ronin Mail.lnk"),
 	} {
 		_ = os.Remove(p)
 	}

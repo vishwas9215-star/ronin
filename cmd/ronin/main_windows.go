@@ -389,6 +389,13 @@ func parseStart(args []string) (c containers.Container, start string, explicit b
 			c, explicit = containers.Calls, true
 		case "--private":
 			c, explicit = containers.Private, true
+		case "--mail": // the "Ronin Mail" shortcut: the family's email (Safe Mail checks every tab)
+			if _, u := appURL(socialSettings().MailApp); u != "" {
+				start = u
+			} else {
+				start = "https://mail.google.com/"
+			}
+			explicit = true
 		}
 	}
 	if start != "" {

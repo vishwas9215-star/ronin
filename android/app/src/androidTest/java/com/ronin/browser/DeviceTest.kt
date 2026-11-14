@@ -312,7 +312,7 @@ class DeviceTest {
         ActivityScenario.launch(MainActivity::class.java).use { sc ->
             Thread.sleep(1500)
             sc.onActivity { a -> a.openToolsForTest() }
-            assertTrue("tools page did not open", waitFor(20) { eval(sc, "document.querySelectorAll('.tool').length") == "19" })
+            assertTrue("tools page did not open", waitFor(20) { eval(sc, "document.querySelectorAll('.tool').length") == "20" })
             eval(sc, "window.__roninToolsOpen('datamatch'),1")
             Thread.sleep(800)
             shot("10-datamatch-page")
@@ -340,7 +340,13 @@ class DeviceTest {
             Thread.sleep(1500)
             var strip = 0
             sc.onActivity { a -> strip = a.tabStripForTest().childCount; a.openSocial() }
-            assertTrue("Safe Social launcher did not open", waitFor(20) { eval(sc, "document.querySelectorAll('.app').length") == "4" })
+            assertTrue("Safe Social launcher did not open", waitFor(20) { eval(sc, "document.querySelectorAll('.app').length") == "5" })
+            // Ronin itself stops Telegram in Safe Social, whatever the page does
+            eval(sc, "location.href='https://t.me/share_market_vip',1")
+            Thread.sleep(2500)
+            var at = ""
+            sc.onActivity { a -> at = a.webForTest().url ?: "" }
+            assertTrue("Safe Social opened Telegram: $at", !at.contains("t.me"))
             var social = false; var barShown = true
             sc.onActivity { a -> social = a.currentIsSocialForTest(); barShown = a.addressForTest().isShown }
             assertTrue("not a Safe Social tab", social)
@@ -377,7 +383,7 @@ class DeviceTest {
             var strip = 0
             sc.onActivity { a -> strip = a.tabStripForTest().childCount }
             sc.onActivity { a -> a.openToolsForTest() }
-            assertTrue("tools page did not open", waitFor(20) { eval(sc, "document.querySelectorAll('.tool').length") == "19" })
+            assertTrue("tools page did not open", waitFor(20) { eval(sc, "document.querySelectorAll('.tool').length") == "20" })
             var after = 0
             sc.onActivity { a -> after = a.tabStripForTest().childCount }
             assertEquals("Ronin Tools must not show as a tab", strip, after)

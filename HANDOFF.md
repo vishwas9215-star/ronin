@@ -110,6 +110,23 @@ Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + tes
 - Tests: tools/uitest/social.js, DeviceTest safeSocialOpensFullScreenAndCloses.
 - Review prompt for another AI given to owner (Ronin_review_prompt.txt); his answers will come back as suggestions.
 
+## 3.10.0 in progress (owner: everything in 3.10, approved 14 Nov evening)
+- DONE (phase A): review of 6 AIs merged. Shared engine ui/tools/scamcheck.js (score-based: 1 heavy or 2 normal signs,
+  advice lowers) with data internal/safelinks/{lists.json,scamrules.json} (Go Check + Kotlin SafeLinks + JS, same
+  cases.json; corpus tools/uitest/scam_corpus.json). Safe Mail in inject_social.js (Gmail/Outlook/Yahoo + custom
+  sites): red bar + Delete/Spam (presses the site's own button) + 1930. Native gate in Safe Social tabs (Windows
+  NavigationStarting, Android shouldOverrideUrlLoading). socialKey (home/close only) vs toolsKey (launcher only).
+  Big labelled buttons, TTS (Android roninNative WebMessageListener, Windows speechSynthesis), stranger banners,
+  video-call ask, fact-check sites, Scam Check tool (+ Android Share text -> Ronin), "Ronin Mail" icon
+  (Android activity-alias MailLauncher, Windows --mail shortcut).
+- TODO phase B: Ronin Messages = FULL default SMS app (owner chose, warned: RCS chats stay in Google Messages,
+  MMS limited). Tabs काम के / अनजान / विज्ञापन / ठगी, block (BlockedNumberContract), own icon.
+- TODO phase C: Ronin Calls = FULL default dialer (owner chose against my advice; must never break 112/emergency;
+  InCallService + CallScreening), own icon.
+- TODO phase D: WhatsApp notification watcher (NotificationListenerService) for "hacked friend asks money + QR".
+- Owner must once: App info -> ⋮ -> Allow restricted settings (Android 15+ for sideloaded SMS/dialer/notification).
+- Advice given: SMS "BLOCK PROMO" to 1909 (TRAI, Sept 2026) stops promotional SMS/calls at the operator.
+
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only
   when he presses it, with a warning that the photo goes to Google.

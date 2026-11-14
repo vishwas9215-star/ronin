@@ -10,6 +10,15 @@ import java.io.File
 class LogicTest {
     private val rules = Rules(File("src/main/assets/ronin/rules.json").readText())
 
+    @Test fun safeLinksLikeWindows() {
+        // the same cases as internal/safelinks (Go) and tools/uitest/scamcheck.js (page)
+        val a = org.json.JSONArray(File("../../internal/safelinks/cases.json").readText())
+        for (i in 0 until a.length()) {
+            val c = a.getJSONArray(i)
+            assertEquals(c.getString(0), c.getString(1), rules.safeLinks.check(c.getString(0)))
+        }
+    }
+
     @Test fun classifiesLikeWindows() {
         assertEquals(Kind.BANK, rules.classify("https://sbi.bank.in/"))
         assertEquals(Kind.BANK, rules.classify("https://netbanking.hdfcbank.com/x"))

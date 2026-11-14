@@ -7,7 +7,7 @@ body.light{--bg:#f4f6fb;--card:#fff;--fg:#111;--mut:#555;--line:#d6dbe6}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font-family:"Segoe UI","Nirmala UI","Noto Sans Devanagari",sans-serif;font-size:17px}
 main{max-width:900px;margin:0 auto;padding:14px 14px 50px}
 .top{display:flex;align-items:center;justify-content:space-between;gap:8px}.top h1{font-size:22px;margin:0}
-.round{width:42px;height:42px;border-radius:21px;border:1px solid var(--line);background:var(--card);color:var(--fg);font-size:20px;cursor:pointer}
+.round{width:48px;height:48px;border-radius:24px;border:1px solid var(--line);background:var(--card);color:var(--fg);font-size:20px;cursor:pointer}
 .note{color:var(--mut);font-size:14px;margin:6px 0 14px;line-height:1.45}
 .apps{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px}
 .app{border:0;border-radius:18px;padding:18px 8px;min-height:120px;color:#fff;font-family:inherit;font-size:17px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;box-shadow:0 3px 12px rgba(0,0,0,.25)}
@@ -22,6 +22,11 @@ main{max-width:900px;margin:0 auto;padding:14px 14px 50px}
 .big{display:block;width:100%;min-height:50px;border:0;border-radius:14px;background:var(--acc);color:#fff;font:inherit;font-weight:700;cursor:pointer;margin-top:10px}
 input{font:inherit;font-size:22px;letter-spacing:6px;text-align:center;padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);width:180px}
 .err{color:#f87171;font-size:14px}
+.pill{display:inline-flex;align-items:center;min-height:48px;padding:0 16px;border-radius:24px;border:1px solid var(--line);background:var(--card);color:var(--fg);font:inherit;font-weight:700;cursor:pointer;text-decoration:none}
+.pill.red{background:#dc2626;color:#fff;border-color:#dc2626}
+.sos{background:#3b1414;border:2px solid #dc2626;border-radius:14px;padding:12px 14px;margin:14px 0}body.light .sos{background:#fde8e8}
+.sos small{display:block;margin-top:8px;color:var(--mut)}.row2{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.txt{display:block;width:100%;letter-spacing:0;text-align:left;font-size:17px;margin:6px 0}.sel{font:inherit;padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);min-height:48px}
 </style></head><body>
 <main id="app"></main>
 <script src="social.js"></script>

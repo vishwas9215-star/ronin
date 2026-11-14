@@ -1,0 +1,16 @@
+{
+ "_note": "Safe Social link rules, shared by Windows (Go), Android (Kotlin) and the page script (scamcheck.js). Hosts match the host itself or any sub-domain.",
+ "paySchemes": ["upi", "phonepe", "paytmmp", "paytm", "gpay", "tez", "bhim", "credpay", "mobikwik"],
+ "badSchemes": ["tg", "javascript", "data", "blob", "file", "vbscript", "market"],
+ "telegram": ["t.me", "telegram.me", "telegram.org", "telegram.dog", "telegra.ph", "tx.me"],
+ "invites": ["chat.whatsapp.com", "discord.gg", "discord.com/invite", "signal.group", "line.me/ti/g", "wa.me/invite", "whatsapp.com/invite"],
+ "short": ["bit.ly", "tinyurl.com", "cutt.ly", "cutt.us", "rb.gy", "is.gd", "v.gd", "shorturl.at", "t.ly", "tiny.cc", "ow.ly", "buff.ly", "rebrand.ly", "bit.do", "shorte.st", "adf.ly", "goo.gl", "goo.su", "soo.gd", "s.id", "qr.ae", "surl.li", "1url.in", "clck.ru", "u.to", "gplinks.co", "gplinks.in", "shrinkme.io", "linksly.co", "wa.link", "lnk.bio", "bio.link", "solo.to", "beacons.ai", "linktr.ee", "tr.ee", "shorturl.gg", "rebrandly.com", "t2m.io", "short.gy", "ln.run", "dub.sh"],
+ "remote": ["anydesk.com", "teamviewer.com", "rustdesk.com", "airdroid.com", "apowersoft.com", "islonline.com", "getscreen.me", "remotedesktop.google.com", "quicksupport.app", "supremocontrol.com", "ultraviewer.net", "zoho.com/assist", "splashtop.com", "aeroadmin.com"],
+ "apkHosts": ["apkpure.com", "apkmirror.com", "apkcombo.com", "apkmody.io", "apkmody.com", "happymod.com", "modapk.org", "an1.com", "uptodown.com", "apkdone.com", "liteapks.com", "5play.ru", "apk.support", "apkmb.com", "moddroid.com"],
+ "apkWords": ["apk", "modapk", "apkmod", "mod-apk", "hackapk"],
+ "fileExt": [".apk", ".apks", ".xapk", ".exe", ".msi", ".scr", ".bat", ".cmd", ".vbs", ".ps1", ".lnk", ".jar"],
+ "moneyWords": ["invest", "investment", "forex", "crypto", "bitcoin", "usdt", "profit", "earning", "earnmoney", "kyc", "ekyc", "refund", "cashback", "lottery", "prize", "reward", "rewards", "giftcard", "freemoney", "freerecharge", "task", "tasks", "dailyincome", "doublemoney"],
+ "freeHosts": ["web.app", "firebaseapp.com", "netlify.app", "vercel.app", "pages.dev", "workers.dev", "github.io", "gitlab.io", "glitch.me", "blogspot.com", "wixsite.com", "weebly.com", "000webhostapp.com", "ngrok-free.app", "ngrok.io", "trycloudflare.com", "onrender.com", "rf.gd", "infinityfreeapp.com", "sites.google.com", "framer.website", "webflow.io", "carrd.co"],
+ "lureWords": ["sbi", "onlinesbi", "hdfc", "icici", "axis", "pnb", "kotak", "bob", "canara", "paytm", "phonepe", "gpay", "upi", "npci", "irctc", "uidai", "aadhaar", "aadhar", "pan", "kyc", "ekyc", "epfo", "pf", "incometax", "gst", "uppcl", "bijli", "electricity", "yojana", "pmkisan", "scheme", "refund", "rbi", "sebi", "police", "cbi", "court", "customs", "fedex", "indiapost", "dhl", "bluedart", "jio", "airtel", "recharge", "lottery", "kbc", "gift", "reward", "cashback", "loan", "login", "verify", "update", "secure"],
+ "officialEnds": ["gov.in", "nic.in", "ac.in", "edu.in", "res.in", "mil.in", "bank.in", "sbi", "rbi.org.in", "npci.org.in"]
+}

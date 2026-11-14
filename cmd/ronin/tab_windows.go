@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"golang.org/x/sys/windows"
 	"html"
 	"net/url"
@@ -441,10 +442,7 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 	if strings.HasPrefix(uri, "https://ronin.newtab/social") {
 		call(args, nsSetCancel, 1)
 		if u, err := url.Parse(uri); err == nil && u.Query().Get("k") == newTabKey && t.isNewTab {
-			open := ""
-			if a, ok := socialApps[u.Query().Get("app")]; ok {
-				open = a[1]
-			}
+			_, open := appURL(u.Query().Get("app"))
 			runOnUI(func() { t.w.showSocial(open) })
 		}
 		return
@@ -458,6 +456,20 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 			}
 		}
 		return
+	}
+	// Safe Social: Telegram, group invites, UPI apps, short links, .apk, fake bank sites... never
+	// open, however the page tries (link, script, redirect); the page shows why.
+	if t.isSocial {
+		if r := socialStop(uri); r != "" {
+			call(args, nsSetCancel, 1)
+			b, _ := json.Marshal(uri)
+			runOnUI(func() {
+				if t.c != nil {
+					t.c.Eval("window.__roninSocialWarn&&window.__roninSocialWarn(" + string(b) + ")")
+				}
+			})
+			return
+		}
 	}
 	// for the "did the user ask for this download?" check
 	if strings.HasPrefix(uri, "http") { // Ronin's own pages (new tab, error page) do not count

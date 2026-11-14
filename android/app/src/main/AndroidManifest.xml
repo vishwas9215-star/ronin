@@ -50,7 +50,26 @@
                 <data android:scheme="http" />
                 <data android:scheme="https" />
             </intent-filter>
+            <!-- WhatsApp / SMS -> Share -> Ronin: "क्या यह ठगी है?" -->
+            <intent-filter android:label="Ronin: ठगी जाँचें">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
+
+        <!-- its own icon on the home screen: the family's email with Safe Mail -->
+        <activity-alias
+            android:name=".MailLauncher"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:icon="@mipmap/ic_mail"
+            android:label="Ronin Mail">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <activity
             android:name=".SafeMoneyActivity"

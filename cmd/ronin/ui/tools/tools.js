@@ -338,8 +338,9 @@ function topBar(back) {
     h('button', { cls: 'chip', on: { click: closeTools } }, '✕ Back to browser'));
 }
 // every tool once: [category, id, icon, name, what it does]. A new tool = one line here + T[id].
-const CATS = [['data', '📊 Data'], ['calc', '🧮 Calculators'], ['pdf', '📄 PDF'], ['photo', '🖼️ Photo']];
+const CATS = [['safe', '🛡️ Safety'], ['data', '📊 Data'], ['calc', '🧮 Calculators'], ['pdf', '📄 PDF'], ['photo', '🖼️ Photo']];
 const TOOLS = [
+  ['safe', 'scamcheck', '🛡️', 'Scam Check', 'क्या यह ठगी है? message, link या email यहाँ डालें'],
   ['data', 'datamatch', '🔀', 'Data Match', 'कोई भी 2 या ज़्यादा Excel / CSV: अंतर और छूटे हुए'],
   ['calc', 'datecalc', '📅', 'Date Calculator', 'उम्र, प्रवेश आयु, सेवा, सेवानिवृत्ति, छुट्टी के दिन, उम्र का अनुमान'],
   ['calc', 'words', '₹', 'Amount in Words', 'रकम शब्दों में: Hindi और English (bill, चेक, form)'],
@@ -371,14 +372,14 @@ function home() {
         h('button', { cls: 'tool', title: sub, on: { click: () => open(id) } }, h('span', { cls: 'ic' }, icon), h('span', {}, h('b', {}, name), h('small', {}, sub)))))))));
   window.scrollTo(0, 0);
 }
-function open(id) {
+function open(id, preset) {
   const t = T[id];
   app.innerHTML = '';
   msgEl = h('div', { id: 'msg' });
   app.append(topBar(true), h('h1', {}, t.title), h('p', { cls: 'sub' }, t.sub));
   const body = h('div');
   app.append(body, msgEl);
-  t.show(body);
+  t.show(body, preset);
   window.scrollTo(0, 0);
 }
 // a "choose files" button with a list (↑ ↓ ✕), used by every tool
@@ -605,6 +606,33 @@ T.words = {
     });
     body.append(inp, out);
     setTimeout(() => inp.focus(), 50);
+  },
+};
+
+// ---- "क्या यह ठगी है?": the same engine as Safe Social / Safe Mail (RoninScam, scamcheck.js)
+T.scamcheck = {
+  title: '🛡️ Scam Check', sub: 'WhatsApp / SMS / email का message या link यहाँ paste करें (या उस app में Share → Ronin)। सब जाँच इसी phone पर होती है।',
+  show(body, preset) {
+    const S = window.RoninScam;
+    const box = h('textarea', { rows: 6, placeholder: 'यहाँ message या link paste करें...', style: 'width:100%;font-size:17px' });
+    const out = h('div');
+    const check = () => {
+      out.innerHTML = '';
+      const t = box.value.trim();
+      if (!t) return;
+      if (!S) { out.append(h('div', { cls: 'res bad' }, 'जाँच अभी उपलब्ध नहीं है: Ronin फिर से खोलें।')); return; }
+      const r = S.text(t);
+      const links = (t.match(/(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+)/gi) || []).map(u => S.link(/^https?:/i.test(u) ? u : 'https://' + u)).filter(Boolean);
+      if (r.level === 'stop' || links.length) out.append(h('div', { cls: 'res bad', id: 'verdict', 'data-level': 'stop' }, h('big', {}, '⛔ यह ठगी का हो सकता है'), h('ul', {}, r.reasons.concat(links.map(v => v.title + ': ' + v.text)).slice(0, 6).map(x => h('li', {}, x))),
+        h('p', {}, 'पैसे, OTP, PIN, फ़ोटो न दें। जानने वाले के नाम से हो तो उन्हें फ़ोन करके पक्का करें। पैसा चला गया हो तो तुरंत 1930 पर call करें।')));
+      else if (r.level === 'warn') out.append(h('div', { cls: 'res warn', id: 'verdict', 'data-level': 'warn' }, h('big', {}, '⚠ सावधान: ठगी के संकेत हैं'), h('ul', {}, r.reasons.slice(0, 5).map(x => h('li', {}, x)))));
+      else if (r.rumour) out.append(h('div', { cls: 'res warn', id: 'verdict', 'data-level': 'rumour' }, h('big', {}, 'ℹ जाँच ज़रूरी'), h('p', {}, 'इसमें "सबको भेजें / 100% सच" जैसी बातें हैं। आगे भेजने से पहले किसी fact-check वेबसाइट पर देखें।')));
+      else out.append(h('div', { cls: 'res ok', id: 'verdict', 'data-level': '' }, h('big', {}, '✔ ठगी के जाने-पहचाने संकेत नहीं मिले'), h('p', {}, 'फिर भी: अनजान व्यक्ति पैसे, OTP या फ़ोटो माँगे तो न दें।')));
+    };
+    box.addEventListener('input', () => { clearTimeout(box.__t); box.__t = setTimeout(check, 300); });
+    body.append(box, h('button', { cls: 'big', on: { click: check } }, '🛡️ जाँचें'), out,
+      h('p', { cls: 'note' }, '🆘 ठगी हो गई? 📞 1930 पर call करें, cybercrime.gov.in पर शिकायत करें, और ठगी वाले नंबर / SMS की शिकायत sancharsaathi.gov.in (चक्षु) पर करें।'));
+    if (preset) { box.value = preset; check(); } else setTimeout(() => box.focus(), 50);
   },
 };
 
@@ -1762,5 +1790,8 @@ window.__roninToolsSelfTest = async () => {
 
 // start: #tool opens a tool straight away (used by the menu and the tests)
 const start = location.hash.slice(1);
-if (T[start]) open(start); else home();
+// "#scamcheck:<text>": a message shared to Ronin from WhatsApp / SMS (stays on this device)
+if (start.startsWith('scamcheck:')) open('scamcheck', decodeURIComponent(start.slice(10)));
+else if (T[start]) open(start); else home();
+window.addEventListener('hashchange', () => { const h0 = location.hash.slice(1); if (h0.startsWith('scamcheck:')) open('scamcheck', decodeURIComponent(h0.slice(10))); });
 window.__roninToolsOpen = open;
