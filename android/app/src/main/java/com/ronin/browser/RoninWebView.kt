@@ -20,4 +20,14 @@ class RoninWebView(context: Context) : WebView(context) {
             super.onWindowVisibilityChanged(visibility)
         }
     }
+
+    // When the app goes to the background Android also hides the view itself;
+    // the engine then holds back the next song until the app is opened again.
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        if (keepPlaying && visibility != View.VISIBLE) {
+            super.onVisibilityChanged(changedView, View.VISIBLE)
+        } else {
+            super.onVisibilityChanged(changedView, visibility)
+        }
+    }
 }

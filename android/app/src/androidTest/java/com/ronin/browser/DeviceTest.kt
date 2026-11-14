@@ -85,6 +85,16 @@ class DeviceTest {
             app.startService(Intent(app, MediaPlaybackService::class.java).setAction(MediaPlaybackService.ACTION_PLAY_PAUSE))
             assertTrue("play button did not play", waitFor(8) { eval(sc, "document.getElementById('v').paused") == "false" })
 
+            // Next song while in the background: the player pauses for a moment, a new
+            // video loads and must start without opening the app
+            eval(sc, "document.getElementById('v').pause(); 1")
+            Thread.sleep(3000)
+            eval(sc, "var o=document.getElementById('v'),n=document.createElement('video');" +
+                "n.setAttribute('playsinline','');n.src=o.src;o.remove();n.id='v';document.body.appendChild(n);n.play();1")
+            assertTrue("next song did not play in the background", waitFor(15) {
+                eval(sc, "document.getElementById('v').currentTime").toDoubleOrNull()?.let { it > 1.0 } == true
+            })
+
             // Close: song pauses, notification goes away
             app.startService(Intent(app, MediaPlaybackService::class.java).setAction(MediaPlaybackService.ACTION_CLOSE))
             assertTrue("close did not pause", waitFor(8) { eval(sc, "document.getElementById('v').paused") == "true" })

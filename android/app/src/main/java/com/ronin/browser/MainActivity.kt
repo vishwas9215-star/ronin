@@ -118,7 +118,10 @@ class MainActivity : AppCompatActivity() {
         }
         if (ok.isEmpty()) req.deny() else req.grant(ok.toTypedArray())
     }
-    private val askNotify = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    // once allowed, show the player card at once (it may have been held back before)
+    private val askNotify = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok && mediaTab != null) MediaPlaybackService.update(this, mediaTitle, "", mediaPlaying)
+    }
 
     // ---- start ---------------------------------------------------------------------
 
@@ -511,7 +514,10 @@ class MainActivity : AppCompatActivity() {
         val o = try { JSONObject(JSONArray("[$raw]").getString(0)) } catch (e: Exception) { return }
         if (!o.optBoolean("v")) {
             if (t == mediaTab && !mediaPlaying) return
-            if (t == mediaTab) { mediaPlaying = false; t.web.keepPlaying = false }
+            if (t == mediaTab && mediaPlaying) {
+                mediaPlaying = false
+                MediaPlaybackService.update(this, mediaTitle, "", false)
+            }
             return
         }
         val playing = o.optBoolean("p")
@@ -524,7 +530,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
         if (t != mediaTab) return
-        t.web.keepPlaying = playing
+        // stays on between songs (the player pauses for a moment while the next one loads)
+        t.web.keepPlaying = true
         if (playing != mediaPlaying || title != mediaTitle) {
             mediaPlaying = playing; mediaTitle = title
             MediaPlaybackService.update(this, title, o.optString("a"), playing)
@@ -541,7 +548,7 @@ class MainActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         // tabs that do not play are paused to save battery; the playing one goes on
-        for (t in tabs) if (!(t == mediaTab && mediaPlaying)) t.web.onPause()
+        for (t in tabs) if (t != mediaTab) t.web.onPause()
     }
 
     override fun onStart() {
