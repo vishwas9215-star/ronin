@@ -389,9 +389,10 @@ class MainActivity : AppCompatActivity() {
         val list = browsingTabs()
         tabsButton.text = list.size.toString()
         if (!::tabStrip.isInitialized) return
+        val inTools = current?.isTools == true
         toolsButton.background = android.graphics.drawable.GradientDrawable().apply {
             cornerRadius = dp(10).toFloat()
-            setColor(Color.parseColor(if (current?.isTools == true) "#2563EB" else "#1B1F29"))
+            setColor(Color.parseColor(if (inTools) "#2563EB" else "#1B1F29"))
         }
         tabStrip.removeAllViews()
         val wide = resources.configuration.smallestScreenWidthDp >= 600
