@@ -42,12 +42,12 @@ object SosStore {
     }
 
     fun message(ctx: Context, loc: Location?, first: Boolean, stop: Boolean = false): String {
-        val who = name(ctx).ifEmpty { "मैं" }
+        val who = name(ctx).ifEmpty { L("मैं", "I") }
         val time = SimpleDateFormat("HH:mm", Locale.US).format(Date())
-        if (stop) return "✅ $who अब ठीक है। (Ronin SOS बंद, $time)"
-        val place = if (loc != null) "https://maps.google.com/?q=%.6f,%.6f (±%dm)".format(Locale.US, loc.latitude, loc.longitude, loc.accuracy.toInt()) else "जगह अभी नहीं मिली"
+        if (stop) return L("✅ $who अब ठीक है। (Ronin SOS बंद, $time)", "✅ $who is safe now. (Ronin SOS off, $time)")
+        val place = if (loc != null) "https://maps.google.com/?q=%.6f,%.6f (±%dm)".format(Locale.US, loc.latitude, loc.longitude, loc.accuracy.toInt()) else L("जगह अभी नहीं मिली", "place not found yet")
         val b = battery(ctx)
-        return (if (first) "🆘 $who मुसीबत में है, तुरंत संपर्क करें। " else "🆘 $who की नई जगह: ") + place + (if (b >= 0) " | Battery $b%" else "") + " | $time"
+        return (if (first) L("🆘 $who मुसीबत में है, तुरंत संपर्क करें। ", "🆘 $who is in trouble, contact at once. ") else L("🆘 $who की नई जगह: ", "🆘 $who's new place: ")) + place + (if (b >= 0) " | Battery $b%" else "") + " | $time"
     }
 }
 
@@ -74,8 +74,8 @@ class SosService : Service() {
         val stop = PendingIntent.getService(this, 1, Intent(this, SosService::class.java).setAction("stop"), PendingIntent.FLAG_IMMUTABLE)
         val open = PendingIntent.getActivity(this, 2, Intent(this, SosActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val n = NotificationCompat.Builder(this, "ronin_sos").setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentTitle("🆘 SOS चालू: परिवार को हर 5 मिनट जगह जा रही है").setOngoing(true).setContentIntent(open)
-            .addAction(0, "✅ मैं ठीक हूँ (बंद करें)", stop).build()
+            .setContentTitle(L("🆘 SOS चालू: परिवार को हर 5 मिनट जगह जा रही है", "🆘 SOS on: your place goes to the family every 5 minutes")).setOngoing(true).setContentIntent(open)
+            .addAction(0, L("✅ मैं ठीक हूँ (बंद करें)", "✅ I am safe (stop)"), stop).build()
         try {
             if (Build.VERSION.SDK_INT >= 30) startForeground(7301, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION) else startForeground(7301, n)
         } catch (e: Exception) { try { startForeground(7301, n) } catch (x: Exception) { } }

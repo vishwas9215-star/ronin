@@ -20,7 +20,12 @@
   // the rules (internal/safelinks/scamrules.json) come from Ronin, the same for Android and the tests
   const RULES = root.__roninScamRules || { groups: [], rumour: [] };
   const NONE = /(?!)/;
-  const G = RULES.groups.map(([id, w, src, why]) => ({ id, w, re: RX(src), why }));
+  // reasons in the phone's language (Ronin sets __roninLang; English unless the device is Hindi)
+  const LANG = String(root.__roninLang || (typeof navigator !== 'undefined' && navigator.language) || 'hi').toLowerCase();
+  const EN = LANG.indexOf('hi') !== 0;
+  const T = (hi, en) => EN ? en : hi;
+  const WHY_EN = RULES.whyEn || {};
+  const G = RULES.groups.map(([id, w, src, why]) => ({ id, w, re: RX(src), why: EN && WHY_EN[id] ? WHY_EN[id] : why }));
   // short Latin names written in capitals only ("ED" inside "need" must not count)
   const CAPS = RULES.caps ? new RegExp(RULES.caps) : NONE;
   // advice / awareness / news about scams lowers the score (never removes it)
@@ -52,9 +57,9 @@
     const urls = String(t0 || '').match(/(https?:\/\/[^\s<>"')]+|www\.[^\s<>"')]+|\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(web\.app|netlify\.app|vercel\.app|xyz|top|click|link|online|site|live|shop|icu|sbs|cfd|buzz|me|ly|gd|gl|ee)\b[^\s<>"')]*)/gi) || [];
     for (const u0 of urls.slice(0, 10)) {
       const v = check(/^https?:/i.test(u0) ? u0 : 'https://' + u0);
-      if (v) { score += 3; heavy = true; res.ids.push('badlink'); res.reasons.push('message में ऐसा link है जो Ronin कभी नहीं खोलता: ' + LINK_WHY[v][0]); break; }
+      if (v) { score += 3; heavy = true; res.ids.push('badlink'); res.reasons.push(T('message में ऐसा link है जो Ronin कभी नहीं खोलता: ', 'The message has a link Ronin never opens: ') + LINK_WHY[v][0]); break; }
     }
-    if (!res.ids.includes('auth') && CAPS.test(String(t0 || ''))) { score += 2; res.ids.push('auth'); res.reasons.push('खुद को पुलिस / CBI / कोर्ट बताना'); }
+    if (!res.ids.includes('auth') && CAPS.test(String(t0 || ''))) { score += 2; res.ids.push('auth'); res.reasons.push(T('खुद को पुलिस / CBI / कोर्ट बताना', 'Says they are police / CBI / a court')); }
     // "link" and "urgent" only add to real signs, never make a warning on their own
     const real = res.ids.filter(i => i !== 'link' && i !== 'urgent').length;
     if (!real) score = 0;
@@ -137,7 +142,7 @@
       return u.href;
     } catch (e) { return String(href || ''); }
   }
-  const LINK_WHY = {
+  const LINK_WHY_HI = {
     pay: ['पैसे भेजने / UPI app का link', 'पैसा लेने के लिए कभी PIN डालना या QR scan करना नहीं पड़ता। अनजान के कहने पर पैसा न भेजें।'],
     ussd: ['Call-forwarding वाला code (*401*, *21*...)', 'इसे dial करने से आपकी calls और OTP ठग के फ़ोन पर चले जाते हैं।'],
     scheme: ['छुपा हुआ / खतरनाक तरह का link', 'ऐसे link से फ़ोन में कुछ भी चल सकता है।'],
@@ -153,7 +158,25 @@
     adult: ['गंदी / जुआ वाली साइट', 'यह साइट सुरक्षित नहीं है।'],
     money: ['पैसे / इनाम / निवेश वाली साइट', 'ऐसी साइटें अक्सर ठगी के लिए बनती हैं।'],
     fake: ['बैंक / सरकार / इनाम के नाम की नकली साइट', 'असली सरकारी साइट .gov.in / .nic.in पर और बैंक की अपनी साइट पर होती है।'],
+  };  const LINK_WHY_EN = {
+    pay: ['A link to send money / a UPI app', 'You never enter a PIN or scan a QR to receive money. Never send money because a stranger asks.'],
+    ussd: ['A call-forwarding code (*401*, *21*...)', 'Dialling it sends your calls and OTPs to the crook\'s phone.'],
+    scheme: ['A hidden / dangerous kind of link', 'A link like this can run anything on your phone.'],
+    invite: ['A link that adds you to an unknown group', 'Unknown groups ask for money in the name of investment, jobs or lotteries.'],
+    at: ['A fake address (the @ trick)', 'This link shows a real site\'s name but takes you to another site.'],
+    ip: ['An address that is only numbers', 'Real banks and government sites are never at such addresses.'],
+    puny: ['A fake address with look-alike letters', 'This address looks real but uses letters from another alphabet.'],
+    telegram: ['A link that goes to Telegram', 'Unknown groups / channels asking money for investment or tasks are risky. Telegram is off in Safe Social to keep the family safe.'],
+    remote: ['A screen share / remote control app (like AnyDesk)', 'With it the other person can run your whole phone. No customer care asks you to install it.'],
+    short: ['A short (hidden) link', 'This link hides the real address.'],
+    apk: ['An app file (.apk) / mod app', 'Such an app can hack your phone. Install apps only from the Play Store.'],
+    file: ['A program file (.exe / .bat...)', 'Such a file can put a virus on the computer.'],
+    adult: ['A dirty / gambling site', 'This site is not safe.'],
+    money: ['A money / prize / investment site', 'Such sites are often made for scams.'],
+    fake: ['A fake site in the name of a bank / government / prize', 'Real government sites are on .gov.in / .nic.in, and banks on their own site.'],
   };
+  const LINK_WHY = EN ? LINK_WHY_EN : LINK_WHY_HI;
+
   function link(href, base) {
     const target = realTarget(href, base), why = check(target);
     return why ? { target, why, title: LINK_WHY[why][0], text: LINK_WHY[why][1] } : null;
@@ -174,12 +197,12 @@
     // "Cyber Crime Cell" from xyz@gmail.com, or a made-up "government-looking" address (cybercell-gov.in.net)
     if (dom && !official && AUTH_NAME.test(norm(who)) && (FREE_MAIL.test(dom) || /(gov|police|cbi|court|customs|ncb|cyber|crime|interpol)/.test(dom))) {
       score += 3; res.ids.push('sender');
-      res.reasons.unshift('नाम / विषय में पुलिस-बैंक-सरकार लिखा है, पर email ' + dom + ' जैसे आम पते से आया है: असली विभाग ऐसे पते से नहीं लिखते');
+      res.reasons.unshift(EN ? 'The name / subject says police / bank / government, but the email came from an ordinary address like ' + dom + ': real departments never write from such addresses' : 'नाम / विषय में पुलिस-बैंक-सरकार लिखा है, पर email ' + dom + ' जैसे आम पते से आया है: असली विभाग ऐसे पते से नहीं लिखते');
     }
     for (const f of (m.files || [])) {
       const n = String(f || '').toLowerCase().trim();
-      if (BAD_FILE.test(n)) { score += 3; res.ids.push('file'); res.reasons.push('खतरनाक attachment: ' + n + ' (इसे न खोलें)'); }
-      else if (ODD_FILE.test(n)) { score += 1; res.ids.push('file'); res.reasons.push('ध्यान दें: attachment ' + n + ' में नकली login page हो सकता है'); }
+      if (BAD_FILE.test(n)) { score += 3; res.ids.push('file'); res.reasons.push(T('खतरनाक attachment: ' + n + ' (इसे न खोलें)', 'Dangerous attachment: ' + n + ' (do not open it)')); }
+      else if (ODD_FILE.test(n)) { score += 1; res.ids.push('file'); res.reasons.push(T('ध्यान दें: attachment ' + n + ' में नकली login page हो सकता है', 'Careful: attachment ' + n + ' may hold a fake login page')); }
     }
     res.score = score;
     const heavy = res.ids.some(i => ['otp', 'payfirst', 'qr', 'arrest', 'stay', 'sender'].includes(i)) || res.ids.includes('file') && score >= 3;

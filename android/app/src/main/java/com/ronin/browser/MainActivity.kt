@@ -104,6 +104,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var holder: FrameLayout
     private lateinit var readBar: LinearLayout
+    private lateinit var socialBar: LinearLayout
     private lateinit var readPlay: Button
     private lateinit var readSpeed: Button
     private lateinit var readNote: TextView
@@ -342,7 +343,25 @@ class MainActivity : AppCompatActivity() {
             setPadding(dp(8), 0, 0, 0)
         }
         readBar.addView(readPlay); readBar.addView(readStop); readBar.addView(readSpeed); readBar.addView(readNote)
-        root.addView(bar); root.addView(progress); root.addView(holder); root.addView(readBar)
+        // Safe Social: Back / My apps / Close at the bottom, under the page (never on top of the site's own buttons)
+        socialBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(6), dp(4), dp(6), dp(4))
+            setBackgroundColor(Color.parseColor("#111827"))
+            visibility = View.GONE
+            tag = "socialBar"
+        }
+        fun socialButton(label: String, tagName: String, act: () -> Unit) = Button(this).apply {
+            text = label; isAllCaps = false; textSize = 16f; tag = tagName
+            setTextColor(Color.WHITE); setBackgroundColor(Color.TRANSPARENT)
+            layoutParams = LinearLayout.LayoutParams(0, dp(52), 1f)
+            setOnClickListener { act() }
+        }
+        socialBar.addView(socialButton(L("← पीछे", "← Back"), "socialBack") { current?.let { t -> if (t.web.canGoBack()) t.web.goBack() else load(t, SOCIAL) } })
+        socialBar.addView(socialButton(L("⊞ मेरे ऐप", "⊞ My apps"), "socialApps") { current?.let { load(it, SOCIAL) } })
+        socialBar.addView(socialButton(L("✕ बंद", "✕ Close"), "socialClose") { current?.let { if (it.isSocial) leaveSocial(it) } })
+        root.addView(bar); root.addView(progress); root.addView(holder); root.addView(readBar); root.addView(socialBar)
         keepClearOfSystemBars(root)
         setContentView(root)
     }
@@ -410,7 +429,7 @@ class MainActivity : AppCompatActivity() {
         val mail = JSONArray()
         c.optJSONArray("custom")?.let { a -> for (i in 0 until a.length()) a.optJSONObject(i)?.takeIf { it.optBoolean("mail") }?.let { x -> Uri.parse(x.optString("url")).host?.let { mail.put(it.lowercase()) } } }
         // socialKey: websites can read it; it only allows "back to my apps" and "close"
-        return "window.__roninSocialCfg=" + JSONObject().put("k", socialKey).put("reels", c.optBoolean("reels")).put("mail", mail) + ";" +
+        return Lang.pageScript(this) + "window.__roninSocialCfg=" + JSONObject().put("k", socialKey).put("reels", c.optBoolean("reels")).put("mail", mail).put("nativeBar", true) + ";" +
             "window.__roninLinkLists=" + app.rules.safeLinks.json + ";window.__roninScamRules=" + app.rules.scamRulesJson + ";"
     }
 
@@ -425,11 +444,15 @@ class MainActivity : AppCompatActivity() {
     private fun socialWarn(view: WebView, url: String) = view.evaluateJavascript("window.__roninSocialWarn&&window.__roninSocialWarn(" + JSONObject.quote(url) + ")", null)
 
     private var tts: android.speech.tts.TextToSpeech? = null
-    private val warnings = mapOf(
+    private val warnings get() = if (Lang.hindi(this)) mapOf(
         "link" to "सावधान! यह लिंक खतरनाक है। रोनिन ने इसे रोक दिया है।",
         "scam" to "सावधान! यह संदेश ठगी का हो सकता है। पैसे, ओटीपी या पिन किसी को न दें।",
         "mail" to "सावधान! यह ईमेल ठगी का हो सकता है। इसे डिलीट कर दें, और कोई पैसा न भेजें।",
-        "call" to "अनजान व्यक्ति से वीडियो कॉल न करें।")
+        "call" to "अनजान व्यक्ति से वीडियो कॉल न करें।") else mapOf(
+        "link" to "Careful! This link is dangerous. Ronin has stopped it.",
+        "scam" to "Careful! This message may be a scam. Never give money, an OTP or a PIN to anyone.",
+        "mail" to "Careful! This email may be a scam. Delete it, and do not send any money.",
+        "call" to "Do not video call a stranger.")
     private val spoke = HashMap<String, Long>()
     private fun speakWarning(id: String) {
         val text = warnings[id] ?: return
@@ -439,7 +462,7 @@ class MainActivity : AppCompatActivity() {
         val t = tts
         if (t == null) {
             tts = android.speech.tts.TextToSpeech(applicationContext) { st ->
-                if (st == android.speech.tts.TextToSpeech.SUCCESS) { tts?.language = java.util.Locale("hi", "IN"); tts?.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "w") }
+                if (st == android.speech.tts.TextToSpeech.SUCCESS) { tts?.language = if (Lang.hindi(this)) java.util.Locale("hi", "IN") else java.util.Locale("en", "IN"); tts?.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "w") }
             }
         } else t.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "w")
     }
@@ -564,7 +587,7 @@ class MainActivity : AppCompatActivity() {
         val blank = from != null && !from.isPrivate && (from.url.isEmpty() || from.url == HOME)
         newTab(url, select = true, private = true)
         if (blank && from != null && from in tabs) closeTab(from)
-        Toast.makeText(this, "🕶 Private tab: इसकी history और cookies save नहीं होंगी", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, L("🕶 Private tab: इसकी history और cookies save नहीं होंगी", "🕶 Private tab: its history and cookies are not saved"), Toast.LENGTH_SHORT).show()
     }
 
     fun load(t: Tab, url: String) {
@@ -657,6 +680,10 @@ class MainActivity : AppCompatActivity() {
             if (req.isForMainFrame && Sensitive.site(url) && Parts.adultBlocked(this@MainActivity)) { blockAdult(tab(), url); return true }
             if (req.isForMainFrame && Parts.adultBlocked(this@MainActivity) && Parts.safeSearch(url) != null) { view.loadUrl(Parts.safeSearch(url)!!); return true }
             if (req.isForMainFrame && !tab().isPrivate && Sensitive.site(url)) { openPrivate(url, tab()); return true }
+            if (url.startsWith("https://ronin.newtab/social")) {
+                if (req.url.getQueryParameter("k") == pageKey && tab().url == HOME) openSocial(socialUrl(req.url.getQueryParameter("app")))
+                return true
+            }
             if (url.startsWith("https://ronin.newtab/")) { quickLinkChange(tab(), req.url); return true }
             if (url.startsWith("https://ronin.data/save")) {
                 val t = tab()
@@ -668,10 +695,6 @@ class MainActivity : AppCompatActivity() {
                 // Ronin's own launcher page may do everything; a website only "my apps" / "close"
                 val launcher = k == toolsKey && (view.url ?: "").startsWith(SOCIAL)
                 if (tab().isSocial && (launcher || (k == socialKey && (d == "home" || d == "close")))) socialRequest(tab(), req.url)
-                return true
-            }
-            if (url.startsWith("https://ronin.newtab/social")) {
-                if (req.url.getQueryParameter("k") == pageKey && tab().url == HOME) openSocial(socialUrl(req.url.getQueryParameter("app")))
                 return true
             }
             if (url.startsWith("https://ronin.data/close")) {
@@ -717,7 +740,7 @@ class MainActivity : AppCompatActivity() {
             // Google says the site is dangerous: never open it, show Ronin's own red page
             callback.backToSafety(false)
             if (!request.isForMainFrame) {
-                Toast.makeText(this@MainActivity, "इस page का एक ख़तरनाक हिस्सा रोका गया", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, L("इस page का एक ख़तरनाक हिस्सा रोका गया", "A dangerous part of this page was blocked"), Toast.LENGTH_SHORT).show()
                 return
             }
             val host = request.url.host ?: ""
@@ -858,11 +881,11 @@ class MainActivity : AppCompatActivity() {
         val h = android.text.TextUtils.htmlEncode(host)
         // a fake-bank warning can be wrong for a real company of a bank group: one tap (with a question) opens it
         val trust = if (brand == null) "" else
-            "<p class=\"m\" style=\"margin-top:26px\"><a id=\"trust\" style=\"background:none;padding:0;color:#c9b4b8;text-decoration:underline;font-weight:normal\" href=\"$TRUST_PREFIX?h=${Uri.encode(host)}&k=$pageKey\">मैं इस साइट को जानता हूँ — I know this site</a></p>"
+            "<p class=\"m\" style=\"margin-top:26px\"><a id=\"trust\" style=\"background:none;padding:0;color:#c9b4b8;text-decoration:underline;font-weight:normal\" href=\"$TRUST_PREFIX?h=${Uri.encode(host)}&k=$pageKey\">${L("मैं इस साइट को जानता हूँ", "I know this site")}</a></p>"
         val (title, why) = if (brand == null)
-            "खतरनाक साइट रोकी गई" to "यह साइट धोखाधड़ी (phishing) या virus फैलाने वाली साइटों की सूची में है। Ronin ने इसे नहीं खोला।"
+            L("खतरनाक साइट रोकी गई", "Dangerous site blocked") to L("यह साइट धोखाधड़ी (phishing) या virus फैलाने वाली साइटों की सूची में है। Ronin ने इसे नहीं खोला।", "This site is on the list of fraud (phishing) or virus sites. Ronin did not open it.")
         else
-            "नकली bank साइट" to "यह पता ${android.text.TextUtils.htmlEncode(brand.uppercase())} जैसा दिखता है, पर असली bank नहीं है। ऐसी साइटें password, OTP और card नंबर चुराती हैं।"
+            L("नकली bank साइट", "Fake bank site") to L("यह पता ${android.text.TextUtils.htmlEncode(brand.uppercase())} जैसा दिखता है, पर असली bank नहीं है। ऐसी साइटें password, OTP और card नंबर चुराती हैं।", "This address looks like ${android.text.TextUtils.htmlEncode(brand.uppercase())}, but it is not the real bank. Sites like this steal passwords, OTPs and card numbers.")
         return """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>⛔ $title</title><style>body{margin:0;background:#1a0f12;color:#f3e9ea;font:17px sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center}
 main{max-width:560px;padding:28px}.i{width:56px;height:56px;border-radius:50%;background:#d93025;color:#fff;font:bold 34px sans-serif;display:flex;align-items:center;justify-content:center}
@@ -870,7 +893,7 @@ h1{font-size:24px;margin:18px 0 10px}code{display:block;background:#2a1a1e;paddi
 p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-top:18px;background:#3b82f6;color:#fff;text-decoration:none;padding:14px 26px;border-radius:10px;font-weight:bold}</style></head>
 <body><main><div class="i">!</div><h1>$title</h1><code>$h</code><p>$why</p>
 <p class="m">Dangerous site blocked by Ronin. The list updates by itself twice a day. If you are sure this site is safe: Menu → Safe sites.</p>
-<a id="back" href="$BACK_TO_SAFETY">वापस जाएँ — Go back</a>$trust</main></body></html>"""
+<a id="back" href="$BACK_TO_SAFETY">${L("वापस जाएँ", "Go back")}</a>$trust</main></body></html>"""
     }
 
     /** The engine's own name without "wv" (Google refuses sign-in in apps that show it). */
@@ -902,10 +925,10 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     private fun trustFromRedPage(t: Tab, u: Uri) {
         val host = u.getQueryParameter("h") ?: return
         if (u.getQueryParameter("k") != pageKey || host.isBlank() || t.dangerHost != host) return
-        AlertDialog.Builder(this).setTitle("क्या आप पक्का हैं?")
-            .setMessage("$host\n\nBanks कभी SMS, WhatsApp या call में भेजे link से login नहीं करवाते। सिर्फ़ तभी खोलें जब आप इस साइट को अच्छी तरह जानते हों।")
-            .setPositiveButton("नहीं, वापस जाएँ", { _, _ -> leaveDangerPage(t) })
-            .setNegativeButton("हाँ, मैं जानता हूँ") { _, _ ->
+        AlertDialog.Builder(this).setTitle(L("क्या आप पक्का हैं?", "Are you sure?"))
+            .setMessage("$host\n\n" + L("Banks कभी SMS, WhatsApp या call में भेजे link से login नहीं करवाते। सिर्फ़ तभी खोलें जब आप इस साइट को अच्छी तरह जानते हों।", "Banks never ask you to log in through a link sent by SMS, WhatsApp or a call. Open it only if you know this site well."))
+            .setPositiveButton(L("नहीं, वापस जाएँ", "No, go back"), { _, _ -> leaveDangerPage(t) })
+            .setNegativeButton(L("हाँ, मैं जानता हूँ", "Yes, I know it")) { _, _ ->
                 app.store.trustedSites = app.store.trustedSites + host.removePrefix("www.")
                 load(t, "https://$host/")
             }.show()
@@ -915,11 +938,13 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     private fun quickLinkChange(t: Tab, u: Uri) {
         if (t.url != HOME || u.getQueryParameter("k") != pageKey) return
         when (u.path) {
+            "/social" -> { openSocial(socialUrl(u.getQueryParameter("app"))); return } // a Safe Social chip opens that app, never "edit links"
             "/add" -> {
                 val ok = app.store.addQuickLink(u.getQueryParameter("s") ?: "", u.getQueryParameter("n") ?: "", u.getQueryParameter("u") ?: "")
-                if (!ok) Toast.makeText(this, "यह पता सही नहीं है", Toast.LENGTH_SHORT).show()
+                if (!ok) Toast.makeText(this, L("यह पता सही नहीं है", "This address is not right"), Toast.LENGTH_SHORT).show()
             }
             "/del" -> app.store.removeQuickLink(u.getQueryParameter("u") ?: "")
+            else -> return
         }
         homeEditing = true
         load(t, HOME)
@@ -1018,12 +1043,14 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         val on = current?.isSocial == true
         bar.visibility = if (on) View.GONE else View.VISIBLE
         stripRow.visibility = if (on) View.GONE else View.VISIBLE
+        socialBar.visibility = if (on) View.VISIBLE else View.GONE
         androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).let { c ->
             if (on) { c.hide(androidx.core.view.WindowInsetsCompat.Type.statusBars()); c.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE }
             else c.show(androidx.core.view.WindowInsetsCompat.Type.statusBars())
         }
     }
     fun currentIsSocialForTest() = current?.isSocial == true
+    fun socialBarForTest(): View = socialBar
 
     /** Nothing of the private tabs stays: cookies and site storage of their own profile are deleted. */
     private fun wipePrivate() {
@@ -1087,7 +1114,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                         val uri = try { saveToDownloads(name, mime, android.util.Base64.decode(b64.toString(), android.util.Base64.DEFAULT)) } catch (e: Exception) { null }
                         runOnUiThread {
                             done(uri != null)
-                            if (uri == null) Toast.makeText(this, "File save नहीं हुई", Toast.LENGTH_LONG).show()
+                            if (uri == null) Toast.makeText(this, L("File save नहीं हुई", "The file was not saved"), Toast.LENGTH_LONG).show()
                             else savedNote(name, uri, mime)
                         }
                     }
@@ -1107,10 +1134,10 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     /** "Saved" note with an Open button (one at a time: several photos can follow each other). */
     private fun savedNote(name: String, uri: Uri, mime: String) {
         savedDialog?.dismiss()
-        savedDialog = AlertDialog.Builder(this).setMessage("✔ Downloads → Ronin में save:\n$name")
-            .setPositiveButton("खोलें") { _, _ -> openFile(uri, mime) }
+        savedDialog = AlertDialog.Builder(this).setMessage(L("✔ Downloads → Ronin में save:\n$name", "✔ Saved in Downloads → Ronin:\n$name"))
+            .setPositiveButton(L("खोलें", "Open")) { _, _ -> openFile(uri, mime) }
             .setNeutralButton("Share / WhatsApp") { _, _ -> shareFile(uri, mime) }
-            .setNegativeButton("ठीक है", null).show()
+            .setNegativeButton("OK", null).show()
     }
 
     private val tableJs: String by lazy { assets.open("ronin/table_export.js").bufferedReader().readText() }
@@ -1133,7 +1160,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         if (exporting) return
         exporting = true
         exportTab = t
-        Toast.makeText(this, "📊 Table पढ़ रहा हूँ... (Reading the table)", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, L("📊 Table पढ़ रहा हूँ...", "📊 Reading the table..."), Toast.LENGTH_SHORT).show()
         val started = System.currentTimeMillis()
         var lastSeen = started
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) // he may walk away: the screen stays on
@@ -1155,7 +1182,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                             phase == "reading" -> {
                                 if (System.currentTimeMillis() - started > 60 * 60_000) t.web.evaluateJavascript("window.__roninTable.stop()", null) // keep what was read
                                 val pct = if (st.isNull("pct")) "" else "${st.optInt("pct")}% · "
-                                readNote.text = "📊 ${pct}पेज ${st.optInt("page")} · ${st.optInt("rows")} पंक्तियाँ पढ़ीं..."
+                                readNote.text = L("📊 ${pct}पेज ${st.optInt("page")} · ${st.optInt("rows")} पंक्तियाँ पढ़ीं...", "📊 ${pct}page ${st.optInt("page")} · ${st.optInt("rows")} rows read...")
                                 readBar.visibility = View.VISIBLE
                                 ui.postDelayed(this, 600)
                             }
@@ -1174,7 +1201,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (json == null) {
             exporting = false
-            Toast.makeText(this, "📊 Table नहीं मिली / could not read the table: $error", Toast.LENGTH_LONG).show(); return
+            Toast.makeText(this, L("📊 Table नहीं मिली: $error", "📊 Could not read the table: $error"), Toast.LENGTH_LONG).show(); return
         }
         kotlin.concurrent.thread(name = "ronin-export") {
             try {
@@ -1187,17 +1214,17 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                 val p = saveToDownloads("$base.pdf", "application/pdf", te.pdf())
                 runOnUiThread {
                     exporting = false
-                    exportTab?.web?.evaluateJavascript("window.__roninTable&&window.__roninTable.badge('✔ Excel + PDF बन गई (Downloads → Ronin)',100,true)", null)
+                    exportTab?.web?.evaluateJavascript("window.__roninTable&&window.__roninTable.badge('" + L("✔ Excel + PDF बन गई (Downloads → Ronin)", "✔ Excel + PDF ready (Downloads → Ronin)") + "',100,true)", null)
                     val c = te.counts
-                    AlertDialog.Builder(this).setTitle("📊 Excel + PDF बन गई")
-                        .setMessage(if (te.info.isNotEmpty()) te.info.joinToString("\n") { "${it.first}: ${it.second}" }.take(1500) + "\n\nDownloads → Ronin में save है।"
+                    AlertDialog.Builder(this).setTitle(L("📊 Excel + PDF बन गई", "📊 Excel + PDF ready"))
+                        .setMessage(if (te.info.isNotEmpty()) te.info.joinToString("\n") { "${it.first}: ${it.second}" }.take(1500) + L("\n\nDownloads → Ronin में save है।", "\n\nSaved in Downloads → Ronin.")
                             else (if (te.partial.isNotEmpty()) "⚠ अधूरा / NOT complete: ${te.partial}\n\n" else "") + "${te.rows.size} पंक्तियाँ\nदोहराए: ${(c["dupRows"] ?: 0) + (c["dupNames"] ?: 0)} · मिलते-जुलते नाम: ${c["similar"] ?: 0} · संभावित ग़लतियाँ: ${c["spell"] ?: 0}\n\nDownloads → Ronin में save है।")
-                        .setPositiveButton("PDF खोलें") { _, _ -> openFile(p, "application/pdf") }
-                        .setNeutralButton("Excel खोलें") { _, _ -> openFile(x, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") }
+                        .setPositiveButton(L("PDF खोलें", "Open PDF")) { _, _ -> openFile(p, "application/pdf") }
+                        .setNeutralButton(L("Excel खोलें", "Open Excel")) { _, _ -> openFile(x, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") }
                         .setNegativeButton("PDF Share") { _, _ -> shareFile(p, "application/pdf") }.show()
                 }
             } catch (e: Exception) {
-                runOnUiThread { exporting = false; Toast.makeText(this, "📊 File नहीं बन सकी: ${e.message}", Toast.LENGTH_LONG).show() }
+                runOnUiThread { exporting = false; Toast.makeText(this, L("📊 File नहीं बन सकी: ${e.message}", "📊 Could not make the file: ${e.message}"), Toast.LENGTH_LONG).show() }
             }
         }
     }
@@ -1229,7 +1256,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        try { startActivity(Intent.createChooser(send, "भेजें / Share")) } catch (e: Exception) { Toast.makeText(this, "Share नहीं हो सका", Toast.LENGTH_SHORT).show() }
+        try { startActivity(Intent.createChooser(send, L("भेजें", "Share"))) } catch (e: Exception) { Toast.makeText(this, L("Share नहीं हो सका", "Could not share"), Toast.LENGTH_SHORT).show() }
     }
 
     private fun openFile(uri: Uri?, mime: String) {
@@ -1237,7 +1264,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         try {
             startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
         } catch (e: ActivityNotFoundException) {
-            Toast.makeText(this, "इसे खोलने वाला app नहीं मिला (Downloads → Ronin में file है)", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, L("इसे खोलने वाला app नहीं मिला (Downloads → Ronin में file है)", "No app can open this (the file is in Downloads → Ronin)"), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -1249,9 +1276,9 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         val isApp = name.lowercase().endsWith(".apk") || mime == "application/vnd.android.package-archive"
         if (isApp && !Rules.matchAny(host, trustedAppHosts) && !Rules.matchAny(host, app.store.trustedSites)) {
             AlertDialog.Builder(this).setTitle("App file (.apk) from an unknown site")
-                .setMessage("$name\n$host\n\nअनजान साइट से app install करना ख़तरनाक है — इनमें अक्सर virus या पैसे चुराने वाले apps होते हैं। Apps सिर्फ़ Play Store से लें।")
-                .setPositiveButton("रद्द करें — Cancel", null)
-                .setNeutralButton("फिर भी download करें") { _, _ -> startDownload(url, ua, cd, mime) }
+                .setMessage("$name\n$host\n\n" + L("अनजान साइट से app install करना ख़तरनाक है — इनमें अक्सर virus या पैसे चुराने वाले apps होते हैं। Apps सिर्फ़ Play Store से लें।", "Installing an app from an unknown site is dangerous: such apps often carry viruses or steal money. Get apps only from the Play Store."))
+                .setPositiveButton(L("रद्द करें", "Cancel"), null)
+                .setNeutralButton(L("फिर भी download करें", "Download anyway")) { _, _ -> startDownload(url, ua, cd, mime) }
                 .show()
             return@DownloadListener
         }
@@ -1348,18 +1375,27 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
 
     // ---- menu --------------------------------------------------------------------------
 
+    /** Language: the phone's own (default), English or Hindi. The whole app follows it. */
+    private fun chooseLanguage() {
+        val values = arrayOf("auto", "en", "hi")
+        val names = arrayOf(L("फ़ोन जैसी (अपने-आप)", "Same as the phone (automatic)"), "English", "हिंदी")
+        AlertDialog.Builder(this).setTitle("🌐 Language / भाषा")
+            .setSingleChoiceItems(names, values.indexOf(Lang.choice(this)).coerceAtLeast(0)) { d, i -> Lang.set(this, values[i]); d.dismiss(); recreate() }
+            .setNegativeButton(L("रद्द करें", "Cancel"), null).show()
+    }
+
     private fun showMenu(anchor: View) {
         val t = current
         val web = t != null && t.url.startsWith("http")
         val m = PopupMenu(this, anchor)
         val items = linkedMapOf<String, () -> Unit>()
-        items["➕ नया tab / New tab"] = { newTab(HOME) }
+        items[L("➕ नया tab", "➕ New tab")] = { newTab(HOME) }
         if (web) items[if (app.store.isBookmarked(t!!.url)) "★ Remove bookmark" else "☆ Bookmark this page"] = {
             val added = app.store.toggleBookmark(t.title, t.url)
             Toast.makeText(this, if (added) "Bookmark saved" else "Bookmark removed", Toast.LENGTH_SHORT).show()
         }
-        items["Bookmarks / बुकमार्क"] = { showPages("Bookmarks", app.store.bookmarks, bookmarks = true) }
-        items["History / इतिहास"] = { showPages("History", app.store.history, bookmarks = false) }
+        items["Bookmarks"] = { showPages("Bookmarks", app.store.bookmarks, bookmarks = true) }
+        items["History"] = { showPages("History", app.store.history, bookmarks = false) }
         if (web) items["🔊 Read this page aloud"] = { startReading() }
         if (web) items["Reload"] = { t!!.web.reload() }
         items[if (app.store.night) "☀ Day mode" else "☾ Night mode"] = {
@@ -1367,16 +1403,16 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             AppCompatDelegate.setDefaultNightMode(if (app.store.night) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO)
             recreate()
         }
-        if (web) items["🏦 यह मेरा bank है (Safe Money में खोलें)"] = {
+        if (web) items[L("🏦 यह मेरा bank है (Safe Money में खोलें)", "🏦 This is my bank (open in Safe Money)")] = {
             val h = t!!.topHost.removePrefix("www.")
             if (h.isNotEmpty()) { app.store.userBanks = app.store.userBanks + h; load(t, t.url) }
         }
         if (web) {
             val on = app.store.isDataSite(t!!.topHost)
-            if (on) items["📊 Data → Excel + PDF (इस page की पूरी table)"] = { exportData(t) }
-            items[if (on) "📊 Data बटन इस साइट पर बंद करें" else "📊 Data बटन इस साइट पर चालू करें (Excel + PDF)"] = {
+            if (on) items[L("📊 Data → Excel + PDF (इस page की पूरी table)", "📊 Data → Excel + PDF (the whole table on this page)")] = { exportData(t) }
+            items[if (on) L("📊 Data बटन इस साइट पर बंद करें", "📊 Data button off for this site") else L("📊 Data बटन इस साइट पर चालू करें (Excel + PDF)", "📊 Data button on for this site (Excel + PDF)")] = {
                 if (app.store.toggleDataSite(t.topHost)) {
-                    Toast.makeText(this, "📊 Data बटन चालू: page के नीचे दाईं ओर हरा बटन", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, L("📊 Data बटन चालू: page के नीचे दाईं ओर हरा बटन", "📊 Data button on: the green button at the bottom right"), Toast.LENGTH_LONG).show()
                     showDataButton(t)
                 } else t.web.evaluateJavascript("(function(){var b=document.getElementById('ronin-data-btn');if(b)b.remove()})()", null)
             }
@@ -1384,19 +1420,20 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         items["🧰 Ronin Tools (Data Match, PDF, Photo)"] = { openTools() }
         items["🛡️ Safe Social (Facebook, Instagram, YouTube...)"] = { openSocial() }
         items["📧 Safe Mail (Gmail...)"] = { openMail() }
-        items["📱 Ronin के हिस्से (Mail / Messages / Calls)"] = { Parts.choose(this, first = false) }
+        items[L("📱 Ronin के हिस्से (Mail / Messages / Calls)", "📱 Ronin parts (Mail / Messages / Calls)")] = { Parts.choose(this, first = false) }
         items[if (Parts.adultBlocked(this)) "🛡 Family Filter: ON" else "🛡 Family Filter: OFF"] = { Parts.chooseAdult(this, first = false) }
-        items["💬 Delete हुए WhatsApp संदेश"] = { ChatLogActivity.open(this) }
+        items[L("💬 Delete हुए WhatsApp संदेश", "💬 Deleted WhatsApp messages")] = { ChatLogActivity.open(this) }
         if (Parts.isOn(this, Parts.MESSAGES)) items["📩 Ronin Messages"] = { startActivity(Intent(this, MessagesActivity::class.java)) }
         if (Parts.isOn(this, Parts.SOS)) items["🆘 Ronin SOS"] = { startActivity(Intent(this, SosActivity::class.java)) }
         if (Parts.isOn(this, Parts.CALLS)) items["📞 Ronin Calls"] = { startActivity(Intent(this, CallsActivity::class.java)) }
-        items["🔎 क्या यह ठगी है? (Scam Check)"] = { openTools("scamcheck") }
-        items["🔎 Search widget home screen पर लगाएँ"] = {
-            if (!SearchWidget.pin(this)) Toast.makeText(this, "Home screen पर खाली जगह दबाकर रखें → Widgets → Ronin Search", Toast.LENGTH_LONG).show()
+        items[L("🔎 क्या यह ठगी है? (Scam Check)", "🔎 Is this a scam? (Scam Check)")] = { openTools("scamcheck") }
+        items[L("🔎 Search widget home screen पर लगाएँ", "🔎 Put the search widget on the home screen")] = {
+            if (!SearchWidget.pin(this)) Toast.makeText(this, L("Home screen पर खाली जगह दबाकर रखें → Widgets → Ronin Search", "Press and hold an empty spot on the home screen → Widgets → Ronin Search"), Toast.LENGTH_LONG).show()
         }
-        items["🛡 Safe sites / ग़लती से रुकी साइटें"] = { showSafeSites() }
+        items[L("🛡 Safe sites / ग़लती से रुकी साइटें", "🛡 Safe sites (stopped by mistake)")] = { showSafeSites() }
         items["🏦 Ronin Safe Money (banking)"] = { startActivity(Intent(this, SafeMoneyActivity::class.java)) }
-        items["⟳ Update देखें / Check for updates"] = { Updater.check(this, quiet = false) }
+        items[L("⟳ Update देखें", "⟳ Check for updates")] = { Updater.check(this, quiet = false) }
+        items["🌐 Language / भाषा"] = { chooseLanguage() }
         items["About Ronin"] = {
             AlertDialog.Builder(this).setTitle("Ronin Browser ${BuildConfigCompat.versionName(this)}")
                 .setMessage("Ad-block lists: ${app.blocker.listSize} sites.\nDanger list (phishing / malware): ${app.blocker.threatSize} sites, plus Google Safe Browsing.\nSongs and videos keep playing in the background; control them from the notification, the lock screen or your car.")
@@ -1457,7 +1494,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         val card = if (night) "#1c2029" else "#ffffff"
         val line = if (night) "#2e3441" else "#d3d8e1"
         val muted = if (night) "#9aa3b2" else "#5a6375"
-        val titles = mapOf("Quick links" to "Quick links", "School" to "स्कूल / School", "Trading" to "Trading", "Video calls" to "Video calls")
+        val titles = mapOf("Quick links" to "Quick links", "School" to L("स्कूल / School", "School"), "Trading" to "Trading", "Video calls" to "Video calls")
         val all = app.store.quickLinks(app.rules.quickLinks).filter { !it.url.startsWith("http://127.") } // Ronin Terminal runs on the laptop
         val sections = JSONArray()
         for (sec in app.rules.quickSections) {
@@ -1466,7 +1503,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             sections.put(JSONObject().put("id", sec).put("title", titles[sec] ?: sec).put("links", links))
         }
         // Safe Social row first: the family's apps (opens full screen, guarded)
-        val soc = JSONArray().put(JSONObject().put("n", "🛡️ सभी apps").put("u", "https://ronin.newtab/social?k=$pageKey"))
+        val soc = JSONArray().put(JSONObject().put("n", L("🛡️ सभी apps", "🛡️ All apps")).put("u", "https://ronin.newtab/social?k=$pageKey"))
         val chosen = socialSettings().optJSONArray("apps")
         val ids = ArrayList<String>()
         if (chosen != null) for (i in 0 until chosen.length()) ids.add(chosen.optString(i))
@@ -1474,7 +1511,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         for (id in ids) socialName(id)?.let { soc.put(JSONObject().put("n", it).put("u", "https://ronin.newtab/social?app=$id&k=$pageKey")) }
         val withSocial = JSONArray().put(JSONObject().put("id", "Safe Social").put("title", "🛡️ Safe Social").put("links", soc).put("fixed", true))
         for (i in 0 until sections.length()) withSocial.put(sections.get(i))
-        val data = JSONObject().put("k", pageKey).put("edit", homeEditing).put("sections", withSocial).toString().replace("</", "<\\/")
+        val data = JSONObject().put("k", pageKey).put("lang", Lang.code(this)).put("edit", homeEditing).put("sections", withSocial).toString().replace("</", "<\\/")
         return """<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>New tab</title>
 <style>:root{--bg:$bg;--card:$card;--line:$line;--text:$fg;--muted:$muted;--accent:#3b82f6}
 body{margin:0;padding:24px 18px 40px;background:$bg;color:$fg;font-family:sans-serif}main{max-width:820px;margin:0 auto}

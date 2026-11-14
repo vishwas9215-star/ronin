@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>Ronin Messages</title>
 <style>
 :root{--bg:#0f1218;--card:#1a1f29;--fg:#f1f3f7;--mut:#a3acbd;--line:#2c3342;--acc:#2563eb;--ok:#16a34a;--bad:#dc2626;--warn:#f59e0b}
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--fg);font-family:"Noto Sans Devanagari","Nirmala UI","Segoe UI",sans-serif;font-size:17px}
-main{max-width:900px;margin:0 auto;padding:10px 12px 90px}
+main{max-width:900px;margin:0 auto;padding:10px 12px 160px}
 .top{display:flex;align-items:center;justify-content:space-between;gap:8px;position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:5}
 .top h1{font-size:21px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}.top>div{display:flex;gap:6px;flex:none}
 .pill{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-height:48px;min-width:48px;padding:0 14px;border-radius:24px;border:1px solid var(--line);background:var(--card);color:var(--fg);font:inherit;font-weight:700;cursor:pointer;text-decoration:none;white-space:nowrap}
@@ -27,6 +27,11 @@ main{max-width:900px;margin:0 auto;padding:10px 12px 90px}
 input.txt{display:block;width:100%;font:inherit;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--fg);margin:6px 0}
 .note{color:var(--mut);font-size:14px;line-height:1.45}.empty{color:var(--mut);text-align:center;padding:40px 10px}
 .row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;gap:4px;padding:6px 6px calc(6px + env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--line)}
+.nav button{flex:1;min-width:0;min-height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:0;border-radius:16px;background:none;color:var(--mut);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.nav button .ic{font-size:22px;line-height:1}.nav button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nav button.on{background:var(--acc);color:#fff}
+.fab{position:fixed;right:14px;bottom:86px;z-index:6;min-height:56px;padding:0 22px;box-shadow:0 4px 14px rgba(0,0,0,.4)}
 </style></head><body>
 <main id="app"></main>
 <script src="scamcheck.js"></script>

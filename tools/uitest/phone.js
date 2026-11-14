@@ -8,13 +8,13 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   const b = await chromium.launch({ args: ['--lang=hi-IN'] }); let fail = 0; const bad = m => { console.log('FAIL', m); fail++; };
   const serve = async p => p.route('https://ronin.home/tools/**', r => { const f = path.join(dir, new URL(r.request().url()).pathname.replace('/tools/', '')); r.fulfill({ body: fs.readFileSync(f), contentType: /\.js$/.test(f) ? 'text/javascript' : 'text/html; charset=utf-8' }); });
   // the phone side, made up: answers like MessagesActivity / CallsActivity
-  const phone = (state) => `window.__roninLinkLists=${lists};window.__roninScamRules=${rules};
+  const phone = (state) => `window.__roninLang=${JSON.stringify(state.lang || 'hi')};window.__roninLinkLists=${lists};window.__roninScamRules=${rules};
     window.__log=[]; const ST=${JSON.stringify(state)};
-    const T=[{thread:1,address:'+919812300011',name:'',snippet:'Mujhe urgent 10000 rupaye ki zarurat hai',date:Date.now(),unread:1,count:1,cat:'scam',level:'stop',reasons:['need']},
+    const T=ST.threads||[{thread:1,address:'+919812300011',name:'',snippet:'Mujhe urgent 10000 rupaye ki zarurat hai',date:Date.now(),unread:1,count:1,cat:'scam',level:'stop',reasons:['need']},
       {thread:2,address:'JM-SBIINB-S',name:'',snippet:'482913 is your OTP',date:Date.now()-1000,unread:1,count:2,cat:'work',level:'',reasons:[]},
       {thread:3,address:'VM-SHOPPR-P',name:'',snippet:'Big sale',date:Date.now()-2000,unread:0,count:1,cat:'ads',level:'',reasons:[]},
       {thread:4,address:'+919800000000',name:'माँ',snippet:'खाना खा लिया?',date:Date.now()-3000,unread:0,count:5,cat:'work',level:'',reasons:[]}];
-    const M={1:[{id:1,body:'Mujhe urgent 10000 rupaye ki zarurat hai, hospital me hoon, is QR par bhej do',date:Date.now(),type:1,level:'stop',reasons:['किसी जानने वाले के नाम से पैसे']}],
+    const M=ST.msgs||{1:[{id:1,body:'Mujhe urgent 10000 rupaye ki zarurat hai, hospital me hoon, is QR par bhej do',date:Date.now(),type:1,level:'stop',reasons:['किसी जानने वाले के नाम से पैसे']}],
       4:[{id:3,body:'हाँ, खा लिया',date:Date.now()-5000,type:2,level:'',reasons:[]},{id:2,body:'खाना खा लिया?',date:Date.now()-9000,type:1,level:'',reasons:[]}]};
     window.roninPhone={postMessage(s){const m=JSON.parse(s);window.__log.push(m);let d=null;
       switch(m.op){case 'state':d=Object.assign({},ST,window.__sos||{});break;case 'save':window.__sos=Object.assign(window.__sos||{},{contacts:m.contacts,name:m.name});d=true;break;
@@ -102,6 +102,37 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   if (!(await p5.evaluate(() => window.__log.some(m => m.op === 'save' && m.contacts.length === 1 && m.name === 'Vishwas')))) bad('SOS family not saved');
   await p5.click('#stop'); await p5.waitForTimeout(700);
   if (await p5.$('#running')) bad('SOS did not stop');
+  // 6. English phone: everything English, one row per company, the tabs at the bottom (3.11)
+  const hd = (id, a, t) => ({ thread: id, address: a, name: '', snippet: 'HDFC ' + id, date: Date.now() - t, unread: 1, count: 1, cat: 'work', level: '', reasons: [] });
+  const p6 = await b.newPage({ viewport: { width: 412, height: 860 } });
+  await serve(p6); await p6.addInitScript(phone({ lang: 'en', isDefault: true, read: true,
+    threads: [hd(11, 'VM-HDFCBK-S', 1000), hd(12, 'AD-HDFCBK-S', 2000), hd(13, 'VD-HDFCBK-S', 3000), hd(14, 'JX-KOTAKB-S', 4000)],
+    msgs: { 11: [{ id: 1, body: 'Bal Rs 100', date: Date.now() - 1000, type: 1 }], 12: [{ id: 2, body: 'Biometric login on', date: Date.now() - 2000, type: 1 }], 13: [{ id: 3, body: 'IMPS sent', date: Date.now() - 3000, type: 1 }] } }));
+  await p6.goto('https://ronin.home/tools/messages.html'); await p6.waitForSelector('.th');
+  const rows = await p6.$$eval('.th b', a => a.map(x => x.textContent));
+  if (rows.join() !== 'HDFCBK,KOTAKB') bad('not one row per company: ' + rows);
+  const hindi = await p6.evaluate(() => /[\u0900-\u097F]/.test(document.body.innerText));
+  if (hindi) bad('Hindi text on an English phone: ' + (await p6.evaluate(() => document.body.innerText.match(/.*[\u0900-\u097F].*/)[0])));
+  const nav = await p6.$eval('.nav', n => ({ bottom: n.getBoundingClientRect().bottom, top: n.getBoundingClientRect().top }));
+  if (nav.bottom < 850 || nav.top < 700) bad('message boxes are not at the bottom: ' + JSON.stringify(nav));
+  if (!await p6.$('.nav button:has-text("Important")')) bad('English tab names');
+  await p6.screenshot({ path: path.join(out, 'messages-english.png') });
+  await p6.click('.th >> nth=0'); await p6.waitForSelector('.b');
+  if ((await p6.$$('.b')).length !== 3) bad('company conversation does not show all its SMS');
+  p6.on('dialog', d => d.accept());
+  await p6.click('#del'); await p6.waitForTimeout(200);
+  const dels = await p6.evaluate(() => window.__log.filter(m => m.op === 'delete').map(m => m.thread).sort().join());
+  if (dels !== '11,12,13') bad('delete did not cover the whole company: ' + dels);
+  const p7 = await b.newPage({ viewport: { width: 412, height: 860 } });
+  await serve(p7); await p7.addInitScript(phone({ lang: 'en', isDefault: true, log: true, contacts: true }));
+  await p7.goto('https://ronin.home/tools/calls.html'); await p7.waitForSelector('.pad button');
+  const cnav = await p7.$eval('.nav', n => n.getBoundingClientRect().bottom);
+  if (cnav < 850) bad('Keypad / Recent / Contacts not at the bottom');
+  if (await p7.evaluate(() => /[\u0900-\u097F]/.test(document.body.innerText))) bad('Hindi on the English Calls page');
+  await p7.screenshot({ path: path.join(out, 'calls-english.png') });
+  await p7.click('#settings'); await p7.waitForSelector('#langCard');
+  await p7.click('[data-lang=hi]'); await p7.waitForTimeout(100);
+  if (!(await p7.evaluate(() => window.__log.some(m => m.op === 'setLang' && m.value === 'hi')))) bad('language not changed');
   console.log(fail ? fail + ' FAILED' : 'phone pages OK');
   await b.close(); process.exit(fail ? 1 : 0);
 })();

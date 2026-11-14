@@ -17,6 +17,9 @@
   window.__roninSocialDone = true;
   var S = window.RoninScam;
   if (!S) return;
+  // the phone's / computer's language (Android sets __roninLang); Hindi only on a Hindi device
+  var EN = String(window.__roninLang || navigator.language || "en").toLowerCase().indexOf("hi") !== 0;
+  function L(hi, en) { return EN ? en : hi; }
   var host = location.hostname.replace(/^www\.|^m\.|^mobile\.|^web\./, "");
   var SITES = /(^|\.)(facebook\.com|instagram\.com|youtube\.com|whatsapp\.com|x\.com|twitter\.com|threads\.net|threads\.com|sharechat\.com|mojapp\.in|moj\.com|linkedin\.com|snapchat\.com|pinterest\.com|telegram\.org|koo\.in|tiktok\.com|messenger\.com)$/;
   var MAIL = /(^|\.)(mail\.google\.com|outlook\.live\.com|outlook\.office\.com|outlook\.office365\.com|mail\.yahoo\.com|mail\.rediff\.com|rediffmail\.com|mail\.zoho\.com|mail\.zoho\.in|mail\.proton\.me|mail\.aol\.com)$/;
@@ -69,7 +72,12 @@
   function put(e) { (document.body || document.documentElement).appendChild(e); }
 
   // ---- voice: the short warning sentence only (never anyone's message)
-  var SAY = {
+  var SAY = EN ? {
+    link: "Careful! This link is dangerous. Ronin has stopped it.",
+    scam: "Careful! This message may be a scam. Never give money, an OTP or a PIN to anyone.",
+    mail: "Careful! This email may be a scam. Delete it, and do not send any money.",
+    call: "Do not video call a stranger.",
+  } : {
     link: "सावधान! यह link खतरनाक है। Ronin ने इसे रोक दिया है।",
     scam: "सावधान! यह संदेश ठगी का हो सकता है। पैसे, ओटीपी या पिन किसी को न दें।",
     mail: "सावधान! यह ईमेल ठगी का हो सकता है। इसे डिलीट कर दें, और कोई पैसा न भेजें।",
@@ -82,13 +90,13 @@
     lastSaid[id] = now;
     try { if (window.roninNative && window.roninNative.postMessage) { window.roninNative.postMessage("speak:" + id); return; } } catch (e) {}
     try {
-      var u = new SpeechSynthesisUtterance(SAY[id] || SAY.scam); u.lang = "hi-IN";
-      var v = speechSynthesis.getVoices().filter(function (x) { return /^hi/i.test(x.lang); });
+      var u = new SpeechSynthesisUtterance(SAY[id] || SAY.scam); u.lang = EN ? "en-IN" : "hi-IN";
+      var v = speechSynthesis.getVoices().filter(function (x) { return EN ? /^en/i.test(x.lang) : /^hi/i.test(x.lang); });
       if (v.length) u.voice = v.filter(function (x) { return x.localService; })[0] || v[0];
       speechSynthesis.cancel(); speechSynthesis.speak(u);
     } catch (e) {}
   }
-  function sayBtn(id) { var b = el("button", "ronin-say", "🔊 सुनें"); b.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); say(id); }, true); return b; }
+  function sayBtn(id) { var b = el("button", "ronin-say", L("🔊 सुनें", "🔊 Listen")); b.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); say(id); }, true); return b; }
 
   // ---- 1. sponsored posts away (Facebook / Instagram write "Sponsored" in many hidden ways)
   var SPONSOR = /^(sponsored|प्रायोजित|sponsorisé|patrocinado|ప్రాయోజిత|প্রযোজিত|ਸਪਾਂਸਰ ਕੀਤਾ)$/i;
@@ -115,10 +123,10 @@
   // ---- 2. links checked before they open: no "open anyway"
   function helpBox() {
     var h = el("div", "help");
-    h.appendChild(document.createTextNode("पैसा चला गया? तुरंत "));
+    h.appendChild(document.createTextNode(L("पैसा चला गया? तुरंत ", "Lost money? At once ")));
     var a = el("a", "", "📞 1930"); a.href = "tel:1930"; a.style.cssText = "font-weight:800;color:#1d4ed8";
     h.appendChild(a);
-    h.appendChild(document.createTextNode(" पर call करें या cybercrime.gov.in पर शिकायत करें, और अपने बैंक को बताएँ।"));
+    h.appendChild(document.createTextNode(L(" पर call करें या cybercrime.gov.in पर शिकायत करें, और अपने बैंक को बताएँ।", " call, or report on cybercrime.gov.in, and tell your bank.")));
     return h;
   }
   function overlay(title, text, detail, calm, actions) {
@@ -136,10 +144,10 @@
     return w;
   }
   function warnLink(v) {
-    var safe = el("button", "safe", "✔ वापस (सुरक्षित)");
+    var safe = el("button", "safe", L("✔ वापस (सुरक्षित)", "✔ Go back (safe)"));
     var w;
     safe.onclick = function () { w.remove(); };
-    var note = el("div", "", "Ronin ने यह link रोक दिया है, यह यहाँ से नहीं खुलेगा।"); note.style.cssText = "margin-top:8px;font-size:14px;color:#555";
+    var note = el("div", "", L("Ronin ने यह link रोक दिया है, यह यहाँ से नहीं खुलेगा।", "Ronin has stopped this link; it will not open from here.")); note.style.cssText = "margin-top:8px;font-size:14px;color:#555";
     var row = el("div"); row.appendChild(sayBtn("link"));
     w = overlay("⛔ " + v.title, v.text, v.target.slice(0, 200), false, [safe, note, row, helpBox()]);
     counts.links++;
@@ -174,16 +182,16 @@
   }
   function tag(n, r) {
     var t = el("div", "ronin-scam" + (r.level === "stop" ? " ronin-stop" : ""));
-    t.appendChild(el("b", "", (r.level === "stop" ? "⛔ Ronin: यह ठगी का संदेश हो सकता है" : "⚠ Ronin: सावधान, ठगी के संकेत")));
+    t.appendChild(el("b", "", (r.level === "stop" ? L("⛔ Ronin: यह ठगी का संदेश हो सकता है", "⛔ Ronin: this may be a scam message") : L("⚠ Ronin: सावधान, ठगी के संकेत", "⚠ Ronin: careful, signs of a scam"))));
     t.appendChild(el("div", "", r.reasons.slice(0, 2).join(" • ")));
-    t.appendChild(el("div", "", "पैसे, OTP, PIN, फ़ोटो किसी अनजान को न दें। "));
+    t.appendChild(el("div", "", L("पैसे, OTP, PIN, फ़ोटो किसी अनजान को न दें। ", "Never give money, OTP, PIN or photos to a stranger. ")));
     t.lastChild.appendChild(sayBtn("scam"));
     try { n.parentNode.insertBefore(t, n); } catch (e) {}
     if (r.level === "stop") say("scam", true);
   }
   function rumourTag(n, text) {
     var t = el("div", "ronin-scam ronin-rumour");
-    t.appendChild(el("div", "", "ℹ जाँच ज़रूरी: इसमें \"सबको भेजें / 100% सच\" जैसी बातें हैं। आगे भेजने से पहले देखें, किसी fact-check वेबसाइट ने इसके बारे में क्या लिखा है:"));
+    t.appendChild(el("div", "", L("ℹ जाँच ज़रूरी: इसमें \"सबको भेजें / 100% सच\" जैसी बातें हैं। आगे भेजने से पहले देखें, किसी fact-check वेबसाइट ने इसके बारे में क्या लिखा है:", "ℹ Check first: this says things like \"send to all / 100% true\". Before forwarding, see what a fact-check website says about it:")));
     t.appendChild(factLinks(text));
     try { n.parentNode.insertBefore(t, n); } catch (e) {}
   }
@@ -208,12 +216,12 @@
   function strangers() {
     var key = "", msg = "";
     var path = location.pathname + location.search;
-    if (/facebook\.com$|messenger\.com$/.test(host) && /message_requests|\/requests|filtered/.test(path)) { key = path; msg = "👤 ये Message Requests हैं: ये लोग आपके दोस्त नहीं हैं।"; }
-    if (/instagram\.com$/.test(host) && /\/direct\/requests/.test(path)) { key = path; msg = "👤 ये Message Requests हैं: ये लोग आपको follow नहीं करते / अनजान हैं।"; }
+    if (/facebook\.com$|messenger\.com$/.test(host) && /message_requests|\/requests|filtered/.test(path)) { key = path; msg = L("👤 ये Message Requests हैं: ये लोग आपके दोस्त नहीं हैं।", "👤 These are Message Requests: these people are not your friends."); }
+    if (/instagram\.com$/.test(host) && /\/direct\/requests/.test(path)) { key = path; msg = L("👤 ये Message Requests हैं: ये लोग आपको follow नहीं करते / अनजान हैं।", "👤 These are Message Requests: these people do not follow you / are strangers."); }
     if (/whatsapp\.com$/.test(host)) {
       var h = document.querySelector("#main header span[title], #main header span[dir=auto]");
       var tt = h ? (h.getAttribute("title") || h.textContent || "").trim() : "";
-      if (/^\+?\d[\d\s-]{8,}$/.test(tt)) { key = "wa:" + tt; msg = "👤 यह नंबर (" + tt + ") आपके फ़ोन में सेव नहीं है: अनजान व्यक्ति है।"; }
+      if (/^\+?\d[\d\s-]{8,}$/.test(tt)) { key = "wa:" + tt; msg = L("👤 यह नंबर (" + tt + ") आपके फ़ोन में सेव नहीं है: अनजान व्यक्ति है।", "👤 This number (" + tt + ") is not saved in your phone: a stranger."); }
     }
     var bar = document.getElementById("ronin-stranger");
     if (!key) { if (bar) bar.remove(); strangerShown = ""; return; }
@@ -222,8 +230,8 @@
     if (bar) bar.remove();
     bar = el("div", "ronin-bar info"); bar.id = "ronin-stranger";
     bar.appendChild(el("b", "", msg));
-    bar.appendChild(el("div", "", "पैसे, OTP, फ़ोटो, घर का पता या video call की बात हो तो जवाब न दें। निवेश / नौकरी / गिफ़्ट / पुलिस की बात = ठगी।"));
-    var row = el("div", "row"), ok = el("button", "hide", "समझ गया");
+    bar.appendChild(el("div", "", L("पैसे, OTP, फ़ोटो, घर का पता या video call की बात हो तो जवाब न दें। निवेश / नौकरी / गिफ़्ट / पुलिस की बात = ठगी।", "If they talk about money, OTP, photos, your address or a video call, do not reply. Investment / job / gift / police talk = scam.")));
+    var row = el("div", "row"), ok = el("button", "hide", L("समझ गया", "Got it"));
     ok.onclick = function () { bar.remove(); };
     row.appendChild(ok); bar.appendChild(row);
     put(bar);
@@ -237,8 +245,8 @@
     if (!CALL.test(lab) && !/^(video-call|voice-call)/.test(lab)) return;
     if (b.__roninCallOk && Date.now() - b.__roninCallOk < 60000) return;
     e.preventDefault(); e.stopImmediatePropagation();
-    var no = el("button", "safe", "📵 नहीं, call न करें"), yes = el("button", "small", "हाँ, मैं इन्हें असल ज़िंदगी में जानता / जानती हूँ: call करें");
-    var w = overlay("📵 क्या आप इन्हें असल ज़िंदगी में जानते हैं?", "अनजान लोग video call पर रिकॉर्ड करके ब्लैकमेल करते हैं। अनजान call न करें, न उठाएँ (कैमरा ढक लें)।", "", true, [no, yes]);
+    var no = el("button", "safe", L("📵 नहीं, call न करें", "📵 No, don't call")), yes = el("button", "small", L("हाँ, मैं इन्हें असल ज़िंदगी में जानता / जानती हूँ: call करें", "Yes, I know them in real life: call"));
+    var w = overlay(L("📵 क्या आप इन्हें असल ज़िंदगी में जानते हैं?", "📵 Do you know this person in real life?"), L("अनजान लोग video call पर रिकॉर्ड करके ब्लैकमेल करते हैं। अनजान call न करें, न उठाएँ (कैमरा ढक लें)।", "Strangers record video calls and blackmail people. Do not call strangers or pick up (cover the camera)."), "", true, [no, yes]);
     no.onclick = function () { w.remove(); };
     yes.onclick = function () { w.remove(); b.__roninCallOk = Date.now(); b.click(); };
     say("call", true);
@@ -312,22 +320,22 @@
     if (!r.level) return;
     counts.mail++;
     bar = el("div", "ronin-bar " + (r.level === "stop" ? "red" : "amber")); bar.id = "ronin-mail";
-    bar.appendChild(el("b", "", r.level === "stop" ? "⛔ यह email ठगी / धमकी वाला हो सकता है" : "⚠ सावधान: इस email में ठगी के संकेत हैं"));
+    bar.appendChild(el("b", "", r.level === "stop" ? L("⛔ यह email ठगी / धमकी वाला हो सकता है", "⛔ This email may be a scam / threat") : L("⚠ सावधान: इस email में ठगी के संकेत हैं", "⚠ Careful: this email has signs of a scam")));
     var ul = el("ul");
     r.reasons.slice(0, 4).forEach(function (x) { ul.appendChild(el("li", "", x)); });
     bar.appendChild(ul);
-    bar.appendChild(el("div", "", "कोई जवाब न दें, कोई link या attachment न खोलें, कोई पैसा न भेजें। पुलिस / CBI / कोर्ट कभी email से जुर्माना नहीं माँगते।"));
+    bar.appendChild(el("div", "", L("कोई जवाब न दें, कोई link या attachment न खोलें, कोई पैसा न भेजें। पुलिस / CBI / कोर्ट कभी email से जुर्माना नहीं माँगते।", "Do not reply, do not open any link or attachment, do not send money. Police / CBI / courts never ask for fines by email.")));
     var row = el("div", "row");
-    var del = el("button", "del", "🗑 Delete करें"), spam = el("button", "spam", "🚫 Spam में डालें");
+    var del = el("button", "del", L("🗑 Delete करें", "🗑 Delete")), spam = el("button", "spam", L("🚫 Spam में डालें", "🚫 Report spam"));
     var call = el("a", "call", "📞 1930"); call.href = "tel:1930";
-    var hide = el("button", "hide", "छिपाएँ");
+    var hide = el("button", "hide", L("छिपाएँ", "Hide"));
     del.onclick = function () {
       var b = findButton(DEL);
-      if (b) { press(b); bar.remove(); } else { del.textContent = "ऊपर 🗑 (Delete) का निशान दबाएँ"; }
+      if (b) { press(b); bar.remove(); } else { del.textContent = L("ऊपर 🗑 (Delete) का निशान दबाएँ", "Tap the 🗑 (Delete) icon at the top"); }
     };
     spam.onclick = function () {
       var b = findButton(SPAM, NOTSPAM);
-      if (b) { press(b); spam.textContent = "✔ Spam में डाला (कुछ पूछे तो Report spam दबाएँ)"; } else { spam.textContent = "ऊपर ⋮ में Report spam दबाएँ"; }
+      if (b) { press(b); spam.textContent = L("✔ Spam में डाला (कुछ पूछे तो Report spam दबाएँ)", "✔ Reported as spam (if asked, tap Report spam)"); } else { spam.textContent = L("ऊपर ⋮ में Report spam दबाएँ", "Tap ⋮ at the top, then Report spam"); }
     };
     hide.onclick = function () { bar.remove(); };
     row.appendChild(del); row.appendChild(spam); row.appendChild(call); row.appendChild(hide); row.appendChild(sayBtn("mail"));
@@ -350,7 +358,7 @@
     if (!q || /fact\s*check/i.test(q) || document.getElementById("ronin-fact")) return;
     var bar = el("div", "ronin-scam ronin-rumour"); bar.id = "ronin-fact";
     bar.style.cssText = "position:fixed;left:8px;bottom:8px;z-index:2147483646;max-width:380px";
-    bar.appendChild(el("div", "", "ℹ कोई खबर खोज रहे हैं? क्या यह सच है? जाँचें:"));
+    bar.appendChild(el("div", "", L("ℹ कोई खबर खोज रहे हैं? क्या यह सच है? जाँचें:", "ℹ Searching for a news story? Is it true? Check:")));
     bar.appendChild(factLinks(q));
     var x = el("button", "ronin-say", "✕"); x.onclick = function () { bar.remove(); }; bar.appendChild(x);
     put(bar);
@@ -368,13 +376,14 @@
   // ---- Safe Social tab: big labelled buttons
   function buttons() {
     var cfg = C();
-    if (!cfg.k || document.getElementById("ronin-soc-btns")) return;
+    // Android has its own bar under the page (Back / My apps / Close); Ronin's own launcher page has its own buttons
+    if (!cfg.k || cfg.nativeBar || host === "ronin.home" || document.getElementById("ronin-soc-btns")) return;
     var narrow = Math.min(window.innerWidth || 800, screen.width || 800) < 480;
     var box = el("div"); box.id = "ronin-soc-btns";
-    var prev = el("a", "", "← पीछे"); prev.href = "#";
+    var prev = el("a", "", L("← पीछे", "← Back")); prev.href = "#";
     prev.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); history.back(); }, true);
-    var apps = el("a", "", narrow ? "⊞ ऐप" : "⊞ मेरे ऐप"); apps.href = "https://ronin.data/social?do=home&k=" + cfg.k;
-    var close = el("a", "", "✕ बंद"); close.href = "https://ronin.data/social?do=close&k=" + cfg.k;
+    var apps = el("a", "", narrow ? L("⊞ ऐप", "⊞ Apps") : L("⊞ मेरे ऐप", "⊞ My apps")); apps.href = "https://ronin.data/social?do=home&k=" + cfg.k;
+    var close = el("a", "", L("✕ बंद", "✕ Close")); close.href = "https://ronin.data/social?do=close&k=" + cfg.k;
     box.appendChild(prev); box.appendChild(apps); box.appendChild(close);
     put(box);
     // sites rebuild the page: put the buttons back if they go

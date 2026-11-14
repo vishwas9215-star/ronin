@@ -404,6 +404,21 @@ class DeviceTest {
     }
 
     @Test
+    fun safeSocialChipOnTheHomePageOpensThatApp() {
+        // bug in 3.10: an Instagram chip on the new tab page opened "Edit links" instead of Instagram
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(2000)
+            assertTrue("Safe Social row missing", waitFor(10) { eval(sc, "document.querySelectorAll('#ql .chips[data-s=\"Safe Social\"] .chip').length").toIntOrNull() ?: 0 >= 2 })
+            eval(sc, "[].filter.call(document.querySelectorAll('#ql .chips[data-s=\"Safe Social\"] .chip'), function(c){return c.href.indexOf('app=')>0})[0].click(); 1")
+            var social = false
+            assertTrue("chip did not open Safe Social", waitFor(15) { sc.onActivity { a -> social = a.currentIsSocialForTest() }; social })
+            var at = ""
+            sc.onActivity { a -> at = a.webForTest().url ?: "" }
+            assertTrue("opened the launcher, not the app: $at", !at.startsWith(MainActivity.SOCIAL))
+        }
+    }
+
+    @Test
     fun safeSocialOpensFullScreenAndCloses() {
         ActivityScenario.launch(MainActivity::class.java).use { sc ->
             Thread.sleep(1500)
@@ -420,6 +435,9 @@ class DeviceTest {
             sc.onActivity { a -> social = a.currentIsSocialForTest(); barShown = a.addressForTest().isShown }
             assertTrue("not a Safe Social tab", social)
             assertTrue("address bar still shown in Safe Social", !barShown)
+            var bottomBar = false
+            sc.onActivity { a -> bottomBar = a.socialBarForTest().isShown }
+            assertTrue("Back / My apps / Close bar not shown at the bottom", bottomBar)
             shot("15-safe-social")
             // ✕ closes it and the browser is back
             eval(sc, "location.href='https://ronin.data/social?do=close&k='+new URLSearchParams(location.search).get('k'),1")

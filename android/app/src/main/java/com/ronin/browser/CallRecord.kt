@@ -125,7 +125,7 @@ class RecordService : Service() {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("ronin_rec", "Call recording", NotificationManager.IMPORTANCE_LOW))
         val n: Notification = NotificationCompat.Builder(this, "ronin_rec").setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("🎙 Call record हो रही है").setOngoing(true).build()
+            .setContentTitle(L("🎙 Call record हो रही है", "🎙 Recording the call")).setOngoing(true).build()
         try {
             if (Build.VERSION.SDK_INT >= 30) startForeground(7201, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE) else startForeground(7201, n)
         } catch (e: Exception) { stopSelf(); return START_NOT_STICKY }

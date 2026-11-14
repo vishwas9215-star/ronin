@@ -33,9 +33,9 @@ class NotifyWatch : NotificationListenerService() {
         val r = try { RoninApp.instance.rules.scam.text(text) } catch (e: Exception) { return }
         if (r.level.isEmpty()) return
         val friend = "need" in r.ids
-        val head = if (friend) "⛔ $app: \"$title\" के नाम से पैसे माँगे गए" else "⛔ $app: \"$title\" का संदेश ठगी जैसा है"
-        val body = (r.reasons.firstOrNull() ?: "ठगी के संकेत") + "\n" +
-            (if (friend) "पैसे भेजने से पहले उन्हें सीधे फ़ोन करके पक्का करें: उनका WhatsApp hack हो सकता है।" else "पैसे, OTP, PIN, फ़ोटो न दें, link न खोलें।")
+        val head = if (friend) L("⛔ $app: \"$title\" के नाम से पैसे माँगे गए", "⛔ $app: money asked in the name of \"$title\"") else L("⛔ $app: \"$title\" का संदेश ठगी जैसा है", "⛔ $app: the message from \"$title\" looks like a scam")
+        val body = (r.reasons.firstOrNull() ?: L("ठगी के संकेत", "Signs of a scam")) + "\n" +
+            (if (friend) L("पैसे भेजने से पहले उन्हें सीधे फ़ोन करके पक्का करें: उनका WhatsApp hack हो सकता है।", "Before paying, phone them yourself to check: their WhatsApp may be hacked.") else L("पैसे, OTP, PIN, फ़ोटो न दें, link न खोलें।", "Never give money, OTP, PIN or photos; do not open the link."))
         val open = Intent(this, MainActivity::class.java).setAction(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         SmsStore.notify(this, key, SmsStore.CH_WARN, head, body, open)

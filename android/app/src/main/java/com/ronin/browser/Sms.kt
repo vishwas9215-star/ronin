@@ -186,9 +186,9 @@ object SmsStore {
     const val CH_QUIET = "ronin_sms_quiet"
     fun channels(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CH_SMS, "SMS (काम के)", NotificationManager.IMPORTANCE_HIGH))
-        nm.createNotificationChannel(NotificationChannel(CH_WARN, "ठगी की चेतावनी", NotificationManager.IMPORTANCE_DEFAULT))
-        nm.createNotificationChannel(NotificationChannel(CH_QUIET, "अनजान नंबर के SMS (बिना घंटी)", NotificationManager.IMPORTANCE_LOW))
+        nm.createNotificationChannel(NotificationChannel(CH_SMS, L("SMS (काम के)", "SMS (important)"), NotificationManager.IMPORTANCE_HIGH))
+        nm.createNotificationChannel(NotificationChannel(CH_WARN, L("ठगी की चेतावनी", "Scam warnings"), NotificationManager.IMPORTANCE_DEFAULT))
+        nm.createNotificationChannel(NotificationChannel(CH_QUIET, L("अनजान नंबर के SMS (बिना घंटी)", "SMS from unknown numbers (no sound)"), NotificationManager.IMPORTANCE_LOW))
     }
     fun notify(ctx: Context, id: Int, channel: String, title: String, text: String, open: Intent) {
         channels(ctx)
@@ -198,7 +198,7 @@ object SmsStore {
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             // on the lock screen only "a message": OTPs and names stay hidden until unlocked
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-            .setPublicVersion(NotificationCompat.Builder(ctx, channel).setSmallIcon(android.R.drawable.sym_action_email).setContentTitle("📩 नया संदेश").build())
+            .setPublicVersion(NotificationCompat.Builder(ctx, channel).setSmallIcon(android.R.drawable.sym_action_email).setContentTitle(L("📩 नया संदेश", "📩 New message")).build())
             .build()
         try { ctx.getSystemService(NotificationManager::class.java).notify(id, n) } catch (e: SecurityException) { }
     }
@@ -230,15 +230,15 @@ class SmsDeliverReceiver : BroadcastReceiver() {
                 val open = Intent(ctx, MessagesActivity::class.java).putExtra("address", address).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 if (saved == null) {
                     // could not be kept: show the whole message so nothing is lost
-                    SmsStore.notify(ctx, address.hashCode(), SmsStore.CH_SMS, "⚠ SMS सहेजा नहीं जा सका: $who", body, open)
+                    SmsStore.notify(ctx, address.hashCode(), SmsStore.CH_SMS, L("⚠ SMS सहेजा नहीं जा सका: $who", "⚠ Could not save the SMS: $who"), body, open)
                     return@Thread
                 }
                 val (cat, r) = try { SmsStore.categorize(ctx, address, body) } catch (e: Exception) { "work" to null }
                 when (cat) {
                     "work" -> SmsStore.notify(ctx, address.hashCode(), SmsStore.CH_SMS, who, body, open)
                     "unknown" -> SmsStore.notify(ctx, address.hashCode(), SmsStore.CH_QUIET, "👤 $who", body, open)
-                    "scam" -> SmsStore.notify(ctx, address.hashCode(), SmsStore.CH_WARN, "⛔ ठगी वाला SMS: $who",
-                        (r?.reasons?.firstOrNull() ?: "ठगी के संकेत") + "\nRonin ने इसे ⛔ ठगी में रखा है। पैसे, OTP, PIN न दें।", open)
+                    "scam" -> SmsStore.notify(ctx, address.hashCode(), SmsStore.CH_WARN, L("⛔ ठगी वाला SMS: $who", "⛔ Scam SMS: $who"),
+                        (r?.reasons?.firstOrNull() ?: L("ठगी के संकेत", "Signs of a scam")) + L("\nRonin ने इसे ⛔ ठगी में रखा है। पैसे, OTP, PIN न दें।", "\nRonin put it in ⛔ Scam. Never give money, OTP or PIN."), open)
                     else -> { } // ads: quietly in their tab
                 }
             } finally { pending.finish() }
@@ -251,8 +251,8 @@ class MmsReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
         val data = intent.getByteArrayExtra("data")
         if (data != null) try { MmsNotice.save(ctx, data) } catch (e: Exception) { }
-        SmsStore.notify(ctx, 7001, SmsStore.CH_SMS, "📷 एक MMS (फ़ोटो वाला संदेश) आया है",
-            "Ronin Messages अभी MMS नहीं दिखाता, पर उसे सँभालकर रखा है। देखने के लिए Ronin Messages → ⚙ → \"Google Messages वापस\" करें, वहाँ download हो जाएगा।",
+        SmsStore.notify(ctx, 7001, SmsStore.CH_SMS, L("📷 एक MMS (फ़ोटो वाला संदेश) आया है", "📷 An MMS (picture message) came"),
+            L("Ronin Messages अभी MMS नहीं दिखाता, पर उसे सँभालकर रखा है। देखने के लिए Ronin Messages → ⚙ → \"Google Messages वापस\" करें, वहाँ download हो जाएगा।", "Ronin Messages cannot show MMS yet, but kept it safe. To see it: Ronin Messages → ⚙ → \"Back to Google Messages\"; it downloads there."),
             Intent(ctx, MessagesActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 }

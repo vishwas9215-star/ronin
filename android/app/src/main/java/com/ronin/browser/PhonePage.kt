@@ -47,7 +47,7 @@ abstract class PhonePage : AppCompatActivity() {
         web.settings.domStorageEnabled = true
         val rules = RoninApp.instance.rules
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            WebViewCompat.addDocumentStartJavaScript(web, "window.__roninLinkLists=" + rules.safeLinks.json + ";window.__roninScamRules=" + rules.scamRulesJson + ";", setOf("https://ronin.home"))
+            WebViewCompat.addDocumentStartJavaScript(web, Lang.pageScript(this) + "window.__roninLinkLists=" + rules.safeLinks.json + ";window.__roninScamRules=" + rules.scamRulesJson + ";", setOf("https://ronin.home"))
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             WebViewCompat.addWebMessageListener(web, "roninPhone", setOf("https://ronin.home")) { _, msg, origin, main, proxy ->
@@ -77,10 +77,13 @@ abstract class PhonePage : AppCompatActivity() {
                 return true
             }
         }
-        setContentView(web)
-        // Android 15+ draws under the bars: keep the page (and its send box) above them and the keyboard
-        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(web) { v, ins ->
-            val b = ins.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or androidx.core.view.WindowInsetsCompat.Type.ime())
+        // Android 15+ draws under the bars. A WebView ignores its own padding (the page still drew under
+        // the clock and the ⚙ was hidden), so the page sits in a frame that keeps it between the bars
+        // and above the keyboard.
+        val frame = android.widget.FrameLayout(this).apply { setBackgroundColor(Color.parseColor("#0f1218")); addView(web) }
+        setContentView(frame)
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(frame) { v, ins ->
+            val b = ins.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or androidx.core.view.WindowInsetsCompat.Type.displayCutout() or androidx.core.view.WindowInsetsCompat.Type.ime())
             v.setPadding(b.left, b.top, b.right, b.bottom); androidx.core.view.WindowInsetsCompat.CONSUMED
         }
         web.loadUrl("https://ronin.home/tools/$page" + startQuery(intent))
@@ -128,6 +131,8 @@ abstract class PhonePage : AppCompatActivity() {
             "defaultApps" -> { try { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) } catch (e: Exception) { startActivity(Intent(Settings.ACTION_SETTINGS)) }; done(true) }
             "notifyAccess" -> { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)); done(true) }
             "watcher" -> done(NotifyWatch.enabled(this))
+            "lang" -> done(Lang.choice(this))
+            "setLang" -> { Lang.set(this, a.optString("value")); done(true); runOnUiThread { recreate() } }
             "check" -> { val r = RoninApp.instance.rules.scam.text(a.optString("text")); done(JSONObject().put("level", r.level).put("reasons", org.json.JSONArray(r.reasons))) }
             else -> return false
         }

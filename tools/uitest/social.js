@@ -6,7 +6,7 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   const out = process.argv[2] || '/tmp/ui'; fs.mkdirSync(out, { recursive: true });
   const lists = fs.readFileSync('internal/safelinks/lists.json', 'utf8'), rules = fs.readFileSync('internal/safelinks/scamrules.json', 'utf8');
   const js = fs.readFileSync('cmd/ronin/ui/tools/scamcheck.js', 'utf8') + '\n' + fs.readFileSync('cmd/ronin/ui/inject_social.js', 'utf8'), dir = 'cmd/ronin/ui/tools';
-  const init = cfg => 'window.__roninSocialCfg=' + JSON.stringify(cfg) + ';window.__roninLinkLists=' + lists + ';window.__roninScamRules=' + rules + ';' +
+  const init = cfg => 'window.__roninLang="hi";window.__roninSocialCfg=' + JSON.stringify(cfg) + ';window.__roninLinkLists=' + lists + ';window.__roninScamRules=' + rules + ';' +
     'window.__said=[];window.roninNative={postMessage:m=>window.__said.push(m)};' + js;
   const b = await chromium.launch(); let fail = 0; const bad = m => { console.log('FAIL', m); fail++; };
   const html = body => ({ contentType: 'text/html; charset=utf-8', body });

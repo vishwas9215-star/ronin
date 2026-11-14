@@ -64,8 +64,8 @@ object Parts {
             // turning it back on needs the PIN set by the parent
             val box = android.widget.EditText(ctx).apply { inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD; hint = "PIN" }
             AlertDialog.Builder(ctx).setTitle("🔒 PIN to change Family Filter").setView(box)
-                .setPositiveButton("खोलें") { _, _ -> if (pinHash(box.text.toString()) == prefs(ctx).getString("adultPin", "")) askAdult(ctx, false) else Toast.makeText(ctx, "PIN ग़लत है", Toast.LENGTH_LONG).show() }
-                .setNegativeButton("रद्द करें", null).show()
+                .setPositiveButton(L("खोलें", "Open")) { _, _ -> if (pinHash(box.text.toString()) == prefs(ctx).getString("adultPin", "")) askAdult(ctx, false) else Toast.makeText(ctx, L("PIN ग़लत है", "Wrong PIN"), Toast.LENGTH_LONG).show() }
+                .setNegativeButton(L("रद्द करें", "Cancel"), null).show()
             return
         }
         askAdult(ctx, first)
@@ -76,7 +76,7 @@ object Parts {
         var pick = if (adultBlocked(ctx)) 0 else 1
         AlertDialog.Builder(ctx).setTitle("🛡 Family Filter for this device")
             .setSingleChoiceItems(items, pick) { _, i -> pick = i }
-            .setPositiveButton("✔ ठीक है") { _, _ ->
+            .setPositiveButton(L("✔ ठीक है", "✔ OK")) { _, _ ->
                 prefs(ctx).edit().putBoolean("adultAsked", true).putBoolean("adultBlock", pick == 0).apply()
                 if (pick == 0) {
                     val box = android.widget.EditText(ctx).apply { inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD; hint = "4-digit PIN (empty = no PIN)" }
@@ -85,7 +85,7 @@ object Parts {
                         .setNegativeButton("No PIN", null).show()
                 } else prefs(ctx).edit().putString("adultPin", "").apply()
             }
-            .setNegativeButton(if (first) "बाद में" else "रद्द करें") { _, _ -> if (first) prefs(ctx).edit().putBoolean("adultAsked", true).apply() }
+            .setNegativeButton(if (first) L("बाद में", "Later") else L("रद्द करें", "Cancel")) { _, _ -> if (first) prefs(ctx).edit().putBoolean("adultAsked", true).apply() }
             .setCancelable(!first).show()
     }
 
@@ -96,14 +96,14 @@ object Parts {
         val phone = hasPhone(ctx)
         val ids = if (phone) listOf(MAIL, SOS, MESSAGES, CALLS) else listOf(MAIL)
         val names = ids.map {
-            when (it) { MAIL -> "📧 Ronin Mail (Gmail आदि, ठगी वाले email पर चेतावनी)"; SOS -> "🆘 Ronin SOS (मुसीबत में परिवार को जगह + battery)"; MESSAGES -> "📩 Ronin Messages (SMS app: ठगी / विज्ञापन अलग)"; else -> "📞 Ronin Calls (phone app: अनजान call पर चेतावनी)" }
+            when (it) { MAIL -> L("📧 Ronin Mail (Gmail आदि, ठगी वाले email पर चेतावनी)", "📧 Ronin Mail (Gmail etc., warns on scam emails)"); SOS -> L("🆘 Ronin SOS (मुसीबत में परिवार को जगह + battery)", "🆘 Ronin SOS (sends the family your place + battery in trouble)"); MESSAGES -> L("📩 Ronin Messages (SMS app: ठगी / विज्ञापन अलग)", "📩 Ronin Messages (SMS app: scams / ads kept apart)"); else -> L("📞 Ronin Calls (phone app: अनजान call पर चेतावनी)", "📞 Ronin Calls (phone app: warns on unknown calls)") }
         }.toTypedArray()
         // first time: Mail ticked; Messages / Calls are big changes, the family ticks them itself
         val checked = ids.map { if (first) it == MAIL || it == SOS else isOn(ctx, it) }.toBooleanArray()
         AlertDialog.Builder(ctx)
-            .setTitle(if (first) "Ronin के कौन-से हिस्से चाहिए?" else "📱 Ronin के हिस्से")
+            .setTitle(if (first) L("Ronin के कौन-से हिस्से चाहिए?", "Which parts of Ronin do you want?") else L("📱 Ronin के हिस्से", "📱 Ronin parts"))
             .setMultiChoiceItems(names, checked) { _, i, on -> checked[i] = on }
-            .setPositiveButton("✔ ठीक है") { _, _ ->
+            .setPositiveButton(L("✔ ठीक है", "✔ OK")) { _, _ ->
                 prefs(ctx).edit().putBoolean("asked", true).apply()
                 var blocked = ""
                 ids.forEachIndexed { i, id ->
@@ -113,14 +113,14 @@ object Parts {
                     set(ctx, id, want)
                 }
                 if (blocked.isNotEmpty()) {
-                    Toast.makeText(ctx, "पहले Default apps में दूसरी $blocked app चुनें, फिर यहाँ से हटाएँ", Toast.LENGTH_LONG).show()
+                    Toast.makeText(ctx, L("पहले Default apps में दूसरी $blocked app चुनें, फिर यहाँ से हटाएँ", "First choose another $blocked app in Default apps, then remove it here"), Toast.LENGTH_LONG).show()
                     try { ctx.startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) } catch (e: Exception) { }
-                } else Toast.makeText(ctx, "✔ Home screen पर चुने हुए icon आ गए (कुछ phone में 1-2 सेकंड लगते हैं)", Toast.LENGTH_LONG).show()
+                } else Toast.makeText(ctx, L("✔ Home screen पर चुने हुए icon आ गए (कुछ phone में 1-2 सेकंड लगते हैं)", "✔ The chosen icons are on the home screen (some phones take 1-2 seconds)"), Toast.LENGTH_LONG).show()
             }
-            .setNegativeButton(if (first) "बाद में" else "रद्द करें") { _, _ -> if (first) prefs(ctx).edit().putBoolean("asked", true).apply() }
+            .setNegativeButton(if (first) L("बाद में", "Later") else L("रद्द करें", "Cancel")) { _, _ -> if (first) prefs(ctx).edit().putBoolean("asked", true).apply() }
             .setOnDismissListener { if (first && !prefs(ctx).getBoolean("adultAsked", false)) chooseAdult(ctx, first = true) }
             .setCancelable(!first)
             .show()
-        if (!phone) Toast.makeText(ctx, "इस device में SIM / call नहीं है: Messages और Calls नहीं दिखाए। SIM वाले phone पर Menu → 📱 Ronin के हिस्से", Toast.LENGTH_LONG).show()
+        if (!phone) Toast.makeText(ctx, L("इस device में SIM / call नहीं है: Messages और Calls नहीं दिखाए। SIM वाले phone पर Menu → 📱 Ronin के हिस्से", "This device has no SIM / calls: Messages and Calls are not shown. On a phone with a SIM: Menu → 📱 Ronin parts"), Toast.LENGTH_LONG).show()
     }
 }

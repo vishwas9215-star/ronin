@@ -53,12 +53,12 @@ object CallInfo {
     /** A short warning for a caller: TRAI telemarketing series, a foreign number, not saved, blocked. */
     fun label(ctx: Context, number: String): String {
         val d = digits(number)
-        if (d.isEmpty()) return "छुपा हुआ नंबर (private): सावधान"
+        if (d.isEmpty()) return L("छुपा हुआ नंबर (private): सावधान", "Hidden number (private): be careful")
         if (isEmergency(d)) return ""
         if (SmsStore.contactName(ctx, number) != null) return ""
-        if (d.removePrefix("+91").startsWith("140")) return "📢 Telemarketing (140 वाला नंबर)"
-        if (d.startsWith("+") && !d.startsWith("+91")) return "🌍 विदेश का नंबर: अनजान हो तो न उठाएँ, पैसे / OTP न दें"
-        return "👤 अनजान नंबर: पुलिस / CBI / बैंक / कूरियर बनकर पैसे माँगे तो call काटें"
+        if (d.removePrefix("+91").startsWith("140")) return L("📢 Telemarketing (140 वाला नंबर)", "📢 Telemarketing (a 140 number)")
+        if (d.startsWith("+") && !d.startsWith("+91")) return L("🌍 विदेश का नंबर: अनजान हो तो न उठाएँ, पैसे / OTP न दें", "🌍 Foreign number: if you do not know them, do not answer; never give money / OTP")
+        return L("👤 अनजान नंबर: पुलिस / CBI / बैंक / कूरियर बनकर पैसे माँगे तो call काटें", "👤 Unknown number: if they claim to be police / CBI / bank / courier and ask money, cut the call")
     }
 
     fun prefs(ctx: Context) = ctx.getSharedPreferences("ronin_phone", Context.MODE_PRIVATE)
@@ -212,13 +212,13 @@ object CallHub {
         val nm = ctx.getSystemService(NotificationManager::class.java)
         val live = calls.firstOrNull { it.state != Call.STATE_RINGING && it.state != Call.STATE_DISCONNECTED }
         if (live == null) { nm.cancel(NOTE + 1); return }
-        nm.createNotificationChannel(NotificationChannel("ronin_call", "Call चल रही है", NotificationManager.IMPORTANCE_LOW))
+        nm.createNotificationChannel(NotificationChannel("ronin_call", L("Call चल रही है", "Ongoing call"), NotificationManager.IMPORTANCE_LOW))
         val num = number(live)
         val screen = PendingIntent.getActivity(ctx, 4, Intent(ctx, InCallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE)
         val end = PendingIntent.getBroadcast(ctx, 5, Intent(ctx, CallActionReceiver::class.java).setAction("hangup"), PendingIntent.FLAG_IMMUTABLE)
         val n = NotificationCompat.Builder(ctx, "ronin_call").setSmallIcon(android.R.drawable.sym_action_call)
-            .setContentTitle("📞 " + (SmsStore.contactName(ctx, num) ?: num)).setContentText("Call चल रही है: वापस जाने के लिए दबाएँ")
-            .setOngoing(true).setContentIntent(screen).setCategory(NotificationCompat.CATEGORY_CALL).addAction(0, "📵 Call काटें", end).build()
+            .setContentTitle("📞 " + (SmsStore.contactName(ctx, num) ?: num)).setContentText(L("Call चल रही है: वापस जाने के लिए दबाएँ", "Call in progress: tap to go back"))
+            .setOngoing(true).setContentIntent(screen).setCategory(NotificationCompat.CATEGORY_CALL).addAction(0, L("📵 Call काटें", "📵 Hang up"), end).build()
         try { nm.notify(NOTE + 1, n) } catch (e: SecurityException) { }
     }
     fun number(c: Call) = c.details?.handle?.schemeSpecificPart ?: ""
@@ -238,7 +238,7 @@ object CallHub {
             .setContentTitle("📞 $who").setContentText(CallInfo.label(ctx, num).ifEmpty { "Incoming call" })
             .setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_MAX).setOngoing(true)
             .setFullScreenIntent(screen, true).setContentIntent(screen)
-            .addAction(0, "❌ काटें", act("decline", 2)).addAction(0, "✅ उठाएँ", answer).build()
+            .addAction(0, L("❌ काटें", "❌ Decline"), act("decline", 2)).addAction(0, L("✅ उठाएँ", "✅ Answer"), answer).build()
         try { nm.notify(NOTE, n) } catch (e: SecurityException) { }
     }
 }
@@ -280,13 +280,13 @@ class InCallActivity : AppCompatActivity() {
             background = GradientDrawable().apply { setColor(Color.parseColor("#3a2a0a")); cornerRadius = 14 * d } }
         second = TextView(this).apply { textSize = 17f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(0, (10 * d).toInt(), 0, 0) }
         ringRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL
-            addView(btn("❌ काटें", "#dc2626") { top()?.reject(false, null) }); addView(btn("✅ उठाएँ", "#16a34a") { top()?.answer(VideoProfile.STATE_AUDIO_ONLY) }) }
+            addView(btn(L("❌ काटें", "❌ Decline"), "#dc2626") { top()?.reject(false, null) }); addView(btn(L("✅ उठाएँ", "✅ Answer"), "#16a34a") { top()?.answer(VideoProfile.STATE_AUDIO_ONLY) }) }
         talkRow = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val r1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL
             addView(btn("🔇 Mute", "#334155") { CallHub.service?.let { it.setMuted(!(it.callAudioState?.isMuted ?: false)) } })
             addView(btn("🔊 Speaker", "#334155") { CallHub.service?.let { val sp = it.callAudioState?.route == CallAudioState.ROUTE_SPEAKER; it.setAudioRoute(if (sp) CallAudioState.ROUTE_WIRED_OR_EARPIECE else CallAudioState.ROUTE_SPEAKER) } })
             addView(btn("⌨ Keypad", "#334155") { keypad.visibility = if (keypad.visibility == android.view.View.VISIBLE) android.view.View.GONE else android.view.View.VISIBLE }) }
-        val r2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; addView(btn("📵 Call काटें", "#dc2626") { top()?.disconnect() }) }
+        val r2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; addView(btn(L("📵 Call काटें", "📵 Hang up"), "#dc2626") { top()?.disconnect() }) }
         talkRow.addView(r1); talkRow.addView(r2)
         keypad = GridLayout(this).apply { columnCount = 3; visibility = android.view.View.GONE
             for (k in listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#")) addView(Button(this@InCallActivity).apply { text = k; textSize = 24f
@@ -330,10 +330,10 @@ class InCallActivity : AppCompatActivity() {
         val tm = getSystemService(TelecomManager::class.java)
         list.forEachIndexed { i, h ->
             val label = try { tm.getPhoneAccount(h)?.label?.toString() } catch (e: Exception) { null } ?: "SIM ${i + 1}"
-            simRow.addView(Button(this).apply { text = "📶 $label से call करें"; textSize = 20f; isAllCaps = false; minHeight = (64 * d).toInt()
+            simRow.addView(Button(this).apply { text = L("📶 $label से call करें", "📶 Call with $label"); textSize = 20f; isAllCaps = false; minHeight = (64 * d).toInt()
                 setOnClickListener { c.phoneAccountSelected(h, false) } })
         }
-        simRow.addView(Button(this).apply { text = "✖ रद्द करें"; textSize = 18f; isAllCaps = false; setOnClickListener { c.disconnect() } })
+        simRow.addView(Button(this).apply { text = L("✖ रद्द करें", "✖ Cancel"); textSize = 18f; isAllCaps = false; setOnClickListener { c.disconnect() } })
     }
 
     private fun refresh() {
@@ -350,11 +350,11 @@ class InCallActivity : AppCompatActivity() {
         ringRow.visibility = if (ringing) android.view.View.VISIBLE else android.view.View.GONE
         talkRow.visibility = if (ringing || choosing) android.view.View.GONE else android.view.View.VISIBLE
         state.text = when (c.state) {
-            Call.STATE_RINGING -> "📞 Call आ रही है"; Call.STATE_DIALING, Call.STATE_CONNECTING -> "📞 लगा रहे हैं..."; Call.STATE_SELECT_PHONE_ACCOUNT -> "किस SIM से call करें?"
-            Call.STATE_HOLDING -> "⏸ Hold पर"; Call.STATE_ACTIVE -> "⏱ " + elapsed(c); else -> ""
+            Call.STATE_RINGING -> L("📞 Call आ रही है", "📞 Incoming call"); Call.STATE_DIALING, Call.STATE_CONNECTING -> L("📞 लगा रहे हैं...", "📞 Calling..."); Call.STATE_SELECT_PHONE_ACCOUNT -> L("किस SIM से call करें?", "Which SIM to call with?")
+            Call.STATE_HOLDING -> L("⏸ Hold पर", "⏸ On hold"); Call.STATE_ACTIVE -> "⏱ " + elapsed(c); else -> ""
         }
         val others = CallHub.calls.filter { it != c && it.state != Call.STATE_DISCONNECTED }
-        second.text = if (others.isEmpty()) "" else "दूसरी call: " + others.joinToString { SmsStore.contactName(this, CallHub.number(it)) ?: CallHub.number(it) }
+        second.text = if (others.isEmpty()) "" else L("दूसरी call: ", "Other call: ") + others.joinToString { SmsStore.contactName(this, CallHub.number(it)) ?: CallHub.number(it) }
         val active = c.state == Call.STATE_ACTIVE
         // automatic recording: every call except the "do not record" people (Settings)
         if (active && CallRecorder.recordingNumber == null && CallRecorder.wanted(this, num)) RecordService.start(this, num)

@@ -13,7 +13,7 @@ import java.util.regex.Pattern
  */
 class ScamCheck(o: JSONObject?, private val links: SafeLinks) {
     class Result(val level: String, val score: Int, val ids: List<String>, val reasons: List<String>, val rumour: Boolean)
-    private class Group(val id: String, val w: Int, val re: Pattern, val why: String)
+    private class Group(val id: String, val w: Int, val re: Pattern, val why: String, val whyEn: String = "")
 
     private val groups: List<Group>
     private val caps: Pattern?
@@ -26,9 +26,10 @@ class ScamCheck(o: JSONObject?, private val links: SafeLinks) {
 
     init {
         val g = o?.optJSONArray("groups") ?: JSONArray()
+        val whyEn = o?.optJSONObject("whyEn")
         groups = (0 until g.length()).mapNotNull { i ->
             val a = g.optJSONArray(i) ?: return@mapNotNull null
-            rx(a.optString(2))?.let { Group(a.optString(0), a.optInt(1), it, a.optString(3)) }
+            rx(a.optString(2))?.let { Group(a.optString(0), a.optInt(1), it, a.optString(3), whyEn?.optString(a.optString(0)).orEmpty()) }
         }
         caps = o?.optString("caps")?.takeIf { it.isNotEmpty() }?.let { try { Pattern.compile(it) } catch (e: Exception) { null } }
         advice = rx(o?.optString("advice")); done = rx(o?.optString("done")); normal = rx(o?.optString("normal")); pincode = rx(o?.optString("pincode"))
@@ -57,7 +58,7 @@ class ScamCheck(o: JSONObject?, private val links: SafeLinks) {
             if (g.re.matcher(tt).find()) {
                 score += g.w; ids.add(g.id)
                 if (g.w >= 3) heavy = true
-                if (g.id != "link" && g.id != "urgent") reasons.add(g.why)
+                if (g.id != "link" && g.id != "urgent") reasons.add(if (g.whyEn.isNotEmpty()) L(g.why, g.whyEn) else g.why)
             }
         }
         // a link Safe Social would never open is a heavy sign itself
@@ -66,11 +67,11 @@ class ScamCheck(o: JSONObject?, private val links: SafeLinks) {
         while (m.find() && n++ < 10) {
             val u = m.group(1) ?: continue
             if (links.check(if (u.startsWith("http", true)) u else "https://$u").isNotEmpty()) {
-                score += 3; heavy = true; ids.add("badlink"); reasons.add("message में ऐसा link है जो Ronin कभी नहीं खोलता")
+                score += 3; heavy = true; ids.add("badlink"); reasons.add(L("message में ऐसा link है जो Ronin कभी नहीं खोलता", "The message has a link Ronin never opens"))
                 break
             }
         }
-        if ("auth" !in ids && caps?.matcher(raw)?.find() == true) { score += 2; ids.add("auth"); reasons.add("खुद को पुलिस / CBI / कोर्ट बताना") }
+        if ("auth" !in ids && caps?.matcher(raw)?.find() == true) { score += 2; ids.add("auth"); reasons.add(L("खुद को पुलिस / CBI / कोर्ट बताना", "Says they are police / CBI / a court")) }
         if (ids.none { it != "link" && it != "urgent" }) score = 0
         // advice / news about scams with nothing asked of the reader is information, not a scam
         val isAdvice = advice?.matcher(t)?.find() == true

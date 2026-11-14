@@ -65,7 +65,7 @@ class SearchActivity : Activity() {
             background = GradientDrawable().apply { setColor(Color.parseColor("#1C2029")); cornerRadius = 28 * d }
         }
         box = EditText(this).apply {
-            hint = "Ronin में खोजें या पता लिखें"
+            hint = L("Ronin में खोजें या पता लिखें", "Search Ronin or type an address")
             setHintTextColor(Color.parseColor("#8A93A6"))
             setTextColor(Color.WHITE)
             textSize = 18f
@@ -79,7 +79,7 @@ class SearchActivity : Activity() {
         }
         val mic = ImageButton(this).apply {
             setImageResource(android.R.drawable.ic_btn_speak_now)
-            contentDescription = "बोलकर खोजें"
+            contentDescription = L("बोलकर खोजें", "Search by voice")
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.parseColor("#2563EB")) }
             layoutParams = LinearLayout.LayoutParams((48 * d).toInt(), (48 * d).toInt())
             setOnClickListener { listen() }
@@ -96,7 +96,7 @@ class SearchActivity : Activity() {
         val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
-            .putExtra(RecognizerIntent.EXTRA_PROMPT, "बोलिए, क्या खोजना है")
+            .putExtra(RecognizerIntent.EXTRA_PROMPT, L("बोलिए, क्या खोजना है", "Say what to search"))
         try { startActivityForResult(i, 7) } catch (e: Exception) { box.requestFocus() }
     }
 

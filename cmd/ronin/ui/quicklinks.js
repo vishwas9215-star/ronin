@@ -4,6 +4,9 @@
 (function () {
   var d = window.RONIN_QL, root = document.getElementById("ql");
   if (!d || !root) return;
+  // English unless the device (or Ronin's setting) is Hindi
+  var EN = String(d.lang || navigator.language || "en").toLowerCase().indexOf("hi") !== 0;
+  var L = function (hi, en) { return EN ? en : hi; };
   if (d.edit) root.classList.add("edit"); // still editing after an add / remove
   var css = document.createElement("style");
   css.textContent =
@@ -36,12 +39,12 @@
       if (!sec.fixed) a.appendChild(x); // a fixed row (Safe Social) is changed in its own settings
       box.appendChild(a);
     });
-    var add = document.createElement("button"); add.className = "add"; add.type = "button"; add.textContent = "+ जोड़ें / Add";
+    var add = document.createElement("button"); add.className = "add"; add.type = "button"; add.textContent = L("+ जोड़ें", "+ Add");
     add.onclick = function () {
       if (box.nextSibling && box.nextSibling.className === "new") return;
       var f = document.createElement("form"); f.className = "new";
-      var n = document.createElement("input"); n.placeholder = "नाम / Name";
-      var u = document.createElement("input"); u.placeholder = "पता / Address (e.g. kite.zerodha.com)"; u.inputMode = "url";
+      var n = document.createElement("input"); n.placeholder = L("नाम", "Name");
+      var u = document.createElement("input"); u.placeholder = L("पता (जैसे kite.zerodha.com)", "Address (e.g. kite.zerodha.com)"); u.inputMode = "url";
       var b = document.createElement("button"); b.textContent = "Save";
       f.onsubmit = function (e) { e.preventDefault(); if (u.value.trim()) go("add", {s: sec.id, n: n.value, u: u.value}); };
       f.append(n, u, b); box.parentNode.insertBefore(f, box.nextSibling); n.focus();
@@ -49,7 +52,7 @@
     if (!sec.fixed) box.appendChild(add);
   });
   var ed = document.createElement("button"); ed.className = "edbtn"; ed.type = "button";
-  var label = function () { ed.textContent = root.classList.contains("edit") ? "✓ Done" : "✎ Links बदलें / Edit links"; };
+  var label = function () { ed.textContent = root.classList.contains("edit") ? L("✓ हो गया", "✓ Done") : L("✎ Links बदलें", "✎ Edit links"); };
   ed.onclick = function () { root.classList.toggle("edit"); label(); };
   label(); root.appendChild(ed);
 })();
