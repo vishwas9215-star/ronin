@@ -48,6 +48,25 @@ class TableExport(json: String) {
 
     fun issue(r: Int, c: Int) = issues[r to c]
 
+    /** The most important mark in a row (red, orange, yellow) - colours the Check cell. */
+    fun rowKind(r: Int): String? {
+        val rank = mapOf("dup" to 1, "dupname" to 1, "similar" to 2, "spell" to 3)
+        var best: String? = null
+        for (c in head.indices) issue(r, c)?.first?.let { if ((rank[it] ?: 0) > (rank[best ?: ""] ?: 0)) best = it }
+        return best
+    }
+
+    /** Columns worth printing; a column with the same value in every row is printed once above the table. */
+    fun printColumns(): Pair<List<Int>, List<Pair<String, String>>> {
+        val keep = ArrayList<Int>(); val same = ArrayList<Pair<String, String>>()
+        head.forEachIndexed { c, h ->
+            val first = rows.first().getOrElse(c) { "" }.trim()
+            val constant = rows.size > 1 && rows.all { it.getOrElse(c) { "" }.trim() == first }
+            if (constant) { if (first.isNotEmpty() && first != "-") same.add(h to first) } else keep.add(c)
+        }
+        return keep to same
+    }
+
     fun rowNotes(r: Int): String {
         val out = LinkedHashSet<String>()
         for (c in head.indices) issue(r, c)?.let { (kind, note) -> out.add(if (kind != "dup" && head[c].isNotEmpty()) "${head[c]}: $note" else note) }
@@ -85,22 +104,23 @@ class TableExport(json: String) {
     fun xlsx(): ByteArray {
         val n = head.size
         val sh = StringBuilder("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>""")
-        for (c in 0..n) {
-            var w = if (c == n) 50 else 14
-            if (c < n) rows.forEach { r -> if (c < r.size && r[c].length + 2 > w) w = r[c].length + 2 }
-            if (w > 60) w = 60
-            sh.append("""<col min="${c + 1}" max="${c + 1}" width="$w" customWidth="1"/>""")
+        sh.append("""<col min="1" max="1" width="48" customWidth="1"/>""")
+        for (c in 0 until n) {
+            var w = maxOf(10, minOf(24, head[c].length + 2))
+            rows.forEach { r -> if (c < r.size && r[c].length + 2 > w) w = r[c].length + 2 }
+            if (w > 50) w = 50
+            sh.append("""<col min="${c + 2}" max="${c + 2}" width="$w" customWidth="1"/>""")
         }
         sh.append("</cols><sheetData>")
-        fun cell(row: Int, col: Int, style: Int, v: String) {
-            if (row > 1 && col < n && isNumber(v)) { sh.append("""<c r="${colName(col)}$row" s="$style"><v>$v</v></c>"""); return }
+        fun cell(row: Int, col: Int, style: Int, v: String, data: Boolean) {
+            if (row > 1 && data && isNumber(v)) { sh.append("""<c r="${colName(col)}$row" s="$style"><v>$v</v></c>"""); return }
             sh.append("""<c r="${colName(col)}$row" t="inlineStr" s="$style"><is><t xml:space="preserve">${esc(v)}</t></is></c>""")
         }
-        sh.append("""<row r="1">"""); head.forEachIndexed { c, h -> cell(1, c, 1, h) }; cell(1, n, 1, "जाँच / Check"); sh.append("</row>")
+        sh.append("""<row r="1">"""); cell(1, 0, 1, "जाँच / Check", false); head.forEachIndexed { c, h -> cell(1, c + 1, 1, h, false) }; sh.append("</row>")
         rows.forEachIndexed { r, row ->
             sh.append("""<row r="${r + 2}">""")
-            for (c in 0 until n) cell(r + 2, c, styleOf(issue(r, c)?.first), row.getOrElse(c) { "" })
-            cell(r + 2, n, 0, rowNotes(r))
+            cell(r + 2, 0, styleOf(rowKind(r)), rowNotes(r), false)
+            for (c in 0 until n) cell(r + 2, c + 1, styleOf(issue(r, c)?.first), row.getOrElse(c) { "" }, true)
             sh.append("</row>")
         }
         sh.append("""</sheetData><autoFilter ref="A1:${colName(n)}${rows.size + 1}"/></worksheet>""")
@@ -141,13 +161,18 @@ class TableExport(json: String) {
         val big = TextPaint(bold).apply { textSize = 12f }
         val line = Paint().apply { color = Color.parseColor("#999999"); strokeWidth = 0.5f; style = Paint.Style.STROKE }
         val fill = Paint().apply { style = Paint.Style.FILL }
-        val cols = head.size + 1
-        // column widths by content (names wider), the Check column gets the rest
-        val weights = FloatArray(cols) { c ->
-            if (c == head.size) 3f else {
-                var w = head[c].length.toFloat()
-                rows.take(200).forEach { r -> w = maxOf(w, r.getOrElse(c) { "" }.length.toFloat()) }
-                w.coerceIn(3f, 30f)
+        val (keep, same) = printColumns()
+        // the Check column comes first (it says why a cell is coloured), then the useful columns
+        val cols = keep.size + 1
+        var checkW = 8f
+        rows.indices.forEach { r -> checkW = maxOf(checkW, rowNotes(r).length / 3f) }
+        checkW = minOf(checkW, 22f)
+        val weights = FloatArray(cols) { i ->
+            if (i == 0) checkW else {
+                val c = keep[i - 1]
+                var w = maxOf(7f, head[c].split(" ").maxOf { it.length }.toFloat())
+                rows.take(300).forEach { r -> w = maxOf(w, r.getOrElse(c) { "" }.length.toFloat()) }
+                w.coerceAtMost(28f)
             }
         }
         val total = weights.sum()
@@ -170,7 +195,9 @@ class TableExport(json: String) {
                 val cv = page!!.canvas
                 if (pageNo == 1) {
                     val t = layout(title, big, pw - 2 * m); cv.save(); cv.translate(m, y); t.draw(cv); cv.restore(); y += t.height + 4
-                    val s = summary().drop(1).joinToString("  ·  ") { "${it.first}: ${it.second}" } + "     पीला = दोहराया · नारंगी = मिलता-जुलता नाम · लाल = संभावित ग़लती"
+                    var s = summary().drop(1).joinToString("  ·  ") { "${it.first}: ${it.second}" } +
+                        "\nपीला = दोहराया · नारंगी = spelling जाँचें · लाल = लिखावट में ग़लती. पहले कॉलम \"जाँच\" में हर रंग का कारण लिखा है।"
+                    if (same.isNotEmpty()) s += "\nसभी पंक्तियों में एक जैसा: " + same.joinToString(" · ") { "${it.first}: ${it.second}" }
                     val sl = layout(s, text, pw - 2 * m); cv.save(); cv.translate(m, y); sl.draw(cv); cv.restore(); y += sl.height + 8
                 }
                 if (!headBg) drawHeader()
@@ -186,10 +213,10 @@ class TableExport(json: String) {
             }
             y += h
         }
-        fun header() = drawRow(head + "जाँच / Check", List(cols) { null }, bold, true)
+        fun header() = drawRow(listOf("जाँच / Check") + keep.map { head[it] }, List(cols) { null }, bold, true)
         drawHeaderRef = { header() }
         rows.forEachIndexed { r, row ->
-            drawRow(List(head.size) { row.getOrElse(it) { "" } } + rowNotes(r), List(head.size) { issue(r, it)?.first } + null, text, false)
+            drawRow(listOf(rowNotes(r)) + keep.map { row.getOrElse(it) { "" } }, listOf(rowKind(r)) + keep.map { issue(r, it)?.first }, text, false)
         }
         page?.let { doc.finishPage(it) }
         val bos = ByteArrayOutputStream()

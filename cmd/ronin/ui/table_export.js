@@ -220,8 +220,11 @@
       if (/^(s\.?\s*no\.?|sr\.?\s*no\.?|sl\.?\s*no\.?|#|क्र|क्रम|क्रमांक|क्र\.?\s*सं)/i.test(h.trim())) return true;
       return rows.length > 2 && rows.every(function (r, i) { return String(r[c]).trim() === String(i + 1); });
     });
-    var nameCols = [];
-    head.forEach(function (h, c) { if (/name|नाम/i.test(h) && !/user\s*name|school|विद्यालय|स्कूल|block|district|class/i.test(h)) nameCols.push(c); });
+    var nameCols = [], PARENT = /father|mother|guardian|parent|husband|पिता|माता|अभिभावक|पति/i;
+    head.forEach(function (h, c) { if (/name|नाम/i.test(h) && !/user\s*name|school|विद्यालय|स्कूल|block|district|class|bank|branch|village|ग्राम/i.test(h)) nameCols.push(c); });
+    var personCol = -1, fatherCol = -1, dobCol = -1;
+    nameCols.forEach(function (c) { if (personCol < 0 && !PARENT.test(head[c])) personCol = c; if (fatherCol < 0 && /father|पिता/i.test(head[c])) fatherCol = c; });
+    head.forEach(function (h, c) { if (dobCol < 0 && /dob|birth|जन्म/i.test(h)) dobCol = c; });
 
     // whole rows that repeat (serial number left out)
     var rowKey = {}, dupRows = 0;
@@ -229,30 +232,43 @@
       var k = r.filter(function (_, c) { return !serial[c]; }).map(norm).join("|");
       if (rowKey[k] !== undefined) {
         dupRows++;
-        r.forEach(function (_, c) { mark(i, c, "dup", "पूरी पंक्ति दोहराई गई (row " + (rowKey[k] + 1) + " जैसी)"); });
-        r.forEach(function (_, c) { mark(rowKey[k], c, "dup", "पूरी पंक्ति दोहराई गई (row " + (i + 1) + " जैसी)"); });
+        r.forEach(function (_, c) { mark(i, c, "dup", "पीला: पूरी पंक्ति दो बार (row " + (rowKey[k] + 1) + " जैसी)"); });
+        r.forEach(function (_, c) { mark(rowKey[k], c, "dup", "पीला: पूरी पंक्ति दो बार (row " + (i + 1) + " जैसी)"); });
       } else rowKey[k] = i;
     });
 
     // names
     var spell = 0, similar = 0, dupNames = 0;
-    var hasUpper = {};
-    nameCols.forEach(function (c) { hasUpper[c] = rows.some(function (x) { return /[A-Z]/.test(x[c] || ""); }); });
+    // the same child entered twice: same name AND same father's name (or date of birth)
+    if (personCol >= 0) {
+      var seenKid = {};
+      rows.forEach(function (r, i) {
+        var n = norm(r[personCol]);
+        if (!n) return;
+        var extra = fatherCol >= 0 ? norm(r[fatherCol]) : dobCol >= 0 ? norm(r[dobCol]) : "";
+        if (fatherCol < 0 && dobCol < 0) return; // only a name: two children can share it
+        var k = n + "|" + extra;
+        if (seenKid[k] !== undefined) {
+          var j = seenKid[k], how = fatherCol >= 0 ? "नाम और पिता का नाम" : "नाम और जन्म तिथि";
+          mark(i, personCol, "dupname", "पीला: यही बच्चा row " + (j + 1) + " में भी (" + how + " एक जैसे)");
+          mark(j, personCol, "dupname", "पीला: यही बच्चा row " + (i + 1) + " में भी (" + how + " एक जैसे)");
+          dupNames++;
+        } else seenKid[k] = i;
+      });
+    }
     nameCols.forEach(function (c) {
       var byName = {}, list = [];
       rows.forEach(function (r, i) {
         var v = String(r[c] || ""), n = norm(v);
         if (!n) return;
-        var why = "";
-        if (/\d/.test(v)) why = "नाम में अंक है";
-        else if (/[^\p{L}\p{M}\s.'\-]/u.test(v)) why = "नाम में अजीब चिह्न है";
-        else if (/\s{2,}/.test(v) || v !== v.trim()) why = "दोहरी / फ़ालतू space";
-        else if (/[a-z]/i.test(v) && /[ऀ-ॿ]/.test(v)) why = "हिंदी-English मिला हुआ";
-        else if (/(.)\1\1/i.test(v)) why = "एक अक्षर तीन बार";
-        else if (/[a-z]/.test(v) && v === v.toLowerCase() && hasUpper[c]) why = "छोटे अक्षरों में (बाक़ी नाम बड़े अक्षर से)";
+        var why = ""; // small / capital letters are NOT a mistake
+        if (/\d/.test(v)) why = "लाल: नाम में अंक (0-9) है";
+        else if (/[^\p{L}\p{M}\s.'\-]/u.test(v)) why = "लाल: नाम में अजीब चिह्न है";
+        else if (/\s{2,}/.test(v) || v !== v.trim()) why = "लाल: दो space एक साथ";
+        else if (/[a-z]/i.test(v) && /[\u0900-\u097f]/.test(v)) why = "लाल: हिंदी और English मिले हुए";
+        else if (/(.)\1\1/i.test(v)) why = "लाल: एक अक्षर तीन बार";
         if (why) { mark(i, c, "spell", why); spell++; }
-        if (byName[n] !== undefined) { mark(i, c, "dupname", "यही नाम row " + (byName[n] + 1) + " में भी"); mark(byName[n], c, "dupname", "यही नाम row " + (i + 1) + " में भी"); dupNames++; }
-        else { byName[n] = i; list.push({ n: n, i: i }); }
+        if (byName[n] === undefined) { byName[n] = i; list.push({ n: n, i: i }); }
       });
       // the same name typed two ways: same words, one long word (6+ letters) differs by
       // one letter ("Rahul Kumar" / "Rahul Kumr"). "Ram Kumar" / "Raj Kumar" are different people.
@@ -279,8 +295,8 @@
             if (fa >= 2 && fz >= 2) continue; // both spellings are used often: two real names (Kumar / Kumari)
             if (A.length === Z.length && !((fa >= 3 && fz === 1) || (fz >= 3 && fa === 1))) continue;
             var ia = g[a].i, iz = g[z].i;
-            mark(ia, c, "similar", "मिलता-जुलता नाम: " + rows[iz][c] + " (row " + (iz + 1) + ") — जाँचें");
-            mark(iz, c, "similar", "मिलता-जुलता नाम: " + rows[ia][c] + " (row " + (ia + 1) + ") — जाँचें");
+            mark(ia, c, "similar", "नारंगी: spelling जाँचें, row " + (iz + 1) + " में \"" + rows[iz][c] + "\" लिखा है");
+            mark(iz, c, "similar", "नारंगी: spelling जाँचें, row " + (ia + 1) + " में \"" + rows[ia][c] + "\" लिखा है");
             similar++;
           }
         });

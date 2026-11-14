@@ -21,7 +21,7 @@ type Data struct {
 	Rows  [][]string `json:"rows"`
 	// Partial says why not every page could be read ("page 7 did not load"); empty = complete.
 	Partial string `json:"partial"`
-	Check struct {
+	Check   struct {
 		Cells  [][]any        `json:"cells"` // [row, col, kind, note]
 		Counts map[string]int `json:"counts"`
 	} `json:"check"`
@@ -79,6 +79,18 @@ func (d *Data) RowNotes(iss map[[2]int]Issue, r int) string {
 	return strings.Join(notes, "; ")
 }
 
+// rowKind is the most important mark in a row (red, then orange, then yellow), for the Check cell.
+func (d *Data) rowKind(iss map[[2]int]Issue, r int) string {
+	best := ""
+	rank := map[string]int{"": 0, "dup": 1, "dupname": 1, "similar": 2, "spell": 3}
+	for c := range d.Head {
+		if k := iss[[2]int{r, c}].Kind; rank[k] > rank[best] {
+			best = k
+		}
+	}
+	return best
+}
+
 // style numbers in styles.xml: 0 normal, 1 header, 2 yellow, 3 red, 4 orange
 func styleOf(kind string) int {
 	switch kind {
@@ -117,46 +129,47 @@ func (d *Data) XLSX() ([]byte, error) {
 	var sheet strings.Builder
 	sheet.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>`)
 	ncol := len(d.Head)
-	for c := 0; c <= ncol; c++ {
-		w := 14
-		if c < ncol {
-			for _, r := range d.Rows {
-				if c < len(r) && len([]rune(r[c]))+2 > w {
-					w = len([]rune(r[c])) + 2
-				}
+	// column A = "जाँच / Check" (why a cell is coloured), then the page's own columns
+	fmt.Fprintf(&sheet, `<col min="1" max="1" width="48" customWidth="1"/>`)
+	for c := 0; c < ncol; c++ {
+		w := 10
+		if h := len([]rune(d.Head[c])) + 2; h > w && h < 24 {
+			w = h
+		}
+		for _, r := range d.Rows {
+			if c < len(r) && len([]rune(r[c]))+2 > w {
+				w = len([]rune(r[c])) + 2
 			}
-		} else {
+		}
+		if w > 50 {
 			w = 50
 		}
-		if w > 60 {
-			w = 60
-		}
-		fmt.Fprintf(&sheet, `<col min="%d" max="%d" width="%d" customWidth="1"/>`, c+1, c+1, w)
+		fmt.Fprintf(&sheet, `<col min="%d" max="%d" width="%d" customWidth="1"/>`, c+2, c+2, w)
 	}
 	sheet.WriteString(`</cols><sheetData>`)
-	cell := func(row, col, style int, v string) {
-		if row > 1 && col < ncol && number(v) {
+	cell := func(row, col, style int, v string, data bool) {
+		if row > 1 && data && number(v) {
 			fmt.Fprintf(&sheet, `<c r="%s%d" s="%d"><v>%s</v></c>`, colName(col), row, style, v)
 			return
 		}
 		fmt.Fprintf(&sheet, `<c r="%s%d" t="inlineStr" s="%d"><is><t xml:space="preserve">%s</t></is></c>`, colName(col), row, style, xmlText(v))
 	}
 	sheet.WriteString(`<row r="1">`)
+	cell(1, 0, 1, "जाँच / Check", false)
 	for c, h := range d.Head {
-		cell(1, c, 1, h)
+		cell(1, c+1, 1, h, false)
 	}
-	cell(1, ncol, 1, "जाँच / Check")
 	sheet.WriteString(`</row>`)
 	for r, row := range d.Rows {
 		fmt.Fprintf(&sheet, `<row r="%d">`, r+2)
+		cell(r+2, 0, styleOf(d.rowKind(iss, r)), d.RowNotes(iss, r), false)
 		for c := 0; c < ncol; c++ {
 			v := ""
 			if c < len(row) {
 				v = row[c]
 			}
-			cell(r+2, c, styleOf(iss[[2]int{r, c}].Kind), v)
+			cell(r+2, c+1, styleOf(iss[[2]int{r, c}].Kind), v, true)
 		}
-		cell(r+2, ncol, 0, d.RowNotes(iss, r))
 		sheet.WriteString(`</row>`)
 	}
 	fmt.Fprintf(&sheet, `</sheetData><autoFilter ref="A1:%s%d"/></worksheet>`, colName(ncol), len(d.Rows)+1)
@@ -177,13 +190,13 @@ func (d *Data) XLSX() ([]byte, error) {
 	sum.WriteString(`</sheetData></worksheet>`)
 
 	files := map[string]string{
-		"[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`,
-		"_rels/.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
-		"xl/workbook.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Data" sheetId="1" r:id="rId1"/><sheet name="Summary" sheetId="2" r:id="rId2"/></sheets><definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">Data!$A$1:$` + colName(ncol) + `$` + fmt.Sprint(len(d.Rows)+1) + `</definedName></definedNames></workbook>`,
+		"[Content_Types].xml":        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`,
+		"_rels/.rels":                `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+		"xl/workbook.xml":            `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Data" sheetId="1" r:id="rId1"/><sheet name="Summary" sheetId="2" r:id="rId2"/></sheets><definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">Data!$A$1:$` + colName(ncol) + `$` + fmt.Sprint(len(d.Rows)+1) + `</definedName></definedNames></workbook>`,
 		"xl/_rels/workbook.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
-		"xl/styles.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="6"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDDE6F5"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF2A8"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF8B4B4"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFD3A1"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="5" borderId="1" xfId="0" applyFill="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`,
-		"xl/worksheets/sheet1.xml": sheet.String(),
-		"xl/worksheets/sheet2.xml": sum.String(),
+		"xl/styles.xml":              `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="6"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDDE6F5"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF2A8"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF8B4B4"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFD3A1"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="5" borderId="1" xfId="0" applyFill="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`,
+		"xl/worksheets/sheet1.xml":   sheet.String(),
+		"xl/worksheets/sheet2.xml":   sum.String(),
 	}
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -245,16 +258,68 @@ func number(v string) bool {
 	return true
 }
 
+// PrintColumns are the columns worth printing: a column with the same value in
+// every row (status texts like "verified", empty action columns) is printed once
+// above the table instead of on every row.
+func (d *Data) PrintColumns() (keep []int, same [][2]string) {
+	for c, h := range d.Head {
+		first, constant := "", true
+		for i, r := range d.Rows {
+			v := ""
+			if c < len(r) {
+				v = strings.TrimSpace(r[c])
+			}
+			if i == 0 {
+				first = v
+			} else if v != first {
+				constant = false
+				break
+			}
+		}
+		if constant && len(d.Rows) > 1 {
+			if first != "" && first != "-" {
+				same = append(same, [2]string{h, first})
+			}
+			continue
+		}
+		keep = append(keep, c)
+	}
+	return keep, same
+}
+
+// colWeight is a column's share of the page width (its longest value, within limits).
+func (d *Data) colWeight(c int) float64 {
+	w := 7
+	for _, word := range strings.Fields(d.Head[c]) {
+		if n := len([]rune(word)); n > w {
+			w = n
+		}
+	}
+	for _, r := range d.Rows {
+		if c < len(r) {
+			if n := len([]rune(r[c])); n > w {
+				w = n
+			}
+		}
+	}
+	if w > 28 {
+		w = 28
+	}
+	return float64(w)
+}
+
 // ReportHTML is a printable page (landscape A4) for "Save as PDF".
 func (d *Data) ReportHTML() string {
 	iss := d.Issues()
+	keep, same := d.PrintColumns()
 	var b strings.Builder
 	b.WriteString(`<!doctype html><html><head><meta charset="utf-8"><title>` + html.EscapeString(d.Title) + `</title><style>
-@page{size:A4 landscape;margin:10mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font:11px "Segoe UI","Nirmala UI","Noto Sans Devanagari",sans-serif;color:#111;margin:0}
-h1{font-size:16px;margin:0 0 4px}.s{color:#444;margin:0 0 8px}table{border-collapse:collapse;width:100%}
-th,td{border:1px solid #999;padding:3px 5px;text-align:left;vertical-align:top}th{background:#dde6f5}
-tr{page-break-inside:avoid}thead{display:table-header-group}
-.dup,.dupname{background:#fff2a8}.spell{background:#f8b4b4}.similar{background:#ffd3a1}.k{font-size:10px;color:#333}
+@page{size:A4 landscape;margin:8mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font:9px "Segoe UI","Nirmala UI","Noto Sans Devanagari",sans-serif;color:#111;margin:0}
+h1{font-size:15px;margin:0 0 3px}.s{color:#333;margin:0 0 4px}table{border-collapse:collapse;width:100%;table-layout:fixed}
+th,td{border:1px solid #999;padding:2px 3px;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}
+th{background:#dde6f5;font-size:8.5px}tr{page-break-inside:avoid}thead{display:table-header-group}
+.dup,.dupname{background:#fff2a8}.spell{background:#f8b4b4}.similar{background:#ffd3a1}.k{font-size:8.5px}
 .legend span{display:inline-block;padding:1px 6px;margin-right:6px;border:1px solid #999}</style></head><body>`)
 	b.WriteString(`<h1>` + html.EscapeString(d.Title) + `</h1><p class="s">`)
 	for i, l := range d.SummaryLines()[1:] {
@@ -266,25 +331,59 @@ tr{page-break-inside:avoid}thead{display:table-header-group}
 	if d.Partial != "" {
 		b.WriteString(`</p><p style="color:#b91c1c;font-weight:bold">` + html.EscapeString(completeText(d.Partial)))
 	}
-	b.WriteString(`</p><p class="legend"><span class="dup">पीला: दोहराया</span><span class="similar">नारंगी: मिलता-जुलता नाम</span><span class="spell">लाल: संभावित ग़लती</span></p><table><thead><tr>`)
-	for _, h := range d.Head {
-		b.WriteString("<th>" + html.EscapeString(h) + "</th>")
+	b.WriteString(`</p><p class="legend"><span class="dup">पीला: दोहराया</span><span class="similar">नारंगी: spelling जाँचें</span><span class="spell">लाल: लिखावट में ग़लती</span> &nbsp;पहले कॉलम "जाँच" में हर रंग का कारण लिखा है।</p>`)
+	if len(same) > 0 {
+		b.WriteString(`<p class="s">सभी पंक्तियों में एक जैसा / same in every row: `)
+		for i, x := range same {
+			if i > 0 {
+				b.WriteString(" · ")
+			}
+			b.WriteString("<b>" + html.EscapeString(x[0]) + "</b>: " + html.EscapeString(x[1]))
+		}
+		b.WriteString(`</p>`)
 	}
-	b.WriteString("<th>जाँच / Check</th></tr></thead><tbody>")
+	checkW := 8.0 // the Check column: wider only when there are notes
+	for r := range d.Rows {
+		if n := float64(len([]rune(d.RowNotes(iss, r)))) / 3; n > checkW {
+			checkW = n
+		}
+	}
+	if checkW > 22 {
+		checkW = 22
+	}
+	total := checkW
+	for _, c := range keep {
+		total += d.colWeight(c)
+	}
+	b.WriteString(fmt.Sprintf(`<table><colgroup><col style="width:%.1f%%">`, checkW/total*100))
+	for _, c := range keep {
+		b.WriteString(fmt.Sprintf(`<col style="width:%.1f%%">`, d.colWeight(c)/total*100))
+	}
+	b.WriteString(`</colgroup><thead><tr><th>जाँच / Check</th>`)
+	for _, c := range keep {
+		b.WriteString("<th>" + html.EscapeString(d.Head[c]) + "</th>")
+	}
+	b.WriteString("</tr></thead><tbody>")
 	for r, row := range d.Rows {
-		b.WriteString("<tr>")
-		for c := range d.Head {
+		cls := ""
+		if k := d.rowKind(iss, r); k != "" {
+			cls = ` class="k ` + k + `"`
+		} else {
+			cls = ` class="k"`
+		}
+		b.WriteString("<tr><td" + cls + ">" + html.EscapeString(d.RowNotes(iss, r)) + "</td>")
+		for _, c := range keep {
 			v := ""
 			if c < len(row) {
 				v = row[c]
 			}
-			cls := ""
+			cc := ""
 			if is, ok := iss[[2]int{r, c}]; ok {
-				cls = ` class="` + is.Kind + `"`
+				cc = ` class="` + is.Kind + `"`
 			}
-			b.WriteString("<td" + cls + ">" + html.EscapeString(v) + "</td>")
+			b.WriteString("<td" + cc + ">" + html.EscapeString(v) + "</td>")
 		}
-		b.WriteString(`<td class="k">` + html.EscapeString(d.RowNotes(iss, r)) + "</td></tr>")
+		b.WriteString("</tr>")
 	}
 	b.WriteString("</tbody></table></body></html>")
 	return b.String()

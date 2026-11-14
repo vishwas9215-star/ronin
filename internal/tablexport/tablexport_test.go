@@ -95,3 +95,19 @@ func TestNumbersAndPartial(t *testing.T) {
 		t.Fatal("partial not shown")
 	}
 }
+
+// RENDER=/path/data.json go test -run TestRender writes data.xlsx and data.html next to it (for checking by eye).
+func TestRender(t *testing.T) {
+	in := os.Getenv("RENDER")
+	if in == "" {
+		t.Skip()
+	}
+	b, _ := os.ReadFile(in)
+	d, err := Parse(string(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	x, _ := d.XLSX()
+	_ = os.WriteFile(strings.TrimSuffix(in, ".json")+".xlsx", x, 0o644)
+	_ = os.WriteFile(strings.TrimSuffix(in, ".json")+".html", []byte(d.ReportHTML()), 0o644)
+}
