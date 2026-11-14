@@ -1,7 +1,7 @@
 # Ronin Browser 3 — HANDOFF 8 (14 Nov 2026, 3.9.0 published; 3.10.0 built + CI green, waiting for approval)
 
 Owner: Vishwas (Hindi; both hands injured: fewest taps/typing). Not a coder: explain in Hindi, technical words in English.
-Current version: **3.8.0** published (Windows + Android). Rollback: 3.7.1 / 3.7.0 / 3.6.1 releases on GitHub; Windows
+Current version: **3.9.0** published (Windows + Android); 3.10.0 built, waiting. Rollback: 3.8.0 / 3.7.1 releases on GitHub; Windows
 RoninSetup-3.5.1 / 3.4.0 in Downloads\Ronin Browser 3 Handoff.
 Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + test history: FEATURES.md.
 
