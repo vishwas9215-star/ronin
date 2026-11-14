@@ -138,6 +138,7 @@ func (t *Tab) create() bool {
 		_ = s.PutAreDevToolsEnabled(!strict)
 		_ = s.PutIsStatusBarEnabled(true)
 		_ = s.PutIsBuiltInErrorPageEnabled(false) // Ronin shows its own page (no other browser's name)
+		requireSmartScreen(uintptr(unsafe.Pointer(s)))
 	}
 	_ = c.PutIsPasswordAutosaveEnabled(false) // passwords belong in Bitwarden
 	_ = c.PutIsGeneralAutofillEnabled(t.w.container != containers.Banking && t.w.container != containers.Kids)
@@ -424,6 +425,13 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 			return
 		}
 	}
+	if host, bad := dangerous(uri); bad {
+		call(args, nsSetCancel, 1)
+		runOnUI(func() {
+			t.w.overlay("blocked", map[string]any{"tab": t.id, "host": host, "mode": "DANGER"})
+		})
+		return
+	}
 	if stop, end := focusStops(t.w.container, uri); stop {
 		call(args, nsSetCancel, 1)
 		runOnUI(func() { t.showFocusPage(uri, end) })
@@ -652,6 +660,22 @@ const wv3TrySuspend = 68
 var iidICoreWebView2_8 = windows.GUID{Data1: 0xe9632730, Data2: 0x6e1e, Data3: 0x43ab, Data4: [8]byte{0xb7, 0xb8, 0x7b, 0x2c, 0x9e, 0x62, 0xe0, 0x94}}
 
 const wv8GetIsDocumentPlayingAudio = 87
+
+// ICoreWebView2Settings8: Microsoft SmartScreen (known phishing and malware
+// sites and downloads; Microsoft keeps its lists up to date by itself).
+var iidICoreWebView2Settings8 = windows.GUID{Data1: 0x9e6b0e8f, Data2: 0x86ad, Data3: 0x4e81, Data4: [8]byte{0x81, 0x47, 0xa9, 0xb5, 0xed, 0xb6, 0x86, 0x50}}
+
+const settings8PutIsReputationCheckingRequired = 36
+
+// requireSmartScreen keeps SmartScreen on for every Ronin page.
+func requireSmartScreen(settings uintptr) {
+	s8 := queryInterface(settings, &iidICoreWebView2Settings8)
+	if s8 == 0 {
+		return
+	}
+	defer release(s8)
+	call(s8, settings8PutIsReputationCheckingRequired, 1)
+}
 
 // playingAudio reports whether the page is playing sound right now (a song,
 // a video, a call). Unknown (old engine) counts as playing, to be safe.

@@ -19,10 +19,36 @@ class RoninApp : Application() {
         store = Store(this)
         rules = Rules(assets.open("ronin/rules.json").bufferedReader().readText())
         blocker = AdBlocker(rules)
-        thread(name = "ronin-lists") { loadAndRefreshLists() }
+        thread(name = "ronin-lists") { loadAndRefreshThreats(); loadAndRefreshLists() }
     }
 
     private val listFile get() = File(filesDir, "adblock-domains.txt.gz")
+    private val threatFile get() = File(filesDir, "threat-domains.txt.gz")
+
+    /** The phishing / malware list: saved copy at once, a fresh one every 12 hours. */
+    fun loadAndRefreshThreats(force: Boolean = false) {
+        try {
+            if (threatFile.exists() && blocker.threatSize == 0) {
+                val n = GZIPInputStream(threatFile.inputStream()).bufferedReader().use { blocker.loadThreats(it) }
+                Log.i(TAG, "danger list loaded: $n")
+            }
+            if (!force && System.currentTimeMillis() - store.threatsUpdated < 12 * 3600 * 1000L && threatFile.exists()) return
+            val tmp = File(filesDir, "threat-domains.tmp")
+            val c = URL(THREATS_URL).openConnection() as HttpURLConnection
+            c.connectTimeout = 20000; c.readTimeout = 60000
+            c.instanceFollowRedirects = true
+            if (c.responseCode != 200) return
+            c.inputStream.use { inp -> tmp.outputStream().use { inp.copyTo(it) } }
+            val n = GZIPInputStream(tmp.inputStream()).bufferedReader().use { blocker.loadThreats(it) }
+            if (n > 1000) {
+                tmp.renameTo(threatFile)
+                store.threatsUpdated = System.currentTimeMillis()
+            } else tmp.delete()
+            Log.i(TAG, "danger list updated: $n")
+        } catch (e: Exception) {
+            Log.w(TAG, "danger list: $e")
+        }
+    }
 
     /** The big ad list: last saved copy at once, a fresh one from the internet once a day. */
     private fun loadAndRefreshLists() {
@@ -53,6 +79,7 @@ class RoninApp : Application() {
         const val TAG = "Ronin"
         const val REPO = "https://github.com/vishwas9215-star/ronin"
         const val LISTS_URL = "$REPO/releases/download/lists/adblock-domains.txt.gz"
+        const val THREATS_URL = "$REPO/releases/download/lists/threat-domains.txt.gz"
         const val UPDATE_URL = "$REPO/releases/latest/download/android.json"
         lateinit var instance: RoninApp
     }

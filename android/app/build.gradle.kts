@@ -15,12 +15,12 @@ val keyPass = System.getenv("RONIN_KEYSTORE_PASS")
 
 android {
     namespace = "com.ronin.browser"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.ronin.browser"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = roninCode
         versionName = roninVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

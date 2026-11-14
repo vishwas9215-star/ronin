@@ -68,6 +68,8 @@ func writeAssets(dir string) error {
 		"thirdParty": third,
 		"adPaths":    paths,
 		"focusSites": focus.DefaultSites,
+		"lookalike":  safemoney.LookalikeData(),
+		"testThreat": adblock.TestThreat,
 	}
 	b, err := json.MarshalIndent(rules, "", " ")
 	if err != nil {
@@ -114,7 +116,14 @@ func writeLists(dir string) error {
 			continue
 		}
 		fmt.Println(l.Name, len(block))
-		e.LoadList(bytes.NewReader(body))
+		if l.Threat {
+			e.LoadThreat(bytes.NewReader(body))
+		} else {
+			e.LoadList(bytes.NewReader(body))
+		}
+	}
+	if err := writeThreats(dir, e.Threats()); err != nil {
+		return err
 	}
 	block, allow := e.Snapshot()
 	if len(block) < 50000 {
@@ -134,4 +143,23 @@ func writeLists(dir string) error {
 	}
 	fmt.Printf("lists: %d blocked, %d allowed, %d bytes\n", len(block), len(allow), buf.Len())
 	return os.WriteFile(filepath.Join(dir, "adblock-domains.txt.gz"), buf.Bytes(), 0o644)
+}
+
+// writeThreats writes the phishing / malware sites (whole site is stopped
+// with a red page on Android).
+func writeThreats(dir string, threats []string) error {
+	if len(threats) < 1000 {
+		return fmt.Errorf("only %d dangerous sites - lists look broken, not publishing", len(threats))
+	}
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	fmt.Fprintf(zw, "# Ronin danger list (phishing / malware) %s\n", time.Now().UTC().Format(time.RFC3339))
+	for _, d := range sorted(threats) {
+		fmt.Fprintln(zw, d)
+	}
+	if err := zw.Close(); err != nil {
+		return err
+	}
+	fmt.Printf("threats: %d sites, %d bytes\n", len(threats), buf.Len())
+	return os.WriteFile(filepath.Join(dir, "threat-domains.txt.gz"), buf.Bytes(), 0o644)
 }

@@ -1,10 +1,10 @@
-# Once a day: download the public ad lists, turn them into one compact domain
+# Twice a day: download the public ad lists, turn them into one compact domain
 # file (same parsing as Ronin for Windows) and publish it for Ronin for Android.
 name: ad-lists
 
 on:
   schedule:
-    - cron: "17 21 * * *"   # 02:47 India time
+    - cron: "17 9,21 * * *"   # 14:47 and 02:47 India time (danger list: twice a day)
   workflow_dispatch:
 
 permissions:
@@ -25,4 +25,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view lists >/dev/null 2>&1 || gh release create lists --title "Ad lists (daily)" --notes "Updated every day for Ronin for Android." --prerelease
-          gh release upload lists out/adblock-domains.txt.gz --clobber
+          gh release upload lists out/adblock-domains.txt.gz out/threat-domains.txt.gz --clobber

@@ -27,6 +27,7 @@ import android.view.inputmethod.InputMethodManager
 import android.webkit.CookieManager
 import android.webkit.DownloadListener
 import android.webkit.PermissionRequest
+import android.webkit.SafeBrowsingResponse
 import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -46,6 +47,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
@@ -88,6 +90,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var address: EditText
     private lateinit var tabsButton: Button
+    private lateinit var tabStrip: LinearLayout
     private lateinit var progress: ProgressBar
     private lateinit var holder: FrameLayout
     private lateinit var readBar: LinearLayout
@@ -223,6 +226,18 @@ class MainActivity : AppCompatActivity() {
         }
         val menu = iconButton(android.R.drawable.ic_menu_more, "Menu") { showMenu(it) }
         bar.addView(address); bar.addView(mic); bar.addView(tabsButton); bar.addView(menu)
+        // tabs side by side (like a computer browser), with + for a new tab
+        tabStrip = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), dp(4), dp(4), 0)
+        }
+        val stripScroll = android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            setBackgroundColor(Color.parseColor("#0E1016"))
+            addView(tabStrip)
+        }
+        root.addView(stripScroll)
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(3))
@@ -266,6 +281,10 @@ class MainActivity : AppCompatActivity() {
             setSupportMultipleWindows(false)
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             javaScriptCanOpenWindowsAutomatically = false
+        }
+        // Google Safe Browsing: Google keeps its phishing / malware list up to date by itself
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.SAFE_BROWSING_ENABLE)) {
+            WebSettingsCompat.setSafeBrowsingEnabled(w.settings, true)
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
             WebSettingsCompat.setAlgorithmicDarkeningAllowed(w.settings, app.store.night)
@@ -315,7 +334,64 @@ class MainActivity : AppCompatActivity() {
         updateTabsButton()
     }
 
-    private fun updateTabsButton() { tabsButton.text = tabs.size.toString() }
+    private fun updateTabsButton() {
+        tabsButton.text = tabs.size.toString()
+        if (!::tabStrip.isInitialized) return
+        tabStrip.removeAllViews()
+        val wide = resources.configuration.smallestScreenWidthDp >= 600
+        for (t in tabs) {
+            val on = t == current
+            val chip = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), 0, dp(2), 0)
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadii = floatArrayOf(dp(10).toFloat(), dp(10).toFloat(), dp(10).toFloat(), dp(10).toFloat(), 0f, 0f, 0f, 0f)
+                    setColor(Color.parseColor(if (on) "#14171F" else "#1B1F29"))
+                }
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(42)).apply { marginEnd = dp(4) }
+                contentDescription = "Tab: " + t.title.ifBlank { "New tab" }
+                tag = "tab"
+                setOnClickListener { select(t) }
+            }
+            val name = TextView(this).apply {
+                text = t.title.ifBlank { if (t.url == HOME || t.url.isEmpty()) "New tab" else display(t.url) }
+                setTextColor(Color.parseColor(if (on) "#FFFFFF" else "#9AA3B2"))
+                textSize = 14f
+                setSingleLine(true)
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                maxWidth = dp(if (wide) 220 else 140)
+                if (on) setTypeface(typeface, Typeface.BOLD)
+            }
+            val x = Button(this).apply {
+                text = "✕"
+                contentDescription = "Close tab"
+                setTextColor(Color.parseColor("#9AA3B2"))
+                setBackgroundColor(Color.TRANSPARENT)
+                minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0
+                layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
+                setOnClickListener { closeTab(t) }
+            }
+            chip.addView(name); chip.addView(x)
+            tabStrip.addView(chip)
+        }
+        val plus = Button(this).apply {
+            text = "+"
+            textSize = 22f
+            contentDescription = "New tab"
+            tag = "newtab"
+            setTextColor(Color.parseColor("#E8EAF0"))
+            setBackgroundColor(Color.TRANSPARENT)
+            minWidth = 0; minimumWidth = 0
+            layoutParams = LinearLayout.LayoutParams(dp(52), dp(42))
+            setOnClickListener { newTab(HOME); address.requestFocus() }
+        }
+        tabStrip.addView(plus)
+        val i = tabs.indexOf(current)
+        if (i >= 0) tabStrip.post { (tabStrip.parent as? android.widget.HorizontalScrollView)?.smoothScrollTo(tabStrip.getChildAt(i)?.left ?: 0, 0) }
+    }
+
+    fun tabStripForTest(): LinearLayout = tabStrip
 
     private fun showTabs() {
         val names = tabs.map { (if (it == current) "▶ " else "") + it.title.ifBlank { display(it.url) } }.toMutableList()
@@ -376,6 +452,12 @@ class MainActivity : AppCompatActivity() {
         override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? {
             val url = req.url.toString()
             val t = tab()
+            if (req.isForMainFrame) {
+                stopPage(url)?.let { html ->
+                    return WebResourceResponse("text/html", "utf-8", 200, "OK", mapOf("Cache-Control" to "no-store"),
+                        ByteArrayInputStream(html.toByteArray(Charsets.UTF_8)))
+                }
+            }
             val kind = app.rules.classify(t.topHost.let { if (it.isEmpty()) url else "https://$it/" })
             if (kind == Kind.BANK || kind == Kind.PAYMENT) return null // never break a bank or payment page
             if (app.blocker.blockedFrom(url, t.topHost)) {
@@ -391,9 +473,18 @@ class MainActivity : AppCompatActivity() {
                 view.loadUrl("https" + url.substring(4)) // secure version first (HTTPS-only)
                 return true
             }
+            if (url == BACK_TO_SAFETY) { leaveDangerPage(tab()); return true }
             if (scheme != "http" && scheme != "https") return openOutside(url, view)
             if (req.isForMainFrame && openSafeMoneyIfBank(url)) return true
             return false
+        }
+
+        @RequiresApi(27)
+        override fun onSafeBrowsingHit(view: WebView, request: WebResourceRequest, threatType: Int, callback: SafeBrowsingResponse) {
+            // Google says the site is dangerous: never open it, show Ronin's own red page
+            callback.backToSafety(false)
+            val host = request.url.host ?: ""
+            view.post { view.loadDataWithBaseURL("https://ronin.home/danger", dangerHtml(host, null), "text/html", "utf-8", null) }
         }
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
@@ -409,6 +500,7 @@ class MainActivity : AppCompatActivity() {
         override fun onPageFinished(view: WebView, url: String) {
             val t = tab()
             t.title = view.title ?: ""
+            updateTabsButton()
             if (url.startsWith("http") && !url.startsWith("https://ronin.home")) app.store.addHistory(t.title, url)
         }
 
@@ -482,7 +574,73 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ---- dangerous sites ------------------------------------------------------------------
+
+    /** Ronin's red page for a known phishing / malware site or a fake bank site, else null. */
+    fun stopPage(url: String): String? {
+        if (!url.startsWith("http")) return null
+        val store = app.store
+        if (app.rules.classify(url, store.userBanks) != Kind.GENERAL) return null
+        val host = Rules.hostOf(url)
+        if (host.isEmpty() || Rules.matchAny(host, store.trustedSites)) return null
+        if (app.blocker.dangerous(host)) return dangerHtml(host, null)
+        val brand = app.rules.fakeBank(url, store.trustedSites, store.userBanks) ?: return null
+        return dangerHtml(host, brand)
+    }
+
+    private fun dangerHtml(host: String, brand: String?): String {
+        val h = android.text.TextUtils.htmlEncode(host)
+        val (title, why) = if (brand == null)
+            "खतरनाक साइट रोकी गई" to "यह साइट धोखाधड़ी (phishing) या virus फैलाने वाली साइटों की सूची में है। Ronin ने इसे नहीं खोला।"
+        else
+            "नकली bank साइट" to "यह पता ${android.text.TextUtils.htmlEncode(brand.uppercase())} जैसा दिखता है, पर असली bank नहीं है। ऐसी साइटें password, OTP और card नंबर चुराती हैं।"
+        return """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>$title</title><style>body{margin:0;background:#1a0f12;color:#f3e9ea;font:17px sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center}
+main{max-width:560px;padding:28px}.i{width:56px;height:56px;border-radius:50%;background:#d93025;color:#fff;font:bold 34px sans-serif;display:flex;align-items:center;justify-content:center}
+h1{font-size:24px;margin:18px 0 10px}code{display:block;background:#2a1a1e;padding:10px;border-radius:8px;word-break:break-all;margin:12px 0}
+p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-top:18px;background:#3b82f6;color:#fff;text-decoration:none;padding:14px 26px;border-radius:10px;font-weight:bold}</style></head>
+<body><main><div class="i">!</div><h1>$title</h1><code>$h</code><p>$why</p>
+<p class="m">Dangerous site blocked by Ronin. The list updates by itself twice a day. If you are sure this site is safe: Menu → Safe sites.</p>
+<a id="back" href="$BACK_TO_SAFETY">वापस जाएँ — Go back</a></main></body></html>"""
+    }
+
+    private fun leaveDangerPage(t: Tab) {
+        if (t.web.canGoBack()) t.web.goBack() else load(t, HOME)
+    }
+
+    private fun showSafeSites() {
+        val list = app.store.trustedSites.sorted()
+        val input = EditText(this).apply { hint = "example.com"; inputType = InputType.TYPE_TEXT_VARIATION_URI; setSingleLine() }
+        val b = AlertDialog.Builder(this).setTitle("Safe sites (Ronin stopped them by mistake)")
+        if (list.isNotEmpty()) b.setItems(list.map { "✕  $it" }.toTypedArray()) { _, i ->
+            app.store.trustedSites = app.store.trustedSites - list[i]
+            Toast.makeText(this, "Removed ${list[i]}", Toast.LENGTH_SHORT).show()
+        } else b.setMessage("None. Add a site only if you are completely sure it is safe.")
+        b.setView(input).setPositiveButton("Add") { _, _ ->
+            val txt = input.text.toString().trim()
+            val d = Rules.hostOf(if (txt.contains("://")) txt else "https://$txt").removePrefix("www.")
+            if (d.contains('.')) app.store.trustedSites = app.store.trustedSites + d
+        }.setNegativeButton("Close", null).show()
+    }
+
+    // ---- downloads ----------------------------------------------------------------------
+
     private val downloads = DownloadListener { url, ua, cd, mime, _ ->
+        val name = URLUtil.guessFileName(url, cd, mime)
+        val host = Rules.hostOf(url)
+        val isApp = name.lowercase().endsWith(".apk") || mime == "application/vnd.android.package-archive"
+        if (isApp && !Rules.matchAny(host, trustedAppHosts) && !Rules.matchAny(host, app.store.trustedSites)) {
+            AlertDialog.Builder(this).setTitle("App file (.apk) from an unknown site")
+                .setMessage("$name\n$host\n\nअनजान साइट से app install करना ख़तरनाक है — इनमें अक्सर virus या पैसे चुराने वाले apps होते हैं। Apps सिर्फ़ Play Store से लें।")
+                .setPositiveButton("रद्द करें — Cancel", null)
+                .setNeutralButton("फिर भी download करें") { _, _ -> startDownload(url, ua, cd, mime) }
+                .show()
+            return@DownloadListener
+        }
+        startDownload(url, ua, cd, mime)
+    }
+
+    private fun startDownload(url: String, ua: String, cd: String?, mime: String?) {
         try {
             val name = URLUtil.guessFileName(url, cd, mime)
             val req = android.app.DownloadManager.Request(Uri.parse(url))
@@ -554,6 +712,7 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         for (t in tabs) t.web.onResume()
+        kotlin.concurrent.thread(name = "ronin-danger") { app.loadAndRefreshThreats() }
     }
 
     override fun onDestroy() {
@@ -589,11 +748,12 @@ class MainActivity : AppCompatActivity() {
             val h = t!!.topHost.removePrefix("www.")
             if (h.isNotEmpty()) { app.store.userBanks = app.store.userBanks + h; load(t, t.url) }
         }
+        items["🛡 Safe sites (stopped by mistake)"] = { showSafeSites() }
         items["Ronin Safe Money (banking)"] = { startActivity(Intent(this, SafeMoneyActivity::class.java)) }
         items["Check for updates"] = { Updater.check(this, quiet = false) }
         items["About Ronin"] = {
             AlertDialog.Builder(this).setTitle("Ronin Browser ${BuildConfigCompat.versionName(this)}")
-                .setMessage("Ad-block lists: ${app.blocker.listSize} sites.\nSongs and videos keep playing in the background; control them from the notification, the lock screen or your car.")
+                .setMessage("Ad-block lists: ${app.blocker.listSize} sites.\nDanger list (phishing / malware): ${app.blocker.threatSize} sites, plus Google Safe Browsing.\nSongs and videos keep playing in the background; control them from the notification, the lock screen or your car.")
                 .setPositiveButton("OK", null).show()
         }
         items.keys.forEachIndexed { i, k -> m.menu.add(0, i, i, k) }
@@ -674,5 +834,8 @@ a{display:block;padding:14px;border-radius:12px;background:$card;color:$fg;text-
 
     companion object {
         const val HOME = "ronin://home"
+        const val BACK_TO_SAFETY = "https://ronin.home/back"
+        /** App files from these sites need no warning (Ronin's own updates come from GitHub). */
+        val trustedAppHosts = listOf("github.com", "githubusercontent.com", "f-droid.org")
     }
 }

@@ -17,6 +17,8 @@ class Rules(json: String) {
     val thirdParty: List<String>
     val adPaths: List<Pair<String, String>>
     val focusSites: List<String>
+    val lookalike: Lookalike
+    val testThreat: String
 
     init {
         val o = JSONObject(json)
@@ -28,6 +30,10 @@ class Rules(json: String) {
         val p = o.optJSONArray("adPaths") ?: JSONArray()
         adPaths = (0 until p.length()).map { p.getJSONArray(it).let { a -> a.getString(0) to a.getString(1) } }
         focusSites = strings(o.optJSONArray("focusSites"))
+        val la = o.optJSONObject("lookalike") ?: JSONObject()
+        lookalike = Lookalike(strings(la.optJSONArray("brands")), strings(la.optJSONArray("shortBrands")).toSet(),
+            strings(la.optJSONArray("bankingWords")))
+        testThreat = o.optString("testThreat", "ronin-phishing-test.com")
     }
 
     fun list(name: String): List<String> = sites[name] ?: emptyList()
@@ -56,6 +62,14 @@ class Rules(json: String) {
             matchAny(host, list("call")) -> Kind.CALL
             else -> Kind.GENERAL
         }
+    }
+
+    /** The bank a GENERAL site pretends to be ("sbi-kyc-update.xyz"), or null. Same as Windows. */
+    fun fakeBank(url: String, trusted: Collection<String> = emptyList(), userBanks: Collection<String> = emptyList()): String? {
+        if (classify(url, userBanks) != Kind.GENERAL) return null
+        val host = hostOf(url)
+        if (host.isEmpty() || matchAny(host, list("family")) || matchAny(host, trusted)) return null
+        return lookalike.brand(host)
     }
 
     companion object {

@@ -15,14 +15,19 @@ import (
 
 // Engine holds the block and allow sets. It is safe for concurrent use.
 type Engine struct {
-	mu    sync.RWMutex
-	block map[string]struct{}
-	allow map[string]struct{}
+	mu     sync.RWMutex
+	block  map[string]struct{}
+	allow  map[string]struct{}
+	threat map[string]struct{} // phishing and malware sites (whole site is stopped)
 }
+
+// TestThreat is a made-up address that is always on the danger list, so the
+// red page can be checked on any computer or phone.
+const TestThreat = "ronin-phishing-test.com"
 
 // New returns an engine with Ronin's built-in rules.
 func New() *Engine {
-	e := &Engine{block: map[string]struct{}{}, allow: map[string]struct{}{}}
+	e := &Engine{block: map[string]struct{}{}, allow: map[string]struct{}{}, threat: map[string]struct{}{TestThreat: {}}}
 	for _, d := range builtinBlock {
 		e.block[d] = struct{}{}
 	}
@@ -52,6 +57,49 @@ func (e *Engine) LoadList(r io.Reader) int {
 		e.allow[d] = struct{}{}
 	}
 	return len(block) + len(allow)
+}
+
+// LoadThreat reads a phishing / malware list: its sites are blocked like ads
+// and, when opened as a page, stopped with Ronin's red warning.
+func (e *Engine) LoadThreat(r io.Reader) int {
+	block, _ := ParseList(r)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for d := range block {
+		e.block[d] = struct{}{}
+		e.threat[d] = struct{}{}
+	}
+	return len(block)
+}
+
+// Dangerous reports whether host (or a parent domain of it) is a known
+// phishing or malware site.
+func (e *Engine) Dangerous(host string) bool {
+	h := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	for h != "" {
+		if _, ok := e.threat[h]; ok {
+			return true
+		}
+		i := strings.IndexByte(h, '.')
+		if i < 0 {
+			break
+		}
+		h = h[i+1:]
+	}
+	return false
+}
+
+// Threats returns the danger list (for Ronin for Android).
+func (e *Engine) Threats() []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	out := make([]string, 0, len(e.threat))
+	for d := range e.threat {
+		out = append(out, d)
+	}
+	return out
 }
 
 // ParseList parses a list without changing any engine (used to check a
@@ -219,14 +267,15 @@ func (e *Engine) BlockedFrom(rawURL, topHost string) bool {
 // for Android the build machine turns them into one compact domain file).
 var Lists = []struct {
 	Name, URL string
-	Min       int // a download with fewer rules is treated as broken and ignored
+	Min       int  // a download with fewer rules is treated as broken and ignored
+	Threat    bool // phishing / malware: the whole site is stopped with a red page
 }{
-	{"adguard-dns", "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt", 10000},
-	{"hagezi-pro", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt", 50000},
-	{"popup-ads", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/popupads.txt", 10000},
-	{"peter-lowe", "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext", 1000},
-	{"malware-filter", "https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-hosts.txt", 100},
-	{"phishing-filter", "https://malware-filter.gitlab.io/malware-filter/phishing-filter-hosts.txt", 100},
+	{"adguard-dns", "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt", 10000, false},
+	{"hagezi-pro", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt", 50000, false},
+	{"popup-ads", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/popupads.txt", 10000, false},
+	{"peter-lowe", "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext", 1000, false},
+	{"malware-filter", "https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-hosts.txt", 100, true},
+	{"phishing-filter", "https://malware-filter.gitlab.io/malware-filter/phishing-filter-hosts.txt", 100, true},
 }
 
 // Snapshot returns the engine's rules for other Ronin apps (Android).

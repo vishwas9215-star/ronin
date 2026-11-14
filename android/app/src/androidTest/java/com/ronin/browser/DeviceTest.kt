@@ -150,4 +150,52 @@ class DeviceTest {
             })
         }
     }
+
+    private fun pageText(sc: ActivityScenario<MainActivity>) = eval(sc, "document.body ? document.body.innerText : ''")
+
+    @Test
+    fun dangerousAndFakeBankSitesAreStoppedWithARedPage() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            sc.onActivity { a -> a.go("https://ronin-phishing-test.com/login") }
+            assertTrue("danger site not stopped", waitFor(15) { pageText(sc).contains("खतरनाक साइट रोकी गई") })
+            assertTrue(pageText(sc).contains("ronin-phishing-test.com"))
+            // the only button goes back to safety
+            eval(sc, "document.getElementById('back').click(); 1")
+            assertTrue("go back did not leave the red page", waitFor(10) { !pageText(sc).contains("खतरनाक") })
+
+            sc.onActivity { a -> a.go("https://sbi-kyc-update.xyz/") }
+            assertTrue("fake bank site not stopped", waitFor(15) { pageText(sc).contains("नकली bank साइट") })
+            assertTrue(pageText(sc).contains("SBI"))
+        }
+    }
+
+    @Test
+    fun tabsSitSideBySideWithANewTabButton() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            var newTabBtn: android.view.View? = null
+            sc.onActivity { a -> newTabBtn = a.tabStripForTest().findViewWithTag<android.view.View>("newtab") }
+            assertNotNull("no + (new tab) button on screen", newTabBtn)
+            sc.onActivity { newTabBtn!!.performClick() }
+            Thread.sleep(800)
+            sc.onActivity { a ->
+                val strip = a.tabStripForTest()
+                val chips = (0 until strip.childCount).map { strip.getChildAt(it) }.filter { it.tag == "tab" }
+                assertEquals("two tabs should show", 2, chips.size)
+                assertTrue("tabs are not visible", chips.all { it.isShown && it.width > 0 })
+                val l0 = IntArray(2); val l1 = IntArray(2)
+                chips[0].getLocationOnScreen(l0); chips[1].getLocationOnScreen(l1)
+                assertEquals("tabs are not on one row", l0[1], l1[1])
+                assertTrue("tabs overlap", l1[0] >= l0[0] + chips[0].width)
+                // tapping the first tab selects it
+                chips[0].performClick()
+            }
+            Thread.sleep(500)
+            sc.onActivity { a ->
+                val strip = a.tabStripForTest()
+                assertEquals(3, strip.childCount) // 2 tabs + "+"
+            }
+        }
+    }
 }

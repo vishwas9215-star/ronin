@@ -68,4 +68,13 @@ class Store(ctx: Context) {
     var userBanks: Set<String>
         get() = p.getStringSet("userBanks", emptySet()) ?: emptySet()
         set(v) = p.edit().putStringSet("userBanks", v).apply()
+
+    /** Safe sites the user added after Ronin stopped them by mistake. */
+    var trustedSites: Set<String>
+        get() = p.getStringSet("trustedSites", emptySet()) ?: emptySet()
+        set(v) = p.edit().putStringSet("trustedSites", v).apply()
+
+    var threatsUpdated: Long
+        get() = p.getLong("threatsUpdated", 0)
+        set(v) = p.edit().putLong("threatsUpdated", v).apply()
 }

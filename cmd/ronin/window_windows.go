@@ -625,6 +625,9 @@ func (w *Window) onUIMessage(raw string) {
 	case "removebank":
 		_ = store.Update(func(s *settingsT) { s.UserBanks = removeItem(s.UserBanks, m.Host) })
 		w.overlay("settings", settingsData())
+	case "trustadd": // Settings: a site wrongly stopped as dangerous
+		store.Trust(m.URL)
+		w.overlay("settings", settingsData())
 	case "untrust":
 		_ = store.Update(func(s *settingsT) { s.TrustedSites = removeItem(s.TrustedSites, m.Host) })
 		w.overlay("settings", settingsData())

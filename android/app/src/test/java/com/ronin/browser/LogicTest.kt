@@ -73,4 +73,37 @@ class LogicTest {
         assertTrue(ps.all { it.length <= 240 })
         assertEquals(long.trim().replace(Regex("\\s+"), " "), ps.joinToString(" ").replace(Regex("\\s+"), " "))
     }
+
+    // same cases as internal/safemoney/classify_test.go (Windows)
+    @Test fun fakeBankSitesLikeWindows() {
+        val bad = listOf("https://onlinesbi-kyc.xyz/", "https://sbi-kyc-update.com/", "https://sbionline.co/",
+            "https://yonosbi-rewards.in/", "https://hdfcbank-login.net/", "https://hdfcbamk.com/",
+            "https://1cici-netbanking.in/", "https://lcicibank.co.in/", "https://axisbank.secure-login.top/",
+            "https://pnb-kyc.online/", "https://kotak-reward-points.com/", "https://xn--onlinesb-0hh.com/",
+            "https://xn--hdfcbnk-6fg.in/", "https://canarabank-help.in/", "https://dhan-login.co/")
+        for (u in bad) assertTrue("$u should be a fake bank site", rules.fakeBank(u) != null)
+        val good = listOf("https://www.google.com/", "https://www.sbicard.com/", "https://www.hdfclife.com/",
+            "https://www.icicidirect.com/", "https://www.hdfcsky.com/", "https://www.axis-design.com/",
+            "https://kotakcollege.edu.in/", "https://www.barodatimes.com/", "https://sbi.example.com/",
+            "https://www.youtube.com/watch?v=hdfc", "https://en.wikipedia.org/wiki/State_Bank_of_India",
+            "https://www.dhanbank.com/", "https://www.onlinemarket.in/", "https://sbi.bank.in/",
+            "https://netbanking.hdfcbank.com/")
+        for (u in good) assertNull("$u wrongly flagged", rules.fakeBank(u))
+        assertNull(rules.fakeBank("https://sbi-pension-help.org/", trusted = setOf("sbi-pension-help.org")))
+        assertEquals("sbi", rules.fakeBank("https://sbi-pension-help.org/"))
+    }
+
+    @Test fun dangerListStopsWholeSites() {
+        val b = AdBlocker(rules)
+        assertTrue("test site", b.dangerous("ronin-phishing-test.com"))
+        assertTrue(b.dangerous("www.ronin-phishing-test.com"))
+        assertFalse(b.dangerous("www.google.com"))
+        val n = b.loadThreats("# danger\nphish.example\nmalware.example.org\n".reader().buffered())
+        assertEquals(2, n)
+        assertTrue(b.dangerous("login.phish.example"))
+        assertTrue(b.dangerous("MALWARE.example.org."))
+        assertFalse(b.dangerous("notphish.example"))
+        assertTrue("danger sites are blocked as page parts too", b.blocked("https://phish.example/x.js"))
+        assertTrue(b.dangerous("ronin-phishing-test.com")) // the test site stays after a list update
+    }
 }

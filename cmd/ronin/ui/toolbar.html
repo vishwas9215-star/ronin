@@ -560,6 +560,15 @@ const overlays = {
     return c;
   },
   blocked(o){
+    if (o.mode === "DANGER") {
+      const c = card(); c.dataset.danger = "1"; c.appendChild(dangerIcon());
+      c.appendChild(el("h1", "", "\u0916\u0924\u0930\u0928\u093e\u0915 \u0938\u093e\u0907\u091f \u0930\u094b\u0915\u0940 \u0917\u0908 \u2014 Dangerous site blocked"));
+      c.appendChild(el("p", "host", o.host || ""));
+      c.appendChild(el("p", "", "\u092f\u0939 \u0938\u093e\u0907\u091f \u0927\u094b\u0916\u093e\u0927\u0921\u093c\u0940 (phishing) \u092f\u093e virus \u092b\u0948\u0932\u093e\u0928\u0947 \u0935\u093e\u0932\u0940 \u0938\u093e\u0907\u091f\u094b\u0902 \u0915\u0940 \u0938\u0942\u091a\u0940 \u092e\u0947\u0902 \u0939\u0948\u0964 Ronin \u0928\u0947 \u0907\u0938\u0947 \u0928\u0939\u0940\u0902 \u0916\u094b\u0932\u093e\u0964"));
+      c.appendChild(el("p", "muted", "This site is on the phishing / malware list (updated twice a day). Passwords, OTPs and files from it are not safe. If you are sure it is safe: Settings \u2192 add it as a safe site."));
+      c.appendChild(row(btn("\u0935\u093e\u092a\u0938 \u091c\u093e\u090f\u0901 \u2014 Go back", "primary", closeOv)));
+      return c;
+    }
     const c = card(); c.appendChild(el("h1", "", o.mode === "KIDS" ? "Not for Kids mode" : "Not available here"));
     c.appendChild(el("p", "", o.reason || ((o.mode === "KIDS" ? "Kids mode" : "This window") + " cannot open " + o.host + ".")));
     if (o.host) c.appendChild(el("p", "host", o.host));
@@ -681,6 +690,9 @@ const overlays = {
     if (!(o.trusted||[]).length) ul2.appendChild(el("li", "muted", "None."));
     (o.trusted||[]).forEach(h => { const li = el("li", "", h); const x = el("button", "link", "Remove"); x.onclick = () => post({cmd:"untrust", host:h}); li.appendChild(x); ul2.appendChild(li); });
     c.appendChild(ul2);
+    const tsr = el("div", "row"); const ti = el("input"); ti.placeholder = "A safe site Ronin stopped by mistake, e.g. example.com"; ti.style.flex = "1";
+    tsr.append(ti, btn("Add", "", () => { if (ti.value.trim()) post({cmd:"trustadd", url: ti.value.trim()}); }));
+    c.appendChild(tsr);
     const lab = el("label", "chk"); const cb = el("input"); cb.type = "checkbox"; cb.checked = !!o.remember;
     cb.onchange = () => post({cmd:"remember", value: cb.checked});
     lab.append(cb, "Remember my bank login on this computer (less private)"); c.appendChild(lab);

@@ -12,6 +12,36 @@ class AdBlocker(rules: Rules) {
     private val thirdParty = rules.thirdParty
     private val paths = rules.adPaths
     @Volatile private var hashes = LongArray(0)
+    @Volatile private var threats = LongArray(0)
+    private val testThreat = rules.testThreat
+
+    val threatSize: Int get() = threats.size
+
+    /** Loads the phishing / malware list (one domain per line). */
+    fun loadThreats(reader: BufferedReader): Int {
+        val tmp = LongArrayBuilder()
+        reader.forEachLine { line ->
+            val d = line.trim().lowercase()
+            if (d.isNotEmpty() && !d.startsWith("#")) tmp.add(hash(d))
+        }
+        val arr = tmp.toArray()
+        arr.sort()
+        threats = arr
+        return arr.size
+    }
+
+    /** host (or a parent domain) is a known phishing or malware site. */
+    fun dangerous(host0: String): Boolean {
+        var h = Rules.normalize(host0)
+        val a = threats
+        while (h.isNotEmpty()) {
+            if (h == testThreat || (a.isNotEmpty() && a.binarySearch(hash(h)) >= 0)) return true
+            val i = h.indexOf('.')
+            if (i < 0) return false
+            h = h.substring(i + 1)
+        }
+        return false
+    }
 
     val listSize: Int get() = hashes.size
 
@@ -36,6 +66,8 @@ class AdBlocker(rules: Rules) {
 
     private fun listed(h: String): Boolean {
         if (builtinBlock.contains(h)) return true
+        val t = threats
+        if (t.isNotEmpty() && t.binarySearch(hash(h)) >= 0) return true
         val a = hashes
         return a.isNotEmpty() && a.binarySearch(hash(h)) >= 0
     }

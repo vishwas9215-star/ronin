@@ -2,6 +2,7 @@ package safemoney
 
 import (
 	"net/url"
+	"sort"
 	"strings"
 )
 
@@ -205,4 +206,14 @@ func Export() map[string][]string {
 		"bank": bankDomains, "family": familyDomains, "payment": paymentDomains,
 		"auth": authDomains, "trading": tradingDomains, "call": callDomains,
 	}
+}
+
+// LookalikeData gives the fake-bank-site rules to Ronin for Android.
+func LookalikeData() map[string]any {
+	short := make([]string, 0, len(shortBrands))
+	for b := range shortBrands {
+		short = append(short, b)
+	}
+	sort.Strings(short)
+	return map[string]any{"brands": brands, "shortBrands": short, "bankingWords": bankingWords}
 }

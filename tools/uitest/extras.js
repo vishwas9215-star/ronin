@@ -78,7 +78,18 @@ const out = process.argv[2] || '/tmp';
   await p.evaluate(() => ronin.overlay({ kind: 'bookmarks', list: [{ title: 'Wiki', url: 'https://hi.wikipedia.org/' }] }));
   await p.click('text=Export bookmarks file'); if (!last('bmexport')) bad('bookmark export');
   await p.click('text=Import from a file'); if (!last('bmimport')) bad('bookmark import');
+  // dangerous site: red page, only "Go back" (no way to open it from here)
+  await p.evaluate(() => ronin.overlay({ kind: 'blocked', tab: 1, host: 'ronin-phishing-test.com', mode: 'DANGER' }));
+  const dt = await p.textContent('#ov.show');
+  if (!dt.includes('ronin-phishing-test.com') || !dt.includes('खतरनाक') || !dt.includes('Go back')) bad('danger page text');
+  if ((await p.$$('#ov.show button')).length !== 1) bad('danger page must have only Go back');
+  await p.screenshot({ path: out + '/danger.png' });
+  await p.click('#ov.show button'); if (await p.isVisible('#ov.show')) bad('go back did not close');
+  // settings: add a safe site that was stopped by mistake
+  await p.evaluate(() => ronin.overlay({ kind: 'settings', banks: [], trusted: [], idle: 5, vpn: {}, ai: { keys: {} }, kids: {}, focus: { on: false, from: '18:00', to: '21:00', sites: '' } }));
+  await p.fill('input[placeholder^="A safe site"]', 'my-coop-site.in'); await p.click('#ov.show button:text-is("Add")');
+  if (!last('trustadd') || last('trustadd').url !== 'my-coop-site.in') bad('trustadd ' + JSON.stringify(last('trustadd')));
   if (errs.length) bad('JS errors ' + errs);
-  console.log(fail ? fail + ' FAILED' : 'history, page size, study time UI OK');
+  console.log(fail ? fail + ' FAILED' : 'history, page size, study time, danger page UI OK');
   await b.close(); process.exit(fail ? 1 : 0);
 })();

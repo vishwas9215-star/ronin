@@ -107,3 +107,33 @@ func TestBlockedFrom(t *testing.T) {
 		t.Error("normal page blocked")
 	}
 }
+
+func TestDangerList(t *testing.T) {
+	e := New()
+	if !e.Dangerous(TestThreat) || !e.Dangerous("www." + TestThreat) {
+		t.Fatal("test danger site not on the list")
+	}
+	n := e.LoadThreat(strings.NewReader("0.0.0.0 phish.example\n||malware.example^\n# comment\n"))
+	if n != 2 {
+		t.Fatalf("loaded %d", n)
+	}
+	for _, h := range []string{"phish.example", "login.phish.example", "MALWARE.example."} {
+		if !e.Dangerous(h) {
+			t.Errorf("%s should be dangerous", h)
+		}
+	}
+	for _, h := range []string{"example", "notphish.example", "google.com", ""} {
+		if e.Dangerous(h) {
+			t.Errorf("%s should not be dangerous", h)
+		}
+	}
+	// danger sites are blocked as page parts too
+	if !e.Blocked("https://phish.example/a.js") {
+		t.Error("danger site not blocked as a request")
+	}
+	// ad lists do not make a site "dangerous"
+	e.LoadList(strings.NewReader("||ads.example^\n"))
+	if e.Dangerous("ads.example") {
+		t.Error("an advert host is not a danger site")
+	}
+}

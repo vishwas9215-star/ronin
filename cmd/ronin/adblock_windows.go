@@ -33,15 +33,16 @@ var darkJS string
 var readerJS string
 
 type filterList struct {
-	name string
-	url  string
-	min  int // a download with fewer rules is treated as broken and ignored
+	name   string
+	url    string
+	min    int  // a download with fewer rules is treated as broken and ignored
+	threat bool // phishing / malware list: refreshed twice a day, red page
 }
 
 var filterLists = func() []filterList {
 	var out []filterList
 	for _, l := range adblock.Lists { // one list for Windows and Android
-		out = append(out, filterList{l.Name, l.URL, l.Min})
+		out = append(out, filterList{l.Name, l.URL, l.Min, l.Threat})
 	}
 	return out
 }()
@@ -56,7 +57,11 @@ func loadFilterLists() {
 	e := adblock.New()
 	for _, l := range filterLists {
 		if b, err := os.ReadFile(listPath(l.name)); err == nil {
-			e.LoadList(bytes.NewReader(b))
+			if l.threat {
+				e.LoadThreat(bytes.NewReader(b))
+			} else {
+				e.LoadList(bytes.NewReader(b))
+			}
 		}
 	}
 	blocker.Store(e)
@@ -73,7 +78,11 @@ func updateFilterLists() {
 	for _, l := range filterLists {
 		key := "list:" + l.name
 		c := st.Components[key]
-		if !c.Updated.IsZero() && time.Since(c.Updated) < 24*time.Hour {
+		every := 24 * time.Hour
+		if l.threat {
+			every = 12 * time.Hour // new phishing sites appear every day
+		}
+		if !c.Updated.IsZero() && time.Since(c.Updated) < every {
 			continue
 		}
 		b, err := fetch(l.url, 30<<20)
@@ -100,6 +109,30 @@ func updateFilterLists() {
 	if changed {
 		loadFilterLists()
 	}
+}
+
+// dangerous reports whether uri is a known phishing or malware site that must
+// not open. Banks, payment pages and sites the user marked "I trust this
+// site" are never stopped.
+func dangerous(uri string) (string, bool) {
+	e := blocker.Load()
+	if e == nil || !strings.HasPrefix(uri, "http") {
+		return "", false
+	}
+	v := safemoney.Classify(uri, store.Lists())
+	if v.Host == "" || v.Kind != safemoney.General || trustedHost(v.Host) {
+		return "", false
+	}
+	return v.Host, e.Dangerous(v.Host)
+}
+
+func trustedHost(h string) bool {
+	for _, d := range store.Lists().Trusted {
+		if h == d || strings.HasSuffix(h, "."+d) {
+			return true
+		}
+	}
+	return false
 }
 
 // hookAdblock connects the network blocker and page scripts to a tab.
