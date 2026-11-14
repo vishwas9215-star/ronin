@@ -141,6 +141,11 @@ func Check(raw string) string {
 	if isIP(host) {
 		return "ip"
 	}
+	for _, r := range host {
+		if r > 127 { // look-alike letters ("ѕbi" with a Cyrillic ѕ)
+			return "puny"
+		}
+	}
 	if strings.HasPrefix(host, "xn--") || strings.Contains(host, ".xn--") {
 		return "puny"
 	}

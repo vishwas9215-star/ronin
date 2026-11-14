@@ -50,7 +50,9 @@ class SafeLinks(private val o: JSONObject?) {
         val u = try { URI(raw) } catch (e: Exception) { return "" }
         if (u.rawUserInfo != null) return "at"
         // java.net.URI gives no host for names with "_": take it from the authority then
-        val host = (u.host ?: u.rawAuthority?.substringAfterLast('@')?.substringBefore(':') ?: return "").lowercase().trimEnd('.')
+        val raw0 = (u.host ?: u.rawAuthority?.substringAfterLast('@')?.substringBefore(':') ?: return "").trimEnd('.')
+        // look-alike letters (Cyrillic "ѕbi") become "xn--..." and are caught below
+        val host = try { java.net.IDN.toASCII(raw0, java.net.IDN.ALLOW_UNASSIGNED).lowercase() } catch (e: Exception) { return "puny" }
         if (host.isEmpty()) return ""
         if (isIP(host)) return "ip"
         if (host.startsWith("xn--") || host.contains(".xn--")) return "puny"

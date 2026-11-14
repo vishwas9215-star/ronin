@@ -21,3 +21,13 @@ func TestCases(t *testing.T) {
 		}
 	}
 }
+
+func TestScamRulesLoad(t *testing.T) {
+	var r struct {
+		Groups   [][]any  `json:"groups"`
+		Requests []string `json:"requests"`
+	}
+	if err := json.Unmarshal(ScamRulesJSON, &r); err != nil || len(r.Groups) < 20 || len(r.Requests) == 0 {
+		t.Fatalf("scam rules broken: %v %d", err, len(r.Groups))
+	}
+}

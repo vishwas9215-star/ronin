@@ -20,6 +20,7 @@
  ["http://103.45.67.89/kyc", "ip"],
  ["http://3232235777/", "ip"],
  ["https://xn--pypal-4ve.com/", "puny"],
+ ["https://ѕbi.co.in/login", "puny"],
  ["https://anydesk.com/en/downloads", "remote"],
  ["https://download.teamviewer.com/qs", "remote"],
  ["https://bit.ly/3xYz", "short"],

@@ -98,7 +98,7 @@ Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + tes
   make_tool_fixtures.py), DeviceTest merge + tools self-test.
 - Owner's real Prerna file checked locally only (never committed): fake UDISE with 6 planted changes -> all 6 found.
 
-## 3.10.0 (built, CI green 43605132002, NOT published)
+## 3.10.0 first build (superseded by the section above)
 - Safe Social: launcher ui/tools/social.html + social.js (apps chosen in PIN-locked settings, safety card);
   page script ui/inject_social.js (Sponsored ads hidden, optional Reels/Shorts hide, link guard with NO open-anyway:
   Telegram, WhatsApp group invites, UPI apps, .apk, short links, adult, money-word sites; orange scam marks;
@@ -110,22 +110,30 @@ Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + tes
 - Tests: tools/uitest/social.js, DeviceTest safeSocialOpensFullScreenAndCloses.
 - Review prompt for another AI given to owner (Ronin_review_prompt.txt); his answers will come back as suggestions.
 
-## 3.10.0 in progress (owner: everything in 3.10, approved 14 Nov evening)
-- DONE (phase A): review of 6 AIs merged. Shared engine ui/tools/scamcheck.js (score-based: 1 heavy or 2 normal signs,
-  advice lowers) with data internal/safelinks/{lists.json,scamrules.json} (Go Check + Kotlin SafeLinks + JS, same
-  cases.json; corpus tools/uitest/scam_corpus.json). Safe Mail in inject_social.js (Gmail/Outlook/Yahoo + custom
-  sites): red bar + Delete/Spam (presses the site's own button) + 1930. Native gate in Safe Social tabs (Windows
-  NavigationStarting, Android shouldOverrideUrlLoading). socialKey (home/close only) vs toolsKey (launcher only).
-  Big labelled buttons, TTS (Android roninNative WebMessageListener, Windows speechSynthesis), stranger banners,
-  video-call ask, fact-check sites, Scam Check tool (+ Android Share text -> Ronin), "Ronin Mail" icon
-  (Android activity-alias MailLauncher, Windows --mail shortcut).
-- TODO phase B: Ronin Messages = FULL default SMS app (owner chose, warned: RCS chats stay in Google Messages,
-  MMS limited). Tabs काम के / अनजान / विज्ञापन / ठगी, block (BlockedNumberContract), own icon.
-- TODO phase C: Ronin Calls = FULL default dialer (owner chose against my advice; must never break 112/emergency;
-  InCallService + CallScreening), own icon.
-- TODO phase D: WhatsApp notification watcher (NotificationListenerService) for "hacked friend asks money + QR".
-- Owner must once: App info -> ⋮ -> Allow restricted settings (Android 15+ for sideloaded SMS/dialer/notification).
-- Advice given: SMS "BLOCK PROMO" to 1909 (TRAI, Sept 2026) stops promotional SMS/calls at the operator.
+## 3.10.0 in progress (owner: everything in 3.10; NOT published)
+- Phase A done: shared engine ui/tools/scamcheck.js; rules data internal/safelinks/{lists.json, scamrules.json,
+  cases.json} used by Go (safelinks.Check), Kotlin (SafeLinks.kt, ScamCheck.kt via rules.json "safeLinks"/"scamRules")
+  and JS (native injects window.__roninLinkLists / __roninScamRules). Score: 1 heavy or 2 normal signs; advice with no
+  request (rules "requests") = no warning. Tests: tools/uitest/scamcheck.js (scam_corpus.json + scam_heldout.json from
+  the independent reviewer: before tuning 69% caught / 7% false; after 100% / 0%), LogicTest + DeviceTest same sets.
+  Safe Mail (Gmail/Outlook/Yahoo + custom mail hosts) red bar + Delete/Spam/1930. Native gate in Safe Social tabs.
+  socialKey (home/close) vs toolsKey (launcher only). Big labels, TTS, stranger banner, video-call ask, 🆘 only on tap.
+- Phase B-D (Android, all components android:enabled=false until chosen in Parts.choose / Menu "📱 Ronin के हिस्से";
+  tablet without SIM gets only Mail): Ronin Messages = default SMS app (Sms.kt, MessagesActivity, messages.html/js;
+  tabs work/unknown/ads/scam; block via BlockedNumberContract; MMS notice kept in Mms inbox), Ronin Calls = default
+  dialer (Calls.kt: InCallService + native InCallActivity, CallScreening silence options, SIM choice, ongoing
+  notification), auto call recording (CallRecord.kt: Accessibility RecordAccess + RecordService mic FGS,
+  VOICE_RECOGNITION; "do not record" list; other side may be soft on some phones), NotifyWatch (scam warning on
+  WhatsApp/chat/Gmail notifications) + ChatLog (7-day text log -> deleted WhatsApp messages, ChatLogActivity).
+  Pages are PhonePage (WebView + roninPhone WebMessageListener, origin https://ronin.home only).
+- RISK told to owner, he chose to keep everything in the browser APK: Google Play Protect India fraud pilot blocks
+  sideloaded installs of apps declaring READ_SMS/RECEIVE_SMS/notification listener/accessibility. If the update is
+  blocked: Play Store -> profile -> Play Protect -> ⚙ -> "Scan apps with Play Protect" off, install, turn on again
+  (owner does it himself), or install via adb from the laptop. Fallback idea: a "lite" flavor without these parts.
+- Owner must once (Android 15+): App info -> ⋮ -> Allow restricted settings (SMS role, dialer role, notification
+  access, accessibility). Advice given: SMS "BLOCK PROMO" to 1909.
+- Remaining review items not done: Windows-side nothing; M6 BT audio route, M12 labels; homograph on Android uses
+  rawAuthority (I6) - check.
 
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only
