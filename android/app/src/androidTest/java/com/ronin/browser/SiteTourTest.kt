@@ -12,6 +12,10 @@ import org.junit.runner.RunWith
 class SiteTourTest {
     private val inst = InstrumentationRegistry.getInstrumentation()
 
+    init {
+        inst.targetContext.getSharedPreferences("ronin_parts", android.content.Context.MODE_PRIVATE).edit().putBoolean("asked", true).commit()
+    }
+
     private fun shot(name: String) {
         Thread.sleep(700)
         fun sh(c: String) = inst.uiAutomation.executeShellCommand(c).use { pfd ->

@@ -177,6 +177,8 @@ class MainActivity : AppCompatActivity() {
         })
         ui.postDelayed(mediaPoll, 1500)
         Updater.check(this, quiet = true)
+        // first start of this version: which parts (Mail / Messages / Calls icons) the family wants
+        if (!Parts.prefs(this).getBoolean("asked", false)) ui.postDelayed({ if (!isFinishing) Parts.choose(this, first = true) }, 1200)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -1366,6 +1368,9 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         items["🧰 Ronin Tools (Data Match, PDF, Photo)"] = { openTools() }
         items["🛡️ Safe Social (Facebook, Instagram, YouTube...)"] = { openSocial() }
         items["📧 Safe Mail (Gmail...)"] = { openMail() }
+        items["📱 Ronin के हिस्से (Mail / Messages / Calls)"] = { Parts.choose(this, first = false) }
+        if (Parts.isOn(this, Parts.MESSAGES)) items["📩 Ronin Messages"] = { startActivity(Intent(this, MessagesActivity::class.java)) }
+        if (Parts.isOn(this, Parts.CALLS)) items["📞 Ronin Calls"] = { startActivity(Intent(this, CallsActivity::class.java)) }
         items["🔎 क्या यह ठगी है? (Scam Check)"] = { openTools("scamcheck") }
         items["🔎 Search widget home screen पर लगाएँ"] = {
             if (!SearchWidget.pin(this)) Toast.makeText(this, "Home screen पर खाली जगह दबाकर रखें → Widgets → Ronin Search", Toast.LENGTH_LONG).show()

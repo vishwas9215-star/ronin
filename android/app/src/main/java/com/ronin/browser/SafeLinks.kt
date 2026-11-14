@@ -10,7 +10,7 @@ import java.net.URI
  * bank-KYC-reward sites). Same rules as Windows (internal/safelinks) and the page script
  * (scamcheck.js); the word lists come from rules.json ("safeLinks").
  */
-class SafeLinks(o: JSONObject?) {
+class SafeLinks(private val o: JSONObject?) {
     private fun list(k: String): List<String> {
         val a: JSONArray = o?.optJSONArray(k) ?: return emptyList()
         return (0 until a.length()).map { a.getString(it) }

@@ -19,6 +19,30 @@ class LogicTest {
         }
     }
 
+    @Test fun scamCheckLikeThePage() {
+        // the same corpus as tools/uitest/scamcheck.js: every scam warns, no normal message does
+        val c = org.json.JSONObject(File("../../tools/uitest/scam_corpus.json").readText())
+        val scam = c.getJSONArray("scam"); val normal = c.getJSONArray("normal")
+        val missed = (0 until scam.length()).map { scam.getString(it) }.filter { rules.scam.text(it).level.isEmpty() }
+        val alarms = (0 until normal.length()).map { normal.getString(it) }.filter { rules.scam.text(it).level.isNotEmpty() }
+        assertTrue("missed: $missed", missed.isEmpty())
+        assertTrue("false alarms: $alarms", alarms.isEmpty())
+        assertEquals("stop", rules.scam.text("Mujhe urgent 10000 rupaye ki zarurat hai, hospital me hoon, is QR par bhej do").level)
+        assertEquals("", rules.scam.text("OTP किसी को मत बताना, बैंक कभी OTP नहीं माँगता").level)
+    }
+
+    @Test fun smsSorting() {
+        assertEquals("ads", SmsSort.category("VM-SHOPPR-P", "Big sale! 70% off today", false, ""))
+        assertEquals("work", SmsSort.category("JM-SBIINB-S", "Your OTP is 123456", false, ""))
+        assertEquals("work", SmsSort.category("AD-UIDAI-G", "Aadhaar updated", false, ""))
+        assertEquals("unknown", SmsSort.category("+919812345678", "Hello sir, kal milte hain", false, ""))
+        assertEquals("work", SmsSort.category("+919812345678", "Hello sir, kal milte hain", true, ""))
+        assertEquals("scam", SmsSort.category("+919812345678", "x", false, "stop"))
+        assertEquals("scam", SmsSort.category("+919812345678", "x", true, "warn"))
+        assertEquals("ads", SmsSort.category("+919812345678", "Limited offer! Get 50% cashback, shop now", false, ""))
+        assertEquals("work", SmsSort.category("57575", "Recharge done", false, ""))
+    }
+
     @Test fun classifiesLikeWindows() {
         assertEquals(Kind.BANK, rules.classify("https://sbi.bank.in/"))
         assertEquals(Kind.BANK, rules.classify("https://netbanking.hdfcbank.com/x"))

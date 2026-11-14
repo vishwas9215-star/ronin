@@ -23,6 +23,7 @@ class Rules(json: String) {
     val testThreat: String
     val safeLinks: SafeLinks
     val scamRulesJson: String
+    val scam: ScamCheck
 
     init {
         val o = JSONObject(json)
@@ -40,6 +41,7 @@ class Rules(json: String) {
         testThreat = o.optString("testThreat", "ronin-phishing-test.com")
         safeLinks = SafeLinks(o.optJSONObject("safeLinks"))
         scamRulesJson = o.optJSONObject("scamRules")?.toString() ?: "{}"
+        scam = ScamCheck(o.optJSONObject("scamRules"), safeLinks)
         val ql = o.optJSONArray("quickLinks") ?: JSONArray()
         quickLinks = (0 until ql.length()).map { ql.getJSONObject(it).let { j -> QuickLink(j.getString("section"), j.getString("name"), j.getString("url")) } }
         quickSections = strings(o.optJSONArray("quickSections")).ifEmpty { listOf("Quick links", "School", "Trading", "Video calls") }
