@@ -1,4 +1,4 @@
-# Ronin Browser 3 — HANDOFF 8 (14 Nov 2026, 3.10.0 published)
+# Ronin Browser 3 — HANDOFF 8 (14 Nov 2026, 3.10.0 published, 3.11.0 built + on his phone, not published)
 
 Owner: Vishwas (Hindi; both hands injured: fewest taps/typing). Not a coder: explain in Hindi, technical words in English.
 Current version: **3.10.0** published 14 Nov 23:15 IST (run 43618950937). Rollback: 3.9.0 / 3.8.0 releases on GitHub; Windows
@@ -137,10 +137,40 @@ Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + tes
   setting): Android Parts.chooseAdult (first start, PIN, SafeSearch forced), Windows settings.AdultBlock +
   first-start Yes/No + menu "Family Filter". Chat log (deleted WhatsApp messages) via NotifyWatch + ChatLogActivity.
 - Kashvi (5, KG1): owner chose Google Family Link + Maps sharing (step card given), not a Ronin tracker.
-- 3.11 first task (owner agreed): whole app English with Hindi option (child is English medium).
+- 3.11 (English + Hindi option) built: see the 3.11.0 section.
 - CI green 14 Nov ~22:00 IST (phone + tablet incl. SMS role test and on-phone scam parity).
 - Remaining review items not done: Windows-side nothing; M6 BT audio route, M12 labels; homograph on Android uses
   rawAuthority (I6) - check.
+
+## 3.11.0 (built 14 Nov night, installed on his phone for checking, NOT published yet)
+Owner asked (after 3.10 on phone): Instagram chip on home opened "Edit links"; Safe Social bar and Calls / Messages
+top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped per bank; app in English (phone is English).
+- Chip bug: `ronin.newtab/social` was caught by the generic `ronin.newtab/` (edit links) rule. Fixed + device test
+  `safeSocialChipOnTheHomePageOpensThatApp`.
+- PhonePage: WebView ignores its own padding -> page now sits in a FrameLayout with the inset padding.
+- Calls: Keypad / Recent / Contacts in a bottom `.nav`, keypad low (`.padwrap`). Messages: 4 boxes in bottom nav,
+  "✏ New" floating button. Safe Social on Android: native bottom bar Back / My apps / Close (`socialBar`),
+  inject_social skips its own top buttons when `cfg.nativeBar` (Windows keeps the top buttons).
+- Messages grouping: `group()` in messages.js, key = cat + sender core (VM-/AD-/VD-HDFCBK-S -> HDFCBK); opening a
+  group merges all its threads; delete / block cover all of them.
+- Language: `Lang.kt` (prefs "lang" = auto|en|hi, auto = phone locale) + top-level `L(hi, en)`; pages get
+  `window.__roninLang` (PhonePage + socialBaseJs), each page has `const L`. Menu "🌐 Language / भाषा" and a
+  Language card in Messages / Calls settings. scamrules.json `whyEn` (English reasons, by group id) used by
+  scamcheck.js and ScamCheck.kt; spoken warnings English/Hindi. Windows pages follow navigator.language (laptop =
+  English); Windows Go toolbar strings are still Hindi-first (next step), tools.js (PDF / Data Match) not translated.
+- UI tests: phone.js now pins Hindi for old checks and adds an English + grouping + bottom-bar check; social.js pins Hindi.
+- Real-phone install path that works: CI uploads `Ronin-test.apk` to the "qa" pre-release (never offered as an
+  update); on the phone open github.com/vishwas9215-star/ronin/releases/download/qa/Ronin-test.apk in Ronin ->
+  notification -> Update -> Play Protect "Scan app" -> Install. (A .lnk running adb install did not start; artifact
+  downloads are blocked by the proxy.) Phone screen: scrcpy 5.0.1 in C:\Ronin Ecosystem\scrcpy (scrcpy.exe,
+  grant "Scrcpy" full tier; right-click = Back on the phone). Phone = motorola signature, Android 17.
+- Checked on his phone 23:40 IST: Instagram chip opens Instagram + bottom bar; Messages English, HDFCBK 10 in one row,
+  bottom nav; Calls keypad low, Recent English labels; menu English. Call recording is OFF on his phone
+  (Accessibility must be turned on by him). Saw: Kotak "A/C blocked... kotk.in" SMS from JX-KOTAKD-S (probably real,
+  told him not to tap, check in Kotak app). Minor: a saved contact can show "Unknown number" in Recent for outgoing
+  rows (contact lookup) - check.
+- Still to do before publish: tablet check (asked him to connect the tablet), CI green, independent QA review,
+  then he names the version.
 
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only
