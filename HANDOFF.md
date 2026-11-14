@@ -189,7 +189,15 @@ top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped p
   * Gmail / social "Open in app" banners hidden (hideAppPromos); green "Safe Mail is on" note for 6 s.
   * His phone: Stay awake ON (Developer options), phone silent, laptop muted, laptop sleep Never (was already).
     He allowed me to turn on Ronin-only Android permissions; recording Accessibility still OFF (not done yet).
-- Still to do before publish: tablet check, CI green, independent QA review, then he names the version.
+  * Messages: "Mark all read" (small link), ⭐ Saved box (copies in files/saved-sms.json; ops savedSms/saveSms/
+    unsaveSms with `sid` - a payload key "id" would override the request id in ask()).
+  * Spam calls (owner was threatened by a fake "Daroga ji" WhatsApp caller): CNAP SIM name on the call screen and
+    Recent (CallInfo.cnap / keepCnap; DoT mandated CNAP from 1 Nov 2026 on 4G/5G), threat tip under unknown-caller
+    warnings, after-call notification Block / Report (Chakshu), NotifyWatch warns on WhatsApp/chat calls from unsaved
+    numbers. Told him: WhatsApp -> Settings -> Privacy -> Calls -> Silence unknown callers.
+  * BUG found on the real phone: PhonePage had no WebChromeClient, so every confirm() returned false (Block /
+    Delete / Remove never worked on phones since 3.10). Fixed + device test.
+- Still to do before publish: tablet check, CI green, independent QA review (running), then he names the version.
 
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only
