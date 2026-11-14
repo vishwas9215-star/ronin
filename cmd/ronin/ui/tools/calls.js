@@ -19,6 +19,9 @@
   let tab = 'pad', st = {}, number = '', inSettings = false;
   const when = ms => { const d = new Date(ms), n = new Date(); return d.toDateString() === n.toDateString() ? d.toTimeString().slice(0, 5) : d.getDate() + '/' + (d.getMonth() + 1); };
   const TYPE = { 1: L('↙ आई', '↙ incoming'), 2: L('↗ की', '↗ outgoing'), 3: L('✖ छूटी', '✖ missed'), 5: L('⛔ काटी', '⛔ rejected'), 6: L('🚫 रोकी', '🚫 blocked') };
+  // came in or went out, at a glance: outgoing blue ↗, incoming green ↙, missed red
+  const DIR = { 1: 'in', 2: 'out', 3: 'miss', 5: 'rej', 6: 'blk' };
+  const dirChip = t => TYPE[t] ? h('span', { cls: 'dir ' + (DIR[t] || '') }, TYPE[t]) : '';
   // codes with * or # (e.g. *401*...) can send your calls and OTPs to someone else: ask first
   const call = n => {
     if (/[*#]/.test(n) && !confirm(L('⚠ सावधान: यह code आपकी calls / OTP किसी दूसरे नंबर पर भेज सकता है (ठगी का तरीका)। किसी के कहने पर dial न करें।\n\nफिर भी dial करें?', '⚠ Careful: this code can send your calls / OTPs to another number (a scam trick). Never dial it because someone asked you to.\n\nDial anyway?'))) return null;
@@ -59,7 +62,7 @@
       list.replaceChildren(...(mine.length ? mine.map(r => h('div', { cls: 'th', 'data-number': r.number },
         h('div', { cls: 'av', style: r.label ? 'background:#7c5d12' : '' }, ((r.name || r.number || '?')[0] || '?').toUpperCase()),
         h('div', { cls: 'mid', on: { click: () => window.__roninDial(r.number) } }, // a tap on the name only puts the number on the keypad: only the green 📞 calls (a stray tap once called someone at night)
-         h('b', {}, r.name || r.number), h('small', {}, (r.name ? r.number + ' ' : '') + (TYPE[r.type] || '') + (r.date ? ' • ' + when(r.date) : '')), r.label ? h('span', { cls: 'lbl' }, r.label) : ''),
+         h('b', {}, r.name || r.number), h('small', {}, dirChip(r.type), (r.name ? ' ' + r.number : '') + (r.date ? ' • ' + when(r.date) : '')), r.label ? h('span', { cls: 'lbl' }, r.label) : ''),
         h('button', { cls: 'pill', on: { click: () => ask('sms', { number: r.number }) } }, '💬'),
         r.label ? h('button', { cls: 'pill', on: { click: async () => { if (confirm(L(r.number + ' block करें? इनकी calls और SMS नहीं आएँगे।', 'Block ' + r.number + '? Their calls and SMS will stop.'))) alert((await ask('block', { number: r.number })) ? L('🚫 Block कर दिया', '🚫 Blocked') : L('Block नहीं हुआ', 'Could not block')); } } }, '🚫') : '',
         h('button', { cls: 'pill green', on: { click: () => call(r.number) } }, '📞')))

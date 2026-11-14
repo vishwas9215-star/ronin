@@ -22,7 +22,7 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
       switch(m.op){case 'state':d=Object.assign({},ST,window.__sos||{});break;case 'save':window.__sos=Object.assign(window.__sos||{},{contacts:m.contacts,name:m.name});d=true;break;
       case 'start':d=!!(window.__sos&&window.__sos.contacts&&window.__sos.contacts.length);if(d)window.__sos.running=true;break;case 'stop':window.__sos.running=false;d=true;break;case 'threads':d=T;break;case 'messages':d=M[m.thread]||[];break;case 'makeDefault':d={ok:ST.grant};if(ST.grant)ST.isDefault=true;break;
       case 'savedSms':d=window.__saved||[];break;case 'saveSms':window.__saved=(window.__saved||[]).concat([m.msg]);d=window.__saved;break;case 'unsaveSms':window.__saved=(window.__saved||[]).filter(x=>x.key!==m.key);d=window.__saved;break;case 'send':d=true;break;case 'block':d=true;break;case 'blocked':d=['+91999'];break;case 'watcher':d=false;break;case 'thread':d=9;break;
-      case 'recent':d=[{number:'+923001234567',name:'',date:Date.now(),type:3,label:'🌍 विदेश का नंबर'},{number:'+919800000000',name:'माँ',date:Date.now(),type:1,label:''}];break;
+      case 'recent':d=[{number:'+923001234567',name:'',date:Date.now(),type:3,label:'🌍 विदेश का नंबर'},{number:'+919800000000',name:'माँ',date:Date.now(),type:1,label:''},{number:'+919811111112',name:'Ravi',date:Date.now(),type:2,label:''}];break;
       case 'contacts':d=[{name:'माँ',number:'+919800000000'},{name:'Ramesh',number:'+919811111111'}];break;case 'label':d='👤 अनजान नंबर';break;
       case 'rec':d={auto:false,access:false,skip:window.__skip||[],mic:true};break;case 'skip':window.__skip=(window.__skip||[]).filter(x=>x!==m.number);if(m.on)window.__skip.push(m.number);d=window.__skip;break;
       case 'list':d=[{app:'WhatsApp',chat:'Family',who:'Mama',text:'Kal aa rahe ho?',t:Date.now()-9000},{app:'WhatsApp',chat:'Rahul',who:'Rahul',text:'Sorry, galat message',t:Date.now()-5000,gone:true}];break;
@@ -96,6 +96,10 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   await p3.screenshot({ path: path.join(out, 'calls-pad.png') });
   if (await p3.$('a:has-text("112"), a:has-text("1930")')) bad('emergency / fraud numbers shown all the time');
   await p3.click('[data-tab=recent]'); await p3.waitForSelector('.th');
+  // direction at a glance: coloured chips (outgoing blue, missed red)
+  { const chips = await p3.$$eval('.th .dir', a => a.map(x => x.className + '|' + getComputedStyle(x).backgroundColor));
+    if (!chips.some(c => /out\|/.test(c)) || !chips.some(c => /miss\|/.test(c))) bad('no call direction chips ' + chips);
+    for (const c of chips) { if (/out\|/.test(c) && !/37, 99, 235/.test(c)) bad('outgoing not blue ' + c); if (/miss\|/.test(c) && !/220, 38, 38/.test(c)) bad('missed not red ' + c); } }
   // a tap on a name must NOT call: it only puts the number on the keypad
   { const before = await p3.evaluate(() => window.__log.filter(m => m.op === 'call').length);
     await p3.click('.th .mid'); await p3.waitForTimeout(200);
