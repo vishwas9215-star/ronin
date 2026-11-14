@@ -96,6 +96,7 @@ class SafeMoneyActivity : AppCompatActivity() {
             }
         }
         root.addView(bar); root.addView(web)
+        keepClearOfSystemBars(root)
         setContentView(root)
         val start = intent?.dataString
         if (start != null && start.startsWith("https://")) web.loadUrl(start) else web.loadDataWithBaseURL(

@@ -49,12 +49,26 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
+
+/**
+ * Android 15+ draws apps under the status bar and the navigation bar: Ronin keeps
+ * its address bar and buttons clear of them (and of the keyboard).
+ */
+fun keepClearOfSystemBars(root: View) {
+    ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+        val b = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime())
+        v.setPadding(b.left, b.top, b.right, b.bottom)
+        WindowInsetsCompat.CONSUMED
+    }
+}
 
 class MainActivity : AppCompatActivity() {
 
@@ -229,6 +243,7 @@ class MainActivity : AppCompatActivity() {
         }
         readBar.addView(readPlay); readBar.addView(readStop); readBar.addView(readSpeed); readBar.addView(readNote)
         root.addView(bar); root.addView(progress); root.addView(holder); root.addView(readBar)
+        keepClearOfSystemBars(root)
         setContentView(root)
     }
 
@@ -636,6 +651,9 @@ a{display:block;padding:14px;border-radius:12px;background:$card;color:$fg;text-
 <p style="margin-top:26px">Bank websites open in <b>Ronin Safe Money</b>: no screenshots, nothing else running.</p>
 </body></html>"""
     }
+
+    /** For the device tests: the address box (must sit below the status bar). */
+    fun addressForTest(): View = address
 
     /** For the device tests: the visible tab's page. */
     fun webForTest(): WebView = current!!.web

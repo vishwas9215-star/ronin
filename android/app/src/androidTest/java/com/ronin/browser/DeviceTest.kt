@@ -93,6 +93,23 @@ class DeviceTest {
     }
 
     @Test
+    fun addressBarIsBelowTheStatusBar() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            var top = -1
+            var bar = 0
+            sc.onActivity { a ->
+                val loc = IntArray(2)
+                a.addressForTest().getLocationOnScreen(loc)
+                top = loc[1]
+                val ins = androidx.core.view.ViewCompat.getRootWindowInsets(a.window.decorView)
+                bar = ins?.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars())?.top ?: 0
+            }
+            assertTrue("address bar ($top) is under the status bar ($bar)", top >= bar)
+        }
+    }
+
+    @Test
     fun bankOpensInSafeMoneyWithScreenshotsBlocked() {
         val monitor: Instrumentation.ActivityMonitor = inst.addMonitor(SafeMoneyActivity::class.java.name, null, false)
         ActivityScenario.launch(MainActivity::class.java).use { sc ->
