@@ -4,7 +4,7 @@
   [
    "otp",
    3,
-   "(((otp|ओटीपी|upi\\s*pin|यूपीआई\\s*पिन|\\bpin\\b|पिन|cvv|password|पासवर्ड|verification\\s*code|वेरिफिकेशन\\s*कोड)\\s*.{0,25}?(बताओ|बताएं|बताए|बताइए|बता\\s*दो|बता\\s*दें|भेजो|भेजें|भेजिए|भेज\\s*दो|दे\\s*दो|दीजिए|share\\s*(karo|kare|kijiye|kar\\s*do|now)|\\bsend\\b|\\bshare\\b|\\btell\\b|batao|bata\\s*do|bhejo|bhej\\s*do|de\\s*do)|(share|send|tell|batao|bhejo|bata\\s*do|bhej\\s*do|बताइए|बताओ|भेजें|भेजो|verify|enter|confirm)\\s*(me\\s*|us\\s*)?(your\\s*|the\\s*|apna\\s*|अपना\\s*|aapka\\s*)?(atm\\s*card\\s*|debit\\s*card\\s*|card\\s*)?(otp|ओटीपी|upi\\s*pin|cvv|password|पासवर्ड))|(\\d\\s*(digit|अंकों|अंक)\\s*(का\\s*)?(code|कोड))|(code\\s*(you|jo|जो)\\s*(received|aaya|आया|mila))|((code|कोड)\\s*(bhejo|batao|share\\s*karo|भेजो|बताओ|भेजें|बताएं)))|((send|share|give|bhejo|bhej\\s*do|batao|भेजो|भेजें|बताओ|बताएं)\\s*(me\\s*)?(your\\s*|apna\\s*|अपना\\s*)?.{0,25}(otp|ओटीपी|upi\\s*pin|cvv|password|पासवर्ड))",
+   "(((otp|ओटीपी|upi\\s*pin|यूपीआई\\s*पिन|\\bpin\\b|पिन|cvv|password|पासवर्ड|verification\\s*code|वेरिफिकेशन\\s*कोड)\\s*.{0,25}?(बताओ|बताएं|बताए|बताइए|बता\\s*दो|बता\\s*दें|भेजो|भेजें|भेजिए|भेज\\s*दो|दे\\s*दो|दीजिए|share\\s*(karo|kare|kijiye|kar\\s*do|now)|\\bsend\\b|\\bshare\\b|\\btell\\b|batao|bata\\s*do|bhejo|bhej\\s*do|de\\s*do)|(share|send|tell|batao|bhejo|bata\\s*do|bhej\\s*do|बताइए|बताओ|भेजें|भेजो|verify|enter|confirm)\\s*(me\\s*|us\\s*)?(your\\s*|the\\s*|apna\\s*|अपना\\s*|aapka\\s*)?(atm\\s*card\\s*|debit\\s*card\\s*|card\\s*)?(otp|ओटीपी|upi\\s*pin|cvv|password|पासवर्ड))|(\\d\\s*(digit|अंकों|अंक)\\s*(का\\s*)?(code|कोड))|(code\\s*(you|jo|जो)\\s*(received|aaya|आया|mila))|((code|कोड)\\s*(bhejo|batao|share\\s*karo|भेजो|बताओ|भेजें|बताएं)))|((send|share|give|bhejo|bhej\\s*do|batao|भेजो|भेजें|बताओ|बताएं)\\s*(me\\s*)?(your\\s*|apna\\s*|अपना\\s*)?((aadhaar|aadhar|आधार)\\s*(number\\s*|नंबर\\s*)?(and|&|aur|और)\\s*)?(otp|ओटीपी|upi\\s*pin|cvv|password|पासवर्ड))",
    "OTP / PIN / password माँगा जा रहा है: इसे कभी किसी को न बताएँ, बैंक या पुलिस भी नहीं माँगती"
   ],
   [
@@ -124,7 +124,7 @@
   [
    "sext",
    3,
-   "((((video|वीडियो|photo|फोटो|recording|रिकॉर्डिंग)\\s*.{0,25}(viral|वायरल|leak|लीक)\\s*(kar|कर|ho\\s*jayega|हो\\s*जाएगा)|make\\s*(it\\s*|your\\s*video\\s*)?viral|(सबको|sabko|family|परिवार)\\s*.{0,10}(भेज\\s*दूं|दिखा\\s*दूं|bhej\\s*dunga|send\\s*it)|(paise|पैसे)\\s*nahi\\s*diye\\s*to|(viral|वायरल)\\s*(kar|कर)\\s*(dunga|denge|दूंगा|देंगे)|badnaam|बदनाम|(nude|न्यूड|अश्लील|private|प्राइवेट|निजी)\\s*(video|वीडियो|call|कॉल|photo|फोटो)|morphed|i\\s*recorded\\s*you|delete\\s*(karne|करने)\\s*(ke|के)\\s*(paise|पैसे)))|((recorded|record\\s*kar).{0,20}(video|call))|((upload|send\\s*it|send\\s*to\\s*all).{0,40}(friends|family|contacts|relatives|घरवालों|रिश्तेदार))|((youtube|facebook)\\s*(par|pe|on)\\s*(upload|daal|डाल)))|((recorded|record\\s*kar|रिकॉर्ड|screen\\s*record).{0,80}(family|friends|contacts|relatives|परिवार|दोस्त|रिश्तेदार|घरवाल))",
+   "((((video|वीडियो|photo|फोटो|recording|रिकॉर्डिंग)\\s*.{0,25}(viral|वायरल|leak|लीक)\\s*(kar|कर|ho\\s*jayega|हो\\s*जाएगा)|make\\s*(it\\s*|your\\s*video\\s*)?viral|(सबको|sabko|family|परिवार)\\s*.{0,10}(भेज\\s*दूं|दिखा\\s*दूं|bhej\\s*dunga|send\\s*it)|(paise|पैसे)\\s*nahi\\s*diye\\s*to|(viral|वायरल)\\s*(kar|कर)\\s*(dunga|denge|दूंगा|देंगे)|badnaam|बदनाम|(nude|न्यूड|अश्लील|private|प्राइवेट|निजी)\\s*(video|वीडियो|call|कॉल|photo|फोटो)|morphed|i\\s*recorded\\s*you|delete\\s*(karne|करने)\\s*(ke|के)\\s*(paise|पैसे)))|((recorded|record\\s*kar).{0,20}(video|call))|((upload|send\\s*it|send\\s*to\\s*all).{0,40}(friends|family|contacts|relatives|घरवालों|रिश्तेदार))|((youtube|facebook)\\s*(par|pe|on)\\s*(upload|daal|डाल)))|(((your|tera|tumhara|aapka|तेरा|तुम्हारा|आपका)\\s*.{0,25}(record|रिकॉर्ड)|(recorded|record\\s*kar\\s*liya|रिकॉर्ड\\s*कर\\s*लिया)\\s*(your|tera|tumhara|aapka|तेरा|तुम्हारा|आपका)).{0,80}(family|friends|contacts|relatives|परिवार|दोस्त|रिश्तेदार|घरवाल))",
    "Video / फ़ोटो वायरल करने की धमकी: पैसे न दें, call काटें, block करें, 1930 पर शिकायत करें"
   ],
   [
@@ -202,7 +202,7 @@
   [
    "earn",
    2,
-   "((earn|कमाएं|कमाओ|कमाइए|kamao|kamaye|kamaiye|income|कमाई)\\s*.{0,25}(daily|per\\s*day|a\\s*day|from\\s*home|रोज|रोजाना|roz|घर\\s*बैठे|ghar\\s*baithe))|((daily|per\\s*day|रोज|रोजाना|roz|घर\\s*बैठे|ghar\\s*baithe|from\\s*home)\\s*.{0,25}(earn|कमाएं|कमाओ|कमाइए|kamao|kamaye|kamaiye|कमाई|income))",
+   "(((?<![a-z])earn|कमाएं|कमाओ|कमाइए|kamao|kamaye|kamaiye|कमाई)\\s*.{0,25}(daily|per\\s*day|a\\s*day|from\\s*home|रोज|रोजाना|roz(ana)?\\b|घर\\s*बैठे|ghar\\s*baithe))|((daily|per\\s*day|रोज|रोजाना|roz(ana)?\\b|घर\\s*बैठे|ghar\\s*baithe|from\\s*home)\\s*.{0,25}((?<![a-z])earn|कमाएं|कमाओ|कमाइए|kamao|kamaye|kamaiye|कमाई))",
    "घर बैठे / रोज़ इतना कमाने का लालच"
   ],
   [
@@ -214,14 +214,20 @@
   [
    "bet",
    3,
-   "(aviator|color\\s*prediction|colour\\s*prediction|predictor|\\bsatta\\b|सट्टा|1xbet|betting\\s*(app|id|tips?|site)|online\\s*(betting|casino)|casino\\s*(app|bonus)|rummy\\s*.{0,15}(earn|kamao|cash|कमा)|(gaming|game)\\s*(app\\s*)?(se|से|to\\s*)?.{0,10}(earn|kama|कमा))",
+   "((?<![a-z])aviator|colou?r\\s*prediction|(aviator|colou?r)\\s*predictor|satta\\s*(king|matka|result)|सट्टा|1xbet|betting\\s*(app|id|tips?|site)|online\\s*(betting|casino)|casino\\s*(app|bonus)|rummy\\s*.{0,15}((?<![a-z])earn|kamao|cash|कमाओ)|(gaming|game)\\s*(app\\s*)?(se|से|to\\s*)?.{0,10}((?<![a-z])earn|kamao|kamaye|कमाओ|कमाएं))",
    "सट्टा / betting / \"game से कमाओ\" (भारत में पैसे वाले online game पर रोक है)"
   ],
   [
    "double",
    3,
-   "(\\d+\\s*(k|हजार|hazar|thousand)?\\s*(लगाओ|lagao|lagaiye|लगाइए|invest\\s*karo|डालो|daalo)\\s*.{0,12}\\d+\\s*(k|लाख|lakh|हजार|hazar)?\\s*(पाओ|paao|pao|kamao|कमाओ|milega|मिलेगा|get))|(100\\s*%\\s*(गारंटी|guarantee))",
+   "(\\d+\\s*(k|हजार|hazar|thousand)?\\s*(लगाओ|lagao|lagaiye|लगाइए|invest\\s*karo|डालो|daalo)\\s*.{0,12}\\d+\\s*(k|लाख|lakh|हजार|hazar)?\\s*(पाओ|paao|pao|kamao|कमाओ|milega|मिलेगा|get))",
    "\"इतना लगाओ, इतना पाओ / 100% गारंटी\" — ठगी वाला वादा"
+  ],
+  [
+   "guar",
+   2,
+   "100\\s*%\\s*(गारंटी|guarantee)",
+   "\"100% गारंटी\" — पैसे के मामले में कोई गारंटी नहीं देता"
   ]
  ],
  "caps": "\\b(ED|NIA|NCB|TRAI|CBI|IFSO|DoT|RBI)\\b",
@@ -288,6 +294,7 @@
   "earn": "A promise of \"earn this much daily / from home\"",
   "dm": "\"DM me / link in bio\": pulling you off the platform",
   "bet": "Betting / \"earn from a game\" (real-money online games are banned in India)",
-  "double": "\"Put in this much, get that much / 100% guarantee\": a scam promise"
+  "double": "\"Put in this much, get that much / 100% guarantee\": a scam promise",
+  "guar": "\"100% guarantee\": nobody can guarantee money"
  }
 }

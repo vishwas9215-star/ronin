@@ -152,10 +152,10 @@ html:has(body.light){background:#eef0f4}html:has(body.light.BANKING){background:
 </div>
 <div id="ov"></div>
 <script>
+"use strict";
 // the language of Windows (English on an English laptop, Hindi on a Hindi one), like the Go side
 const HI = (navigator.language || "").toLowerCase().indexOf("hi") === 0;
 const LG = (hi, en) => HI ? hi : en;
-"use strict";
 const $ = s => document.querySelector(s);
 const post = o => window.chrome.webview.postMessage(JSON.stringify(o));
 const CONTAINER = "{{CONTAINER}}";

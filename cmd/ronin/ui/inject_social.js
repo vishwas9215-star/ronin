@@ -101,19 +101,25 @@
   // ---- 1. sponsored posts away (Facebook / Instagram write "Sponsored" in many hidden ways)
   var SPONSOR = /^(sponsored|ad|ads|paidpartnership|प्रायोजित|विज्ञापन|sponsorisé|patrocinado|ప్రాయోజిత|প্রযোজিত|ਸਪਾਂਸਰ ਕੀਤਾ)$/i;
   // the button under an Instagram / Facebook ad (ordinary posts never have one)
-  var CTA = /^(shop now|learn more|install now|install|book now|apply now|order now|buy now|get offer|get quote|sign up|download|play game|use app|open app|अभी खरीदें|और जानें|इंस्टॉल करें)$/i;
+  var CTA = /^(shop now|learn more|install now|book now|apply now|order now|buy now|get offer|get quote|play game|use app|अभी खरीदें|इंस्टॉल करें)$/i;
   function sponsoredIn(el0) {
     if (el0.querySelector("a[href*='/ads/about'],a[href*='ads/about'],[aria-label='Sponsored'],[aria-label='प्रायोजित']")) return true;
-    // the label sits in the post's header, near the top: "Ad" / "Sponsored"
+    // the label sits in the post's header, near the top: "Ad" / "Sponsored" (Facebook hides junk letters
+    // inside it: what is SHOWN, innerText, is checked too)
     var bits = el0.querySelectorAll("span, a");
     for (var i = 0; i < bits.length && i < 80; i++) {
-      var t = (bits[i].textContent || "").replace(/\s+/g, "");
+      var raw = bits[i].textContent || "";
+      if (raw.length > 60) continue;
+      var t = raw.replace(/\s+/g, "");
       if (t.length >= 2 && t.length < 25 && SPONSOR.test(t)) return true;
+      if (raw.length < 60 && SPONSOR.test((bits[i].innerText || "").replace(/\s+/g, ""))) return true;
     }
-    var btns = el0.querySelectorAll("a, [role=button], button");
+    // Instagram / Facebook only: an ad's button is a link that LEAVES the site ("Shop now", "Install now")
+    if (!/instagram\.com$|facebook\.com$/.test(host)) return false;
+    var btns = el0.querySelectorAll("a[href]");
     for (var j = 0; j < btns.length && j < 80; j++) {
       var c = (btns[j].textContent || "").replace(/\s+/g, " ").trim();
-      if (c.length < 20 && CTA.test(c)) return true;
+      if (c.length < 20 && CTA.test(c) && /^https?:\/\/(l\.instagram\.com|l\.facebook\.com|lm\.facebook\.com)\/|^https?:\/\/(?!([a-z0-9-]+\.)*(instagram|facebook)\.com\/)/i.test(btns[j].href)) return true;
     }
     return false;
   }
@@ -123,7 +129,8 @@
     for (var i = 0; i < units.length; i++) {
       var u = units[i];
       // checked again on every change: the "Ad" label and the shop button arrive after the post
-      if (u.__roninAd) continue;
+      // a post is looked at a few times only (its label comes within seconds), then left alone
+      if (u.__roninAd || (u.__roninAdTries = (u.__roninAdTries || 0) + 1) > 6) continue;
       if (sponsoredIn(u)) { u.__roninAd = 1; u.style.setProperty("display", "none", "important"); counts.ads++; }
     }
   }
@@ -208,10 +215,12 @@
     for (var i = 0, n; i < nodes.length && i < 500; i++) {
       n = nodes[i];
       if (n.__roninScam === 2 || n.closest(".ronin-scam,#ronin-soc-warn,.ronin-bar,[contenteditable=true]")) continue;
+      // a caption that opens ("... more") or loads later is checked again; a warned one never twice.
+      // the cheap length first: innerText (it makes the page measure itself) only when the text changed
+      var tl = (n.textContent || "").length;
+      if (n.__roninScamLen === tl) continue;
+      n.__roninScamLen = tl;
       var t = n.innerText || "";
-      // a caption that opens ("... more") or loads later is checked again; a warned one never twice
-      if (n.__roninScamLen === t.length) continue;
-      n.__roninScamLen = t.length;
       if (t.length < 12 || t.length > 4000) continue;
       // the innermost text only: a parent holding the same text was or will be checked once
       if (n.querySelector("div[dir=auto], span[dir=auto]")) continue;

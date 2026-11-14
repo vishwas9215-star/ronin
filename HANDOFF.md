@@ -225,6 +225,10 @@ top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped p
   (not the advert page). Calls: coloured direction chips. Family Filter checked on his phone: ON = adult site
   blocked + Google SafeSearch locked; set back OFF (his setting). Install of the new APK blocked: his phone's
   Android Advanced Protection is ON (I never change it) - he decides.
+- QA review before publish (15 Nov 03:10) found false alarms on normal messages ("कमाल", "learn", "result predictor",
+  "satta" = power, "income tax ghar baithe", "video record ... family", "100% guarantee admission") + CTA hiding
+  normal posts, re-check cost, FB hidden letters, shield polling after onDestroy/onStop, Gmail redirect loop, toolbar
+  strict mode. All fixed; those sentences are now in scam_corpus.json "normal".
 - Still to do before publish: tablet (OnePlus Pad) check when he connects it; he turns on recording Accessibility
   himself if wanted; then he names the version ("हाँ, V3.11.0 publish करो").
 

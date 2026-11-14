@@ -714,7 +714,8 @@ open class MainActivity : AppCompatActivity() {
             }
             if (url == BACK_TO_SAFETY) { leaveDangerPage(tab()); return true }
             // Ronin Mail signed out: Gmail sends you to its advert page; go straight to Google's own sign-in instead
-            if (tab().isSocial && req.isForMainFrame && gmailAdvert(url)) { view.loadUrl(GMAIL_SIGNIN); return true }
+            // once per half minute: if sign-in does not stick, the advert page stays (no loop)
+            if (tab().isSocial && req.isForMainFrame && gmailAdvert(url) && System.currentTimeMillis() - gmailSent > 30_000) { gmailSent = System.currentTimeMillis(); view.loadUrl(GMAIL_SIGNIN); return true }
             if (req.isForMainFrame && Sensitive.site(url) && Parts.adultBlocked(this@MainActivity)) { blockAdult(tab(), url); return true }
             if (req.isForMainFrame && Parts.adultBlocked(this@MainActivity) && Parts.safeSearch(url) != null) { view.loadUrl(Parts.safeSearch(url)!!); return true }
             if (req.isForMainFrame && !tab().isPrivate && Sensitive.site(url)) { openPrivate(url, tab()); return true }
@@ -935,6 +936,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     }
 
     /** The engine's own name without "wv" (Google refuses sign-in in apps that show it). */
+    private var gmailSent = 0L
     private val GMAIL_SIGNIN = "https://accounts.google.com/ServiceLogin?service=mail&continue=https%3A%2F%2Fmail.google.com%2Fmail%2F"
 
     private val phoneUa: String by lazy {
@@ -1413,18 +1415,20 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
 
     override fun onStop() {
         super.onStop()
+        ui.removeCallbacks(shieldTick) // no polling while Ronin is not on screen
         // tabs that do not play are paused to save battery; the playing one goes on
         for (t in tabs) if (t != mediaTab) t.web.onPause()
     }
 
     override fun onStart() {
         super.onStart()
+        if (::socialBar.isInitialized && socialBar.visibility == View.VISIBLE) { ui.removeCallbacks(shieldTick); ui.postDelayed(shieldTick, 1500) }
         for (t in tabs) t.web.onResume()
         kotlin.concurrent.thread(name = "ronin-danger") { app.loadAndRefreshThreats() }
     }
 
     override fun onDestroy() {
-        ui.removeCallbacks(mediaPoll)
+        ui.removeCallbacks(mediaPoll); ui.removeCallbacks(shieldTick)
         if (!isApp && PlayerBridge.control != null && !isChangingConfigurations) PlayerBridge.control = null
         readAloud?.shutdown()
         for (t in tabs) t.web.destroy()
