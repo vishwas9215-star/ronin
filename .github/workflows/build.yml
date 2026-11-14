@@ -1,0 +1,159 @@
+# Builds Ronin for Windows and Android with ONE version (the VERSION file),
+# runs every test (also on an Android emulator), and on a "v*" tag publishes one
+# GitHub release that both apps update from.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Playwright for the UI tests
+        run: |
+          npm install -g playwright@1
+          npx playwright install --with-deps chromium
+      - name: Build + all tests (build.sh)
+        env:
+          GOPROXY: https://proxy.golang.org,direct
+        run: ./build.sh "$(cat VERSION)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            build/Ronin.exe
+            build/RoninSetup.exe
+            build/SHA256SUMS.txt
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Signing key
+        env:
+          RONIN_KEYS_PASS: ${{ secrets.RONIN_KEYS_PASS }}
+        run: |
+          if [ -n "$RONIN_KEYS_PASS" ]; then
+            mkdir -p "$RUNNER_TEMP/keys"
+            printf '%s' "$RONIN_KEYS_PASS" > "$RUNNER_TEMP/keys/pass"
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in keys/ronin-keys.tar.enc -pass "file:$RUNNER_TEMP/keys/pass" | tar -xf - -C "$RUNNER_TEMP/keys"
+            echo "RONIN_KEYSTORE=$RUNNER_TEMP/keys/ronin-android.p12" >> "$GITHUB_ENV"
+            echo "::add-mask::$RONIN_KEYS_PASS"
+            echo "RONIN_KEYSTORE_PASS=$RONIN_KEYS_PASS" >> "$GITHUB_ENV"
+          else
+            echo "::warning::RONIN_KEYS_PASS is not set - the APK is not signed for release"
+          fi
+      - name: Unit tests + APK
+        working-directory: android
+        run: ./gradlew --no-daemon testDebugUnitTest assembleRelease
+      - name: Name the APK
+        run: |
+          mkdir -p out
+          f=$(ls android/app/build/outputs/apk/release/*.apk | head -1)
+          cp "$f" out/Ronin.apk
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: out/Ronin.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-unit-test-report
+          path: android/app/build/reports/tests/
+
+  android-device:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enable KVM (fast emulator)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Device tests on an Android 14 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          working-directory: android
+          script: ./gradlew --no-daemon connectedDebugAndroidTest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-device-test-report
+          path: android/app/build/reports/androidTests/
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, android, android-device]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v4
+        with:
+          path: dl
+      - name: Sign and publish
+        env:
+          RONIN_KEYS_PASS: ${{ secrets.RONIN_KEYS_PASS }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          V="$(cat VERSION)"
+          [ "refs/tags/v$V" = "$GITHUB_REF" ] || { echo "tag does not match VERSION $V"; exit 1; }
+          [ -n "$RONIN_KEYS_PASS" ] || { echo "RONIN_KEYS_PASS secret missing"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/keys" rel
+          printf '%s' "$RONIN_KEYS_PASS" > "$RUNNER_TEMP/keys/pass"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in keys/ronin-keys.tar.enc -pass "file:$RUNNER_TEMP/keys/pass" | tar -xf - -C "$RUNNER_TEMP/keys"
+          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/v$V"
+          cp dl/windows/Ronin.exe dl/windows/RoninSetup.exe dl/android/Ronin.apk rel/
+          go run ./tools/release -version "$V" -exe rel/Ronin.exe -base "$BASE" -key "$RUNNER_TEMP/keys/ronin-release-private.key" -out rel
+          CODE=$(echo "$V" | awk -F. '{print $1*10000+$2*100+$3}')
+          SHA=$(sha256sum rel/Ronin.apk | cut -d' ' -f1)
+          SIZE=$(stat -c %s rel/Ronin.apk)
+          printf '{"versionCode":%s,"versionName":"%s","url":"%s/Ronin.apk","sha256":"%s","size":%s}\n' "$CODE" "$V" "$BASE" "$SHA" "$SIZE" > rel/android.json
+          (cd rel && sha256sum * > SHA256SUMS.txt)
+          rm -rf "$RUNNER_TEMP/keys"
+          gh release create "v$V" rel/* --title "Ronin $V" --notes "Ronin Browser $V for Windows and Android. Windows: RoninSetup.exe (or automatic update). Android phone / tablet: Ronin.apk (or Menu > Check for updates)."

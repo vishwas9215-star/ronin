@@ -2,8 +2,8 @@
 # Builds Ronin.exe and RoninSetup.exe for 64-bit Windows.
 set -e
 cd "$(dirname "$0")"
-VERSION="${1:-3.0.0}"
-export GOOS=windows GOARCH=amd64 CGO_ENABLED=0 GOFLAGS=-mod=mod GOPROXY=off
+VERSION="${1:-$(cat VERSION)}"
+export GOOS=windows GOARCH=amd64 CGO_ENABLED=0 GOFLAGS=-mod=mod GOPROXY="${GOPROXY:-off}"
 
 GOOS= GOARCH= go test ./internal/...
 go vet ./internal/...

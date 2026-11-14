@@ -38,14 +38,13 @@ type filterList struct {
 	min  int // a download with fewer rules is treated as broken and ignored
 }
 
-var filterLists = []filterList{
-	{"adguard-dns", "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt", 10000},
-	{"hagezi-pro", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt", 50000},
-	{"popup-ads", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/popupads.txt", 10000},
-	{"peter-lowe", "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext", 1000},
-	{"malware-filter", "https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-hosts.txt", 100},
-	{"phishing-filter", "https://malware-filter.gitlab.io/malware-filter/phishing-filter-hosts.txt", 100},
-}
+var filterLists = func() []filterList {
+	var out []filterList
+	for _, l := range adblock.Lists { // one list for Windows and Android
+		out = append(out, filterList{l.Name, l.URL, l.Min})
+	}
+	return out
+}()
 
 var blocker atomic.Pointer[adblock.Engine]
 

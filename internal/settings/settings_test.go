@@ -41,7 +41,7 @@ func TestStore(t *testing.T) {
 	}
 	// bad values are corrected
 	st.Update(func(s *Settings) { s.SafeMoneyIdleMins = 999; s.UpdateChannel = "http://insecure" })
-	if g := st.Get(); g.SafeMoneyIdleMins != 5 || g.UpdateChannel != "" {
+	if g := st.Get(); g.SafeMoneyIdleMins != 5 || g.UpdateChannel != DefaultUpdateChannel {
 		t.Fatalf("bad values kept: %+v", g)
 	}
 }

@@ -197,3 +197,12 @@ func IsLinkRedirector(raw string) bool {
 	}
 	return false
 }
+
+// Export gives the site lists to other Ronin apps (Android), so both use the
+// same rules.
+func Export() map[string][]string {
+	return map[string][]string{
+		"bank": bankDomains, "family": familyDomains, "payment": paymentDomains,
+		"auth": authDomains, "trading": tradingDomains, "call": callDomains,
+	}
+}

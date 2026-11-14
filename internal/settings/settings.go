@@ -48,10 +48,13 @@ type Settings struct {
 	NoHistory         bool              `json:"no_history,omitempty"`  // do not keep visited pages
 }
 
+// DefaultUpdateChannel is where Ronin looks for new versions (signed manifest).
+const DefaultUpdateChannel = "https://github.com/vishwas9215-star/ronin/releases/latest/download/manifest.json"
+
 // Defaults are used for a new install.
 func Defaults() Settings {
 	return Settings{HomePage: "ronin://newtab", SafeMoneyIdleMins: 5, AIProvider: "gemini", AIDailyCapRupees: 20,
-		FocusFrom: "18:00", FocusTo: "21:00"}
+		FocusFrom: "18:00", FocusTo: "21:00", UpdateChannel: DefaultUpdateChannel}
 }
 
 // Store loads and saves settings safely from several places.
@@ -81,8 +84,8 @@ func fix(s Settings) Settings {
 	if s.SafeMoneyIdleMins < 1 || s.SafeMoneyIdleMins > 60 {
 		s.SafeMoneyIdleMins = d.SafeMoneyIdleMins
 	}
-	if s.UpdateChannel != "" && !strings.HasPrefix(s.UpdateChannel, "https://") {
-		s.UpdateChannel = ""
+	if s.UpdateChannel == "" || !strings.HasPrefix(s.UpdateChannel, "https://") {
+		s.UpdateChannel = DefaultUpdateChannel // the same GitHub release as Ronin for Android
 	}
 	s.UserBanks = cleanDomains(s.UserBanks)
 	s.TrustedSites = cleanDomains(s.TrustedSites)

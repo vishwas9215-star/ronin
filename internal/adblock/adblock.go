@@ -214,3 +214,39 @@ func (e *Engine) BlockedFrom(rawURL, topHost string) bool {
 	}
 	return false
 }
+
+// Lists are the public filter lists Ronin uses (Windows downloads them daily;
+// for Android the build machine turns them into one compact domain file).
+var Lists = []struct {
+	Name, URL string
+	Min       int // a download with fewer rules is treated as broken and ignored
+}{
+	{"adguard-dns", "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt", 10000},
+	{"hagezi-pro", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt", 50000},
+	{"popup-ads", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/popupads.txt", 10000},
+	{"peter-lowe", "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext", 1000},
+	{"malware-filter", "https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-hosts.txt", 100},
+	{"phishing-filter", "https://malware-filter.gitlab.io/malware-filter/phishing-filter-hosts.txt", 100},
+}
+
+// Snapshot returns the engine's rules for other Ronin apps (Android).
+func (e *Engine) Snapshot() (block, allow []string) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	for d := range e.block {
+		block = append(block, d)
+	}
+	for d := range e.allow {
+		allow = append(allow, d)
+	}
+	return block, allow
+}
+
+// Extra returns the rules that are not plain domains: "advert inside another
+// site" domains and blocked paths (host, path prefix).
+func Extra() (thirdParty []string, paths [][2]string) {
+	for _, r := range pathRules {
+		paths = append(paths, [2]string{r.host, r.prefix})
+	}
+	return append([]string(nil), thirdPartyBlock...), paths
+}
