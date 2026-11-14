@@ -82,7 +82,7 @@ func writeAssets(dir string) error {
 		return err
 	}
 	// page scripts shared with Windows
-	for _, f := range []string{"inject_adblock.js", "quicklinks.js", "table_export.js"} {
+	for _, f := range []string{"inject_adblock.js", "quicklinks.js", "table_export.js", "merge.js", "merge.html"} {
 		src, err := os.ReadFile(filepath.Join("cmd", "ronin", "ui", f))
 		if err != nil {
 			return err

@@ -301,13 +301,40 @@ class DeviceTest {
         }
     }
 
-    private fun recentDownloads(since: Long): List<Pair<String, Long>> {
+    @Test
+    fun mergePageJoinsTwoPortalsIntoExcelAndPdf() {
+        // two small made-up lists, like Prerna and UDISE+ (one child's mother name differs, one child only in Prerna)
+        val prerna = "Sr.No,Student Name,Father Name,Mother Name,Student DOB,Gender\\n1,Asha Devi,Ram Lal,Sita,01/02/2016,Female\\n2,Vinod Kumar,Shyam Lal,Gita,05/06/2015,Male\\n3,Ravi,Mohan,Kamla,07/08/2017,Male\\n"
+        val udise = "S.No.,Student Name,Father's Name,Mother's Name,Date of Birth,Gender\\n1,ASHA DEVI,RAM LAL,SITA,2016-02-01,F\\n2,VINOD KUMAR,SHYAM LAL,GEETA DEVI,2015-06-05,M\\n"
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            sc.onActivity { a -> a.openMergeForTest() }
+            Thread.sleep(2500)
+            shot("10-merge-page")
+            val before = System.currentTimeMillis()
+            eval(sc, "(function(){var dt=new DataTransfer();dt.items.add(new File([\"$prerna\"],'prerna_list.csv',{type:'text/csv'}));" +
+                "dt.items.add(new File([\"$udise\"],'udise_list.csv',{type:'text/csv'}));var i=document.getElementById('pick');i.files=dt.files;" +
+                "i.dispatchEvent(new Event('change'));return 1})()")
+            assertTrue("files not read", waitFor(15) { eval(sc, "document.getElementById('go').disabled") == "false" })
+            shot("11-merge-files")
+            eval(sc, "document.getElementById('go').click(),1")
+            var found = emptyList<Pair<String, Long>>()
+            assertTrue("merged Excel + PDF not saved", waitFor(40) {
+                found = recentDownloads(before, "Prerna + UDISE+")
+                found.any { it.first.endsWith(".xlsx") && it.second > 500 } && found.any { it.first.endsWith(".pdf") && it.second > 500 }
+            })
+            Thread.sleep(800)
+            shot("12-merge-saved")
+        }
+    }
+
+    private fun recentDownloads(since: Long, prefix: String = "Student list test"): List<Pair<String, Long>> {
         if (Build.VERSION.SDK_INT < 29) return emptyList()
         val out = ArrayList<Pair<String, Long>>()
         app.contentResolver.query(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
             arrayOf(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, android.provider.MediaStore.MediaColumns.SIZE, android.provider.MediaStore.MediaColumns.DATE_ADDED),
             null, null, null)?.use { c ->
-            while (c.moveToNext()) if (c.getLong(2) * 1000 >= since - 2000 && c.getString(0).startsWith("Student list test")) out.add(c.getString(0) to c.getLong(1))
+            while (c.moveToNext()) if (c.getLong(2) * 1000 >= since - 2000 && c.getString(0).startsWith(prefix)) out.add(c.getString(0) to c.getLong(1))
         }
         return out
     }

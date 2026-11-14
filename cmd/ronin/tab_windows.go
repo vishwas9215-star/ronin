@@ -49,6 +49,7 @@ type Tab struct {
 	canBack, canFwd bool
 	protect         string // "", "payment", "bank" (Payment Protect reason)
 	isNewTab        bool
+	isMerge         bool              // Ronin's own "डेटा मिलाओ" page
 	userURL         string            // address the user just asked for
 	chainStart      map[uint64]string // first address of each navigation chain
 	chainUser       map[uint64]bool   // whether that chain was started by the user
@@ -217,8 +218,9 @@ func (t *Tab) hookEvents() {
 		t.top.Store(t.url)
 		t.hasVideo = false
 		t.adPaused = store.AdblockPaused(hostOf(t.url))
-		if t.isNewTab && !strings.HasPrefix(t.url, "about:") && !strings.HasPrefix(t.url, "data:") {
+		if !strings.HasPrefix(t.url, "about:") && !strings.HasPrefix(t.url, "data:") {
 			t.isNewTab = false
+			t.isMerge = false
 		}
 		t.pwClearBar()
 		t.applySiteZoom()
@@ -398,6 +400,12 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 	// the page's "Data -> Excel + PDF" button
 	if strings.HasPrefix(uri, "https://ronin.data/") {
 		call(args, nsSetCancel, 1)
+		if u, err := url.Parse(uri); err == nil && u.Path == "/merge" {
+			if u.Query().Get("k") == mergeKey && t.isMerge {
+				runOnUI(func() { t.saveMerge() })
+			}
+			return
+		}
 		if u, err := url.Parse(uri); err == nil && u.Query().Get("k") == dataKey && store.IsDataSite(hostOf(t.url)) {
 			runOnUI(func() { t.exportData() })
 		}

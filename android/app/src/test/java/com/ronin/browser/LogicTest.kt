@@ -118,6 +118,19 @@ class LogicTest {
         assertTrue(rules.quickLinks.any { it.name == "Fyers" && it.section == "Trading" })
     }
 
+    @Test fun mergeResultExcel() {
+        val t = TableExport(File("../../internal/tablexport/testdata/merge.json").readText())
+        assertTrue(t.info.any { it.first.startsWith("अंतर वाले") } && t.legend.any { it.first == "diff" } && t.printCols.isNotEmpty())
+        val kinds = t.rows.indices.mapNotNull { t.rowKind(it) }.toSet()
+        assertTrue("kinds: $kinds", kinds.containsAll(listOf("diff", "only", "dup")))
+        assertTrue(t.printColumns().first.size <= t.printCols.size)
+        val z = java.util.zip.ZipInputStream(t.xlsx().inputStream())
+        val parts = HashMap<String, String>()
+        while (true) { val e = z.nextEntry ?: break; parts[e.name] = z.readBytes().toString(Charsets.UTF_8) }
+        assertTrue(parts["xl/worksheets/sheet1.xml"]!!.contains("s=\"5\"") && parts["xl/worksheets/sheet1.xml"]!!.contains("s=\"6\""))
+        parts.values.forEach { javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(it.byteInputStream()) }
+    }
+
     @Test fun tableExportExcelLikeWindows() {
         val t = TableExport(File("../../internal/tablexport/testdata/result.json").readText())
         assertEquals(21, t.rows.size)

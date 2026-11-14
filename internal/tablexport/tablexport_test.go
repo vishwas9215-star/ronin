@@ -111,3 +111,47 @@ func TestRender(t *testing.T) {
 	_ = os.WriteFile(strings.TrimSuffix(in, ".json")+".xlsx", x, 0o644)
 	_ = os.WriteFile(strings.TrimSuffix(in, ".json")+".html", []byte(d.ReportHTML()), 0o644)
 }
+
+// "डेटा मिलाओ" output (made-up children, from tools/uitest/merge.js): blue / grey marks,
+// its own summary and legend, and a PDF limited to the chosen columns.
+func TestMergeResult(t *testing.T) {
+	b, err := os.ReadFile("testdata/merge.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := Parse(string(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	x, err := d.XLSX()
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, _ := zip.NewReader(bytes.NewReader(x), int64(len(x)))
+	parts := map[string]string{}
+	for _, f := range zr.File {
+		r, _ := f.Open()
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(r)
+		parts[f.Name] = buf.String()
+		if strings.HasSuffix(f.Name, ".xml") {
+			if err := xml.Unmarshal(buf.Bytes(), new(struct{})); err != nil {
+				t.Fatal(f.Name, err)
+			}
+		}
+	}
+	if !strings.Contains(parts["xl/worksheets/sheet1.xml"], `s="5"`) || !strings.Contains(parts["xl/worksheets/sheet1.xml"], `s="6"`) {
+		t.Fatal("blue / grey marks missing")
+	}
+	if !strings.Contains(parts["xl/worksheets/sheet2.xml"], "अंतर वाले बच्चे") || !strings.Contains(parts["xl/worksheets/sheet2.xml"], "नीला") {
+		t.Fatal("merge summary / legend missing")
+	}
+	keep, _ := d.PrintColumns()
+	if len(d.PrintCols) == 0 || len(keep) > len(d.PrintCols) {
+		t.Fatal("print columns not used", keep, d.PrintCols)
+	}
+	h := d.ReportHTML()
+	if !strings.Contains(h, `class="diff"`) || !strings.Contains(h, `class="k only"`) || !strings.Contains(h, "धूसर") {
+		t.Fatal("report marks")
+	}
+}

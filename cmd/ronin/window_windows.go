@@ -436,6 +436,8 @@ func (w *Window) onUIMessage(raw string) {
 		w.panelPending = nil
 	case "panelclose":
 		w.closePanel()
+	case "merge":
+		w.showMerge()
 	case "dataexport":
 		if w.active != nil {
 			w.active.exportData()

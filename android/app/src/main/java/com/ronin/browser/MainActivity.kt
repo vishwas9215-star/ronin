@@ -113,7 +113,10 @@ class MainActivity : AppCompatActivity() {
         if (!text.isNullOrBlank()) go(text.trim().trimEnd('.', '।', '?', '!'))
     }
     private val chooser = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
-        fileCallback?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(r.resultCode, r.data))
+        // several files at once ("डेटा मिलाओ") come as a list
+        val clip = r.data?.clipData
+        val many = if (r.resultCode == RESULT_OK && clip != null && clip.itemCount > 0) Array(clip.itemCount) { clip.getItemAt(it).uri } else null
+        fileCallback?.onReceiveValue(many ?: WebChromeClient.FileChooserParams.parseResult(r.resultCode, r.data))
         fileCallback = null
     }
     private val askMedia = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { res ->
@@ -434,6 +437,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun load(t: Tab, url: String) {
+        if (url == MERGE) {
+            t.url = MERGE
+            t.title = "डेटा मिलाओ"
+            t.web.loadDataWithBaseURL(MERGE, mergeHtml(), "text/html", "utf-8", null)
+            return
+        }
         if (url == HOME) {
             t.url = HOME
             t.web.loadDataWithBaseURL("https://ronin.home/", homeHtml(), "text/html", "utf-8", null)
@@ -499,6 +508,16 @@ class MainActivity : AppCompatActivity() {
             }
             if (url == BACK_TO_SAFETY) { leaveDangerPage(tab()); return true }
             if (url.startsWith("https://ronin.newtab/")) { quickLinkChange(tab(), req.url); return true }
+            if (url.startsWith("https://ronin.data/merge")) {
+                if (req.url.getQueryParameter("k") == mergeKey && view.url?.startsWith(MERGE) == true && !exporting) {
+                    exporting = true
+                    view.evaluateJavascript("window.__roninMerge?window.__roninMerge.result():''") { res ->
+                        val json = jsString(res)
+                        if (json.isEmpty() || json == "null") finishExport(null, "nothing to save") else finishExport(json, null)
+                    }
+                }
+                return true
+            }
             if (url.startsWith("https://ronin.data/")) {
                 val t = tab()
                 if (req.url.getQueryParameter("k") == dataKey && app.store.isDataSite(t.topHost)) exportData(t)
@@ -739,6 +758,13 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
 
     // ---- Data -> Excel + PDF ---------------------------------------------------------------
 
+    /** "डेटा मिलाओ": Ronin's own page that merges several Excel files (Prerna + UDISE+, teachers' forms). */
+    private fun mergeHtml(): String = assets.open("ronin/merge.html").bufferedReader().readText()
+        .replace("{{MERGEJS}}", assets.open("ronin/merge.js").bufferedReader().readText())
+        .replace("{{NONCE}}", pageKey).replace("{{KEY}}", mergeKey).replace("{{DARK}}", if (app.store.night) "1" else "0")
+
+    fun openMergeForTest() = newTab(MERGE)
+
     private val tableJs: String by lazy { assets.open("ronin/table_export.js").bufferedReader().readText() }
     private var exporting = false
 
@@ -799,7 +825,8 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                     exporting = false
                     val c = te.counts
                     AlertDialog.Builder(this).setTitle("📊 Excel + PDF बन गई")
-                        .setMessage((if (te.partial.isNotEmpty()) "⚠ अधूरा / NOT complete: ${te.partial}\n\n" else "") + "${te.rows.size} पंक्तियाँ\nदोहराए: ${(c["dupRows"] ?: 0) + (c["dupNames"] ?: 0)} · मिलते-जुलते नाम: ${c["similar"] ?: 0} · संभावित ग़लतियाँ: ${c["spell"] ?: 0}\n\nDownloads → Ronin में save है।")
+                        .setMessage(if (te.info.isNotEmpty()) te.info.joinToString("\n") { "${it.first}: ${it.second}" }.take(1500) + "\n\nDownloads → Ronin में save है।"
+                            else (if (te.partial.isNotEmpty()) "⚠ अधूरा / NOT complete: ${te.partial}\n\n" else "") + "${te.rows.size} पंक्तियाँ\nदोहराए: ${(c["dupRows"] ?: 0) + (c["dupNames"] ?: 0)} · मिलते-जुलते नाम: ${c["similar"] ?: 0} · संभावित ग़लतियाँ: ${c["spell"] ?: 0}\n\nDownloads → Ronin में save है।")
                         .setPositiveButton("PDF खोलें") { _, _ -> openFile(p, "application/pdf") }
                         .setNeutralButton("Excel खोलें") { _, _ -> openFile(x, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") }
                         .setNegativeButton("ठीक है", null).show()
@@ -978,6 +1005,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                 } else t.web.evaluateJavascript("(function(){var b=document.getElementById('ronin-data-btn');if(b)b.remove()})()", null)
             }
         }
+        items["🔀 डेटा मिलाओ (Prerna + UDISE+ / शिक्षक forms)"] = { newTab(MERGE) }
         items["🛡 Safe sites / ग़लती से रुकी साइटें"] = { showSafeSites() }
         items["🏦 Ronin Safe Money (banking)"] = { startActivity(Intent(this, SafeMoneyActivity::class.java)) }
         items["⟳ Update देखें / Check for updates"] = { Updater.check(this, quiet = false) }
@@ -1079,6 +1107,9 @@ h1{margin:0 0 4px;font-size:24px}p.sub{margin:0 0 6px;opacity:.7}p.note{margin-t
         const val HOME = "ronin://home"
         const val BACK_TO_SAFETY = "https://ronin.home/back"
         const val TRUST_PREFIX = "https://ronin.home/trust"
+        const val MERGE = "https://ronin.home/merge"
+        /** Proves "save the merged table" came from Ronin's own merge page. */
+        val mergeKey: String = java.util.UUID.randomUUID().toString().replace("-", "")
         /** Proves a link came from Ronin's own page (new tab page, red page). New each start. */
         val pageKey: String = java.util.UUID.randomUUID().toString().replace("-", "")
         /** A separate key for the Data button (it sits inside web pages; it can only start an export). */

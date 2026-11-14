@@ -392,6 +392,7 @@ function showMenu(){
     item("Night mode looks wrong on this site? Turn it off here", () => post({cmd:"darkoff", value: true}));
     item("Night mode on this site again", () => post({cmd:"darkoff", value: false}));
   }
+  if (CONTAINER !== "BANKING") item("\uD83D\uDD00 \u0921\u0947\u091f\u093e \u092e\u093f\u0932\u093e\u0913 (Prerna + UDISE+ / \u0936\u093f\u0915\u094d\u0937\u0915 forms)", () => post({cmd:"merge"}));
   if (web && CONTAINER !== "BANKING") {
     item("Save page as PDF   (Ctrl+P)", () => post({cmd:"savepdf"}));
     if (S.dataSite) item("\uD83D\uDCCA Data \u2192 Excel + PDF (\u0907\u0938 page \u0915\u0940 \u092a\u0942\u0930\u0940 table)", () => post({cmd:"dataexport"}));

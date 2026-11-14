@@ -27,6 +27,12 @@ class TableExport(json: String) {
     val counts = HashMap<String, Int>()
     /** Why not every page was read ("page 7 did not load"); empty = complete. */
     val partial: String
+    /** "डेटा मिलाओ" sends its own summary lines, colour legend and the columns for the PDF. */
+    val info: List<Pair<String, String>>
+    private val legendIn: List<Pair<String, String>>
+    val printCols: Set<Int>
+    val printNote: String
+    val legend get() = legendIn.ifEmpty { listOf("dup" to "पीला: दोहराया", "similar" to "नारंगी: spelling जाँचें", "spell" to "लाल: लिखावट में ग़लती") }
 
     init {
         val o = JSONObject(json)
@@ -44,13 +50,17 @@ class TableExport(json: String) {
         }
         ch.optJSONObject("counts")?.let { c -> c.keys().forEach { counts[it] = c.optInt(it) } }
         partial = o.optString("partial")
+        fun pairs(k: String) = o.optJSONArray(k)?.let { a -> (0 until a.length()).map { a.getJSONArray(it).let { p -> p.optString(0) to p.optString(1) } } } ?: emptyList()
+        info = pairs("info"); legendIn = pairs("legend")
+        printCols = o.optJSONArray("printCols")?.let { a -> (0 until a.length()).map { a.getInt(it) }.toSet() } ?: emptySet()
+        printNote = o.optString("printNote")
     }
 
     fun issue(r: Int, c: Int) = issues[r to c]
 
     /** The most important mark in a row (red, orange, yellow) - colours the Check cell. */
     fun rowKind(r: Int): String? {
-        val rank = mapOf("dup" to 1, "dupname" to 1, "similar" to 2, "spell" to 3)
+        val rank = mapOf("dup" to 1, "dupname" to 1, "only" to 2, "similar" to 3, "diff" to 4, "spell" to 5)
         var best: String? = null
         for (c in head.indices) issue(r, c)?.first?.let { if ((rank[it] ?: 0) > (rank[best ?: ""] ?: 0)) best = it }
         return best
@@ -60,6 +70,7 @@ class TableExport(json: String) {
     fun printColumns(): Pair<List<Int>, List<Pair<String, String>>> {
         val keep = ArrayList<Int>(); val same = ArrayList<Pair<String, String>>()
         head.forEachIndexed { c, h ->
+            if (printCols.isNotEmpty() && c !in printCols) return@forEachIndexed
             val first = rows.first().getOrElse(c) { "" }.trim()
             val constant = rows.size > 1 && rows.all { it.getOrElse(c) { "" }.trim() == first }
             if (constant) { if (first.isNotEmpty() && first != "-") same.add(h to first) } else keep.add(c)
@@ -73,7 +84,10 @@ class TableExport(json: String) {
         return out.joinToString("; ")
     }
 
-    fun summary(): List<Pair<String, String>> = listOf(
+    fun summary(): List<Pair<String, String>> = if (info.isNotEmpty()) listOf(
+        "Page / पेज" to title,
+        "Made / बनाया" to SimpleDateFormat("dd-MM-yyyy HH:mm", Locale.US).format(Date()),
+    ) + info else listOf(
         "Page / पेज" to title,
         "Site" to site,
         "Made / बनाया" to SimpleDateFormat("dd-MM-yyyy HH:mm", Locale.US).format(Date()),
@@ -87,7 +101,7 @@ class TableExport(json: String) {
 
     // ---- Excel -------------------------------------------------------------------------
 
-    private fun styleOf(kind: String?) = when (kind) { "dup", "dupname" -> 2; "spell" -> 3; "similar" -> 4; else -> 0 }
+    private fun styleOf(kind: String?) = when (kind) { "dup", "dupname" -> 2; "spell" -> 3; "similar" -> 4; "diff" -> 5; "only" -> 6; else -> 0 }
 
     private fun esc(s: String): String {
         val b = StringBuilder()
@@ -132,9 +146,7 @@ class TableExport(json: String) {
             sum.append("""<row r="$sr"><c r="A$sr" t="inlineStr" s="$style"><is><t>${esc(a)}</t></is></c><c r="B$sr" t="inlineStr"><is><t>${esc(b)}</t></is></c></row>""")
         }
         summary().forEach { line(it.first, it.second, 1) }
-        line("पीला / Yellow", "दोहराई गई पंक्ति या दोहराया नाम", 2)
-        line("नारंगी / Orange", "मिलता-जुलता नाम (शायद एक की spelling ग़लत)", 4)
-        line("लाल / Red", "spelling या लिखावट में ग़लती की संभावना", 3)
+        legend.forEach { line(it.second, "", styleOf(it.first)) }
         sum.append("</sheetData></worksheet>")
 
         val files = linkedMapOf(
@@ -179,7 +191,7 @@ class TableExport(json: String) {
         val widths = FloatArray(cols) { (pw - 2 * m) * weights[it] / total }
         fun layout(s: String, p: TextPaint, w: Float) =
             StaticLayout.Builder.obtain(s, 0, s.length, p, maxOf(10, (w - 6).toInt())).setAlignment(Layout.Alignment.ALIGN_NORMAL).build()
-        fun color(kind: String?) = when (kind) { "dup", "dupname" -> "#FFF2A8"; "spell" -> "#F8B4B4"; "similar" -> "#FFD3A1"; else -> null }
+        fun color(kind: String?) = when (kind) { "dup", "dupname" -> "#FFF2A8"; "spell" -> "#F8B4B4"; "similar" -> "#FFD3A1"; "diff" -> "#BDD7EE"; "only" -> "#DCDCDC"; else -> null }
 
         var pageNo = 0
         var page: PdfDocument.Page? = null
@@ -196,7 +208,8 @@ class TableExport(json: String) {
                 if (pageNo == 1) {
                     val t = layout(title, big, pw - 2 * m); cv.save(); cv.translate(m, y); t.draw(cv); cv.restore(); y += t.height + 4
                     var s = summary().drop(1).joinToString("  ·  ") { "${it.first}: ${it.second}" } +
-                        "\nपीला = दोहराया · नारंगी = spelling जाँचें · लाल = लिखावट में ग़लती. पहले कॉलम \"जाँच\" में हर रंग का कारण लिखा है।"
+                        "\n" + legend.joinToString(" · ") { it.second } + ". पहले कॉलम \"जाँच\" में हर रंग का कारण लिखा है।" +
+                        (if (printNote.isNotEmpty()) "\n$printNote" else "")
                     if (same.isNotEmpty()) s += "\nसभी पंक्तियों में एक जैसा: " + same.joinToString(" · ") { "${it.first}: ${it.second}" }
                     val sl = layout(s, text, pw - 2 * m); cv.save(); cv.translate(m, y); sl.draw(cv); cv.restore(); y += sl.height + 8
                 }
@@ -249,6 +262,6 @@ class TableExport(json: String) {
             return s
         }
 
-        private const val STYLES = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="6"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDDE6F5"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF2A8"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF8B4B4"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFD3A1"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="5" borderId="1" xfId="0" applyFill="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"""
+        private const val STYLES = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="8"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDDE6F5"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF2A8"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF8B4B4"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFD3A1"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFBDD7EE"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDCDCDC"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="7"><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="5" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="6" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="7" borderId="1" xfId="0" applyFill="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"""
     }
 }

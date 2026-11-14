@@ -113,6 +113,9 @@ func (t *Tab) saveData(body string) {
 		w.bar(t, "error", "📊 Excel file नहीं बन सकी: "+err.Error(), nil)
 		return
 	}
+	if t.isMerge {
+		t.title = d.Title // the file is named after what was merged
+	}
 	base := strings.TrimSuffix(pageFileName(t, ".xlsx"), ".xlsx")
 	xlsx := base + ".xlsx"
 	if err := os.WriteFile(xlsx, x, 0o644); err != nil {
@@ -125,8 +128,13 @@ func (t *Tab) saveData(body string) {
 	if d.Partial != "" {
 		note = " ⚠ अधूरा / NOT complete: " + d.Partial + "."
 	}
-	w.bar(t, "ok", fmt.Sprintf("📊 Excel बन गई: %d पंक्तियाँ · दोहराए %d · मिलते-जुलते नाम %d · संभावित ग़लतियाँ %d.%s PDF बन रही है...",
-		len(d.Rows), c["dupRows"]+c["dupNames"], c["similar"], c["spell"], note), nil)
+	if len(d.Info) > 0 {
+		w.bar(t, "ok", fmt.Sprintf("🔀 मिलान की Excel बन गई: %d लोग · अंतर वाले %d · सिर्फ़ एक file में %d · मिलान जाँचें %d. PDF बन रही है...",
+			len(d.Rows), c["diff"], c["only"], c["weak"]), nil)
+	} else {
+		w.bar(t, "ok", fmt.Sprintf("📊 Excel बन गई: %d पंक्तियाँ · दोहराए %d · मिलते-जुलते नाम %d · संभावित ग़लतियाँ %d.%s PDF बन रही है...",
+			len(d.Rows), c["dupRows"]+c["dupNames"], c["similar"], c["spell"], note), nil)
+	}
 
 	// the coloured report opens in a new tab and is printed to PDF from there
 	tmp := filepath.Join(os.TempDir(), "ronin-report-"+fmt.Sprint(time.Now().UnixNano())+".html")

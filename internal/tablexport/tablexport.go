@@ -21,7 +21,14 @@ type Data struct {
 	Rows  [][]string `json:"rows"`
 	// Partial says why not every page could be read ("page 7 did not load"); empty = complete.
 	Partial string `json:"partial"`
-	Check   struct {
+	// Info replaces the standard counts in the summary ("डेटा मिलाओ" sends its own);
+	// Legend replaces the standard colour legend: [kind, text].
+	Info   [][2]string `json:"info"`
+	Legend [][2]string `json:"legend"`
+	// PrintCols limits the PDF to these columns (Excel keeps all); PrintNote says which were left out.
+	PrintCols []int  `json:"printCols"`
+	PrintNote string `json:"printNote"`
+	Check     struct {
 		Cells  [][]any        `json:"cells"` // [row, col, kind, note]
 		Counts map[string]int `json:"counts"`
 	} `json:"check"`
@@ -82,7 +89,7 @@ func (d *Data) RowNotes(iss map[[2]int]Issue, r int) string {
 // rowKind is the most important mark in a row (red, then orange, then yellow), for the Check cell.
 func (d *Data) rowKind(iss map[[2]int]Issue, r int) string {
 	best := ""
-	rank := map[string]int{"": 0, "dup": 1, "dupname": 1, "similar": 2, "spell": 3}
+	rank := map[string]int{"": 0, "dup": 1, "dupname": 1, "only": 2, "similar": 3, "diff": 4, "spell": 5}
 	for c := range d.Head {
 		if k := iss[[2]int{r, c}].Kind; rank[k] > rank[best] {
 			best = k
@@ -91,9 +98,13 @@ func (d *Data) rowKind(iss map[[2]int]Issue, r int) string {
 	return best
 }
 
-// style numbers in styles.xml: 0 normal, 1 header, 2 yellow, 3 red, 4 orange
+// style numbers in styles.xml: 0 normal, 1 header, 2 yellow, 3 red, 4 orange, 5 blue, 6 grey
 func styleOf(kind string) int {
 	switch kind {
+	case "diff":
+		return 5
+	case "only":
+		return 6
 	case "dup", "dupname":
 		return 2
 	case "spell":
@@ -184,9 +195,9 @@ func (d *Data) XLSX() ([]byte, error) {
 	for _, l := range d.SummaryLines() {
 		line(l[0], l[1], 1)
 	}
-	line("पीला / Yellow", "दोहराई गई पंक्ति या दोहराया नाम", 2)
-	line("नारंगी / Orange", "मिलता-जुलता नाम (शायद एक की spelling ग़लत)", 4)
-	line("लाल / Red", "spelling या लिखावट में ग़लती की संभावना", 3)
+	for _, l := range d.legend() {
+		line(l[1], "", styleOf(l[0]))
+	}
 	sum.WriteString(`</sheetData></worksheet>`)
 
 	files := map[string]string{
@@ -194,7 +205,7 @@ func (d *Data) XLSX() ([]byte, error) {
 		"_rels/.rels":                `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
 		"xl/workbook.xml":            `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Data" sheetId="1" r:id="rId1"/><sheet name="Summary" sheetId="2" r:id="rId2"/></sheets><definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">Data!$A$1:$` + colName(ncol) + `$` + fmt.Sprint(len(d.Rows)+1) + `</definedName></definedNames></workbook>`,
 		"xl/_rels/workbook.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
-		"xl/styles.xml":              `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="6"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDDE6F5"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF2A8"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF8B4B4"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFD3A1"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="5" borderId="1" xfId="0" applyFill="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`,
+		"xl/styles.xml":              `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="8"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDDE6F5"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF2A8"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF8B4B4"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFD3A1"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFBDD7EE"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDCDCDC"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="7"><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="5" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="6" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="7" borderId="1" xfId="0" applyFill="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`,
 		"xl/worksheets/sheet1.xml":   sheet.String(),
 		"xl/worksheets/sheet2.xml":   sum.String(),
 	}
@@ -217,6 +228,10 @@ func (d *Data) XLSX() ([]byte, error) {
 
 // SummaryLines are the counts in Hindi and English.
 func (d *Data) SummaryLines() [][2]string {
+	if len(d.Info) > 0 {
+		out := [][2]string{{"Page / पेज", d.Title}, {"Made / बनाया", time.Now().Format("02-01-2006 15:04")}}
+		return append(out, d.Info...)
+	}
 	c := d.Check.Counts
 	return [][2]string{
 		{"Page / पेज", d.Title},
@@ -229,6 +244,14 @@ func (d *Data) SummaryLines() [][2]string {
 		{"Possible spelling mistakes / संभावित ग़लतियाँ", fmt.Sprint(c["spell"])},
 		{"Complete / पूरा", completeText(d.Partial)},
 	}
+}
+
+// legend is [kind, text] for every colour used.
+func (d *Data) legend() [][2]string {
+	if len(d.Legend) > 0 {
+		return d.Legend
+	}
+	return [][2]string{{"dup", "पीला: दोहराया"}, {"similar", "नारंगी: spelling जाँचें"}, {"spell", "लाल: लिखावट में ग़लती"}}
 }
 
 func completeText(partial string) string {
@@ -262,7 +285,14 @@ func number(v string) bool {
 // every row (status texts like "verified", empty action columns) is printed once
 // above the table instead of on every row.
 func (d *Data) PrintColumns() (keep []int, same [][2]string) {
+	allowed := map[int]bool{}
+	for _, c := range d.PrintCols {
+		allowed[c] = true
+	}
 	for c, h := range d.Head {
+		if len(allowed) > 0 && !allowed[c] {
+			continue
+		}
 		first, constant := "", true
 		for i, r := range d.Rows {
 			v := ""
@@ -319,7 +349,7 @@ body{font:9px "Segoe UI","Nirmala UI","Noto Sans Devanagari",sans-serif;color:#1
 h1{font-size:15px;margin:0 0 3px}.s{color:#333;margin:0 0 4px}table{border-collapse:collapse;width:100%;table-layout:fixed}
 th,td{border:1px solid #999;padding:2px 3px;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}
 th{background:#dde6f5;font-size:8.5px}tr{page-break-inside:avoid}thead{display:table-header-group}
-.dup,.dupname{background:#fff2a8}.spell{background:#f8b4b4}.similar{background:#ffd3a1}.k{font-size:8.5px}
+.dup,.dupname{background:#fff2a8}.spell{background:#f8b4b4}.similar{background:#ffd3a1}.diff{background:#bdd7ee}.only{background:#dcdcdc}.k{font-size:8.5px}
 .legend span{display:inline-block;padding:1px 6px;margin-right:6px;border:1px solid #999}</style></head><body>`)
 	b.WriteString(`<h1>` + html.EscapeString(d.Title) + `</h1><p class="s">`)
 	for i, l := range d.SummaryLines()[1:] {
@@ -331,7 +361,14 @@ th{background:#dde6f5;font-size:8.5px}tr{page-break-inside:avoid}thead{display:t
 	if d.Partial != "" {
 		b.WriteString(`</p><p style="color:#b91c1c;font-weight:bold">` + html.EscapeString(completeText(d.Partial)))
 	}
-	b.WriteString(`</p><p class="legend"><span class="dup">पीला: दोहराया</span><span class="similar">नारंगी: spelling जाँचें</span><span class="spell">लाल: लिखावट में ग़लती</span> &nbsp;पहले कॉलम "जाँच" में हर रंग का कारण लिखा है।</p>`)
+	b.WriteString(`</p><p class="legend">`)
+	for _, l := range d.legend() {
+		b.WriteString(`<span class="` + html.EscapeString(l[0]) + `">` + html.EscapeString(l[1]) + `</span>`)
+	}
+	b.WriteString(` &nbsp;पहले कॉलम "जाँच" में हर रंग का कारण लिखा है।</p>`)
+	if d.PrintNote != "" {
+		b.WriteString(`<p class="s">` + html.EscapeString(d.PrintNote) + `</p>`)
+	}
 	if len(same) > 0 {
 		b.WriteString(`<p class="s">सभी पंक्तियों में एक जैसा / same in every row: `)
 		for i, x := range same {
