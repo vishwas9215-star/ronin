@@ -391,39 +391,52 @@ T.pdfsmall = {
       const f = list.files[0];
       const limit = st.kb * 1024;
       if (f.size <= limit) { msg('यह PDF पहले से ' + kb(f.size) + ' की है, छोटी करने की ज़रूरत नहीं।'); return; }
+      const orig = new Uint8Array(await f.arrayBuffer());
+      const done = async (bytes, how) => {
+        await save(baseName(f.name) + ' (' + kb(bytes.length).replace(' ', '') + ').pdf', 'application/pdf', bytes);
+        msg('✔ बन गई: ' + kb(f.size) + ' → ' + kb(bytes.length) + '। Downloads में save है।\n' + how);
+      };
+      // 1. the same PDF written more tightly: nothing changes
+      let lib = null;
+      try { lib = await PDFDocument.load(orig, { updateMetadata: false }); } catch (e) { /* locked or odd: pictures below */ }
+      if (lib) {
+        const tight = await lib.save({ useObjectStreams: true });
+        if (tight.length <= limit) return done(tight, 'अक्षर और photo पहले जैसे साफ़ हैं।');
+        // 2. only the photos inside (scans) made lighter: the writing stays sharp
+        msg('PDF के अंदर की photos छोटी कर रहा हूँ...');
+        const lighter = await shrinkImages(orig, limit);
+        if (lighter) return done(lighter, 'अक्षर पहले जैसे हैं, अंदर की photos हल्की की गई हैं।');
+      }
+      // 3. every page becomes a picture, only as far as it stays readable
       const doc = await openPdf(f);
       const n = doc.numPages;
-      let best = null;
-      let usedScale = 0;
-      for (const scale of [2, 1.6, 1.3, 1.1, 0.9, 0.75, 0.6, 0.5, 0.42, 0.35, 0.3]) {
+      let smallest = 0;
+      for (const scale of [2, 1.6, 1.3, 1.15]) { // smaller than this, small letters stop being readable
         msg('पेज बना रहा हूँ... (' + n + ' पेज)');
         const pages = [];
         for (let i = 1; i <= n; i++) pages.push(await renderPage(doc, i, scale));
-        // overhead of the PDF itself, then the quality that fits
         const per = Math.max(1, (limit - 2000 - n * 400) / n);
-        let lo = 0.15, hi = 0.9, fit = null;
+        let lo = 0.25, hi = 0.9, fit = null, low = 0;
         for (let k = 0; k < 7; k++) {
           const qy = (lo + hi) / 2;
           const jp = [];
           let tot = 0;
           for (const p of pages) { const b = await canvasBytes(p.canvas, 'image/jpeg', qy); jp.push(b); tot += b.length; }
-          if (tot <= per * n) { fit = { jp, qy }; lo = qy; } else hi = qy;
+          if (tot <= per * n) { fit = { jp, qy }; lo = qy; } else { hi = qy; low = tot; }
         }
+        smallest = low;
         if (fit) {
           const out = await PDFDocument.create();
           for (let i = 0; i < n; i++) {
             const img = await out.embedJpg(fit.jp[i]);
-            const pg = out.addPage([pages[i].w, pages[i].h]);
-            pg.drawImage(img, { x: 0, y: 0, width: pages[i].w, height: pages[i].h });
+            out.addPage([pages[i].w, pages[i].h]).drawImage(img, { x: 0, y: 0, width: pages[i].w, height: pages[i].h });
           }
-          best = await out.save({ useObjectStreams: true });
-          usedScale = scale;
-          if (best.length <= limit) break;
+          const bytes = await out.save({ useObjectStreams: true });
+          if (bytes.length <= limit) return done(bytes, 'ध्यान दें: अब PDF के अक्षर photo जैसे हैं (copy नहीं होंगे); खोलकर देख लें कि साफ़ पढ़े जा रहे हैं।');
         }
       }
-      if (!best || best.length > limit) throw new Error('इतनी छोटी नहीं बन सकती (' + n + ' पेज हैं)। थोड़ा बड़ा KB चुनें या पेज कम करें।');
-      await save(baseName(f.name) + ' (' + kb(best.length).replace(' ', '') + ').pdf', 'application/pdf', best);
-      msg('✔ बन गई: ' + kb(f.size) + ' → ' + kb(best.length) + '। Downloads में save है।' + (usedScale < 0.75 ? '\n⚠ इतने कम KB में अक्षर थोड़े धुंधले हैं: खोलकर देख लें, पढ़ने में दिक़्क़त हो तो थोड़ा बड़ा KB चुनें।' : '') + '\nध्यान दें: अब PDF के अक्षर photo जैसे हैं (copy नहीं होंगे), पढ़ने और upload में कोई फ़र्क़ नहीं।');
+      const need = Math.ceil((smallest + 2000 + n * 400) / 1024 / 50) * 50;
+      throw new Error(st.kb + ' KB में यह PDF (' + n + ' पेज) पढ़ने लायक नहीं बन सकती: अक्षर धुंधले हो जाते। लगभग ' + need + ' KB तक साफ़ बनेगी। या "📄 पेज चुनो / हटाओ" से ज़रूरी पेज ही रखें।');
     });
     const list = fileList('application/pdf,.pdf', false, fs => { run.disabled = !fs.length; });
     body.append(list, sizePicker(st, 200), run);
@@ -451,6 +464,47 @@ T.merge = {
     body.append(list, run);
   },
 };
+
+// make the photos inside a PDF (JPEG scans) lighter until the file fits; the text is not touched
+async function shrinkImages(orig, limit) {
+  const { PDFName, PDFNumber, PDFRawStream } = window.PDFLib;
+  for (const [maxSide, q0] of [[2000, 0.75], [1600, 0.6], [1400, 0.5], [1200, 0.42], [1100, 0.35], [1000, 0.3]]) { // below ~1000 px a scanned page is hard to read
+    const doc = await PDFDocument.load(orig, { updateMetadata: false });
+    let changed = 0;
+    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+      if (!(obj instanceof PDFRawStream)) continue;
+      const d = obj.dict;
+      if (d.get(PDFName.of('Subtype')) !== PDFName.of('Image')) continue;
+      const filter = d.get(PDFName.of('Filter'));
+      if (filter !== PDFName.of('DCTDecode')) continue; // only plain JPEG pictures
+      if (obj.contents.length < 20000) continue;
+      try {
+        const img = new Image();
+        const url = URL.createObjectURL(new Blob([obj.contents], { type: 'image/jpeg' }));
+        img.src = url;
+        await img.decode();
+        URL.revokeObjectURL(url);
+        const c = scaled(img, maxSide);
+        const jpg = await canvasBytes(c, 'image/jpeg', q0);
+        if (jpg.length >= obj.contents.length) continue;
+        const nd = d.clone(doc.context);
+        nd.set(PDFName.of('Width'), PDFNumber.of(c.width));
+        nd.set(PDFName.of('Height'), PDFNumber.of(c.height));
+        nd.set(PDFName.of('ColorSpace'), PDFName.of('DeviceRGB'));
+        nd.set(PDFName.of('BitsPerComponent'), PDFNumber.of(8));
+        nd.delete(PDFName.of('Decode'));
+        nd.delete(PDFName.of('DecodeParms'));
+        nd.set(PDFName.of('Length'), PDFNumber.of(jpg.length));
+        doc.context.assign(ref, PDFRawStream.of(nd, jpg));
+        changed++;
+      } catch (e) { /* a picture the browser cannot read stays as it is */ }
+    }
+    if (!changed) return null;
+    const bytes = await doc.save({ useObjectStreams: true });
+    if (bytes.length <= limit) return bytes;
+  }
+  return null;
+}
 
 async function addPhotoPage(out, f, mode) {
   const img = await loadImage(f);

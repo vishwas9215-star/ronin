@@ -38,10 +38,13 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   await p.goto('https://ronin.home/tools/'); await p.waitForSelector('.tile');
   await p.screenshot({ path: path.join(out, 'tools-home.png'), fullPage: true });
 
-  await tool('pdfsmall'); await choose(['report.pdf']); await chip('200 KB'); r = await run(120000);
-  if (!r.size || r.size > 200 * 1024 || r.pages !== 6) bad('PDF smaller: ' + JSON.stringify(r));
-  await tool('pdfsmall'); await choose(['report.pdf']); await chip('50 KB'); r = await run(120000);
-  if (!r.size || r.size > 50 * 1024 || r.pages !== 6) bad('PDF smaller 50: ' + JSON.stringify(r));
+  await tool('pdfsmall'); await choose(['report.pdf']); await chip('500 KB'); r = await run(120000);
+  if (!r.size || r.size > 500 * 1024 || r.pages !== 6) bad('PDF smaller: ' + JSON.stringify(r));
+  if (!/अक्षर पहले जैसे/.test(r.msg)) bad('scanned PDF should keep its writing: ' + r.msg);
+  await tool('pdfsmall'); await choose(['report.pdf']); await chip('20 KB'); r = await run(120000);
+  if (r.size || !/पढ़ने लायक नहीं बन सकती.*लगभग \d+ KB/.test(r.msg)) bad('too small should be refused with the readable size: ' + JSON.stringify(r));
+  await tool('pdfsmall'); await choose(['textonly.pdf']); await chip('200 KB'); r = await run(120000);
+  if (!r.size || r.size > 200 * 1024 || !/photo जैसे/.test(r.msg)) bad('text PDF to pictures: ' + JSON.stringify(r));
 
   await tool('merge'); await choose(['report.pdf', 'photo1.jpg', 'report.pdf']); r = await run();
   if (r.pages !== 13) bad('merge: ' + JSON.stringify(r));

@@ -21,7 +21,9 @@ for i in range(6):
     p = Image.new("RGB", (1240, 1754), "white")
     d = ImageDraw.Draw(p)
     d.text((100, 80), "Test page %d" % (i + 1), fill="black")
-    p.paste(photo(1000, 1200, i), (120, 300))
+    for k in range(60):  # like a scanned letter: lines of writing and a small photo
+        d.text((100, 140 + k * 26), " ".join("word%d" % random.randrange(1000) for _ in range(14)), fill=(30, 30, 30))
+    p.paste(photo(300, 360, i), (850, 1300))
     pages.append(p)
 pages[0].save(os.path.join(out, "report.pdf"), save_all=True, append_images=pages[1:], resolution=150, quality=95)
 pdf = pikepdf.open(os.path.join(out, "report.pdf"))
@@ -32,3 +34,16 @@ photo(1200, 1200, 9).save(os.path.join(out, "photo3.png"))
 s = Image.new("RGB", (900, 300), "white"); ImageDraw.Draw(s).line([(60, 200), (200, 80), (340, 220), (520, 90), (800, 180)], fill=(20, 20, 90), width=12)
 s.save(os.path.join(out, "sign.jpg"), quality=90)
 print("ok")
+# a typed (not scanned) 3-page PDF with a soft picture stored without JPEG: becomes pictures to fit
+from PIL import ImageFilter  # noqa: E402
+from reportlab.pdfgen import canvas as rc  # noqa: E402
+from reportlab.lib.utils import ImageReader  # noqa: E402
+soft = Image.effect_noise((700, 700), 90).convert("RGB").filter(ImageFilter.GaussianBlur(2))
+c = rc.Canvas(os.path.join(out, "textonly.pdf"))
+for pg in range(3):
+    for k in range(40):
+        c.drawString(60, 800 - k * 18, "Line %d of page %d: the quick brown fox jumps over the lazy dog" % (k, pg + 1))
+    c.drawImage(ImageReader(soft), 300, 60, 250, 250)
+    c.showPage()
+c.save()
+print(os.path.getsize(os.path.join(out, "textonly.pdf")))

@@ -61,11 +61,26 @@ Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + tes
 - Android UA: "wv" removed (Google sign-in); desktop UA for docs.google.com and web.whatsapp.com; accounts.google.com
   keeps the current one. targetSdk/compileSdk 36, AGP 8.11.1.
 
-## Planned 3.8.0 (owner agreed)
-PDF + photo tools inside Ronin, all offline (no upload): compress to target KB (PDF + photo), merge, extract/split,
-reorder, page numbers, sign, add text/edit, unlock a PDF whose password he knows; photo: add signature, collage
-of 2-3 photos, WhatsApp status (1080x1920) / profile (square) size. Plan: pdf-lib (MIT) + pdf.js (Apache-2.0)
-bundled as a local page for Windows and Android.
+## 3.7.1 (published) / 3.8.0 (built, waiting for "हाँ, V3.8.0 publish करो")
+- 3.7.1: Data export marks: no lowercase mark; child repeated only by name + father/DOB; reason in the first
+  column "जाँच" (colour-prefixed); PDF drops constant columns (owner's Prerna list 29 -> 3 pages).
+- 3.8.0 डेटा मिलाओ (cmd/ronin/ui/merge.js + merge.html; Windows merge_windows.go, Android MERGE page):
+  several Excel/CSV files -> one row per child/teacher. Kinds: diff (blue), only (grey, "form नहीं भरा"),
+  similar (orange, match not sure), dup (yellow, newest form answer used). Google Form files (Timestamp) are
+  separate sources; 2-of-3 agreement -> "शायद सही". PDF input NOT supported (asks for Excel).
+  Data JSON gained info / legend / printCols / printNote (Go tablexport + Kotlin TableExport).
+- 3.8.0 PDF/Photo tools (cmd/ronin/ui/tools/, pdf.js 4.10 legacy + pdf-lib 1.17): https://ronin.home/tools/
+  served from memory (Windows serveTools in WebResourceRequested; Android shouldInterceptRequest from assets).
+  Save hand-over: page -> https://ronin.data/save?k=toolsKey -> native reads window.__roninSave.part(i).
+- Tests: tools/uitest/merge.js (fixtures in tools/uitest/fixtures, made-up), pdftools.js (fixtures from
+  make_tool_fixtures.py), DeviceTest merge + tools self-test.
+- Owner's real Prerna file checked locally only (never committed): fake UDISE with 6 planted changes -> all 6 found.
+
+## Agreed for 3.9 (not started)
+- Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only
+  when he presses it, with a warning that the photo goes to Google.
+- Easy form-link for teachers (big buttons, Hindi, voice), answers into HIS Google Sheet; then डेटा मिलाओ.
+- Declined: auto-answering training quiz Google Forms from the internet. Offered: voice ticking ("दूसरा विकल्प").
 
 ## Later
 Android: VPN, own password vault (tablet now uses Google Password Manager via Android autofill - check it saves on
