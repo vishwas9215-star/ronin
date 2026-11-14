@@ -354,9 +354,12 @@ class DeviceTest {
         Parts.set(app, Parts.MESSAGES, true)
         // (the role stays with Ronin afterwards: taking it away revokes the SMS permissions,
         // and Android then ends Ronin's process, which would end this test run too)
-        shell("cmd role add-role-holder android.app.role.SMS ${app.packageName} 0")
+        // what the owner does once by hand ("Allow restricted settings"), then the SMS role
+        val ops = shell("cmd appops set ${app.packageName} ACCESS_RESTRICTED_SETTINGS allow")
+        Thread.sleep(1000)
+        val out = shell("cmd role add-role-holder android.app.role.SMS ${app.packageName} 0") + shell("cmd role get-role-holders android.app.role.SMS")
         run {
-            assertTrue("Ronin did not become the SMS app", waitFor(10) { SmsStore.isDefault(app) })
+            assertTrue("Ronin did not become the SMS app: $ops | $out", waitFor(15) { SmsStore.isDefault(app) })
             val now = System.currentTimeMillis()
             fun inbox(from: String, body: String) = app.contentResolver.insert(android.provider.Telephony.Sms.Inbox.CONTENT_URI, android.content.ContentValues().apply {
                 put("address", from); put("body", body); put("date", now); put("read", 0); put("type", 1) })
