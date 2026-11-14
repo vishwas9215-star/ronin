@@ -416,6 +416,7 @@ function showMenu(){
   }
   if (CONTAINER === "PERSONAL" || CONTAINER === "TRADING" || CONTAINER === "CALLS") item("History   (Ctrl+H)", () => post({cmd:"history"}));
   if (CONTAINER !== "BANKING" && CONTAINER !== "KIDS") item("\u{1F511} Passwords (saved, import, export)", () => post({cmd:"passwords"}));
+  item("\u27F3 Check for updates (\u0928\u092f\u093e Ronin)", () => post({cmd:"checkupdate"}));
   item("Settings", () => post({cmd:"settings"}));
   item("System health", () => post({cmd:"health"}));
   wrap.appendChild(m); openOv(wrap, true);

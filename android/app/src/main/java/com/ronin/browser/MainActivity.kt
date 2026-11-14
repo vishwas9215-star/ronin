@@ -248,7 +248,21 @@ class MainActivity : AppCompatActivity() {
             addView(tabStrip)
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
-        // "+" is pinned at the right edge, so it never scrolls out of sight
+        // Home (Google) and "+" sit at the left edge, before the tabs, so they never scroll out of sight
+        val homeButton = Button(this).apply {
+            text = "⌂"
+            textSize = 24f
+            contentDescription = "Home: Google"
+            tag = "home"
+            setTextColor(Color.parseColor("#E8EAF0"))
+            setBackgroundColor(Color.TRANSPARENT)
+            minWidth = 0; minimumWidth = 0
+            layoutParams = LinearLayout.LayoutParams(dp(52), dp(50))
+            setOnClickListener {
+                val t = current
+                if (t == null || t.isTools) newTab(GOOGLE) else load(t, GOOGLE)
+            }
+        }
         newTabButton = Button(this).apply {
             text = "+"
             textSize = 24f
@@ -257,7 +271,7 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#E8EAF0"))
             setBackgroundColor(Color.TRANSPARENT)
             minWidth = 0; minimumWidth = 0
-            layoutParams = LinearLayout.LayoutParams(dp(60), dp(50))
+            layoutParams = LinearLayout.LayoutParams(dp(52), dp(50))
             setOnClickListener {
                 newTab(HOME)
                 address.requestFocus()
@@ -282,7 +296,7 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(Color.parseColor("#0E1016"))
-            addView(stripScroll); addView(newTabButton); addView(toolsButton)
+            addView(homeButton); addView(newTabButton); addView(stripScroll); addView(toolsButton)
         }
         root.addView(stripRow)
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -1216,6 +1230,7 @@ h1{margin:0 0 4px;font-size:24px}p.sub{margin:0 0 6px;opacity:.7}p.note{margin-t
         const val BACK_TO_SAFETY = "https://ronin.home/back"
         const val TRUST_PREFIX = "https://ronin.home/trust"
         const val TOOLS = "https://ronin.home/tools/"
+        const val GOOGLE = "https://www.google.com/"
         /** Proves "save this file" came from the tools page. */
         val toolsKey: String = java.util.UUID.randomUUID().toString().replace("-", "")
 

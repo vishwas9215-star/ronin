@@ -196,6 +196,9 @@ class DeviceTest {
                 val strip = a.tabStripForTest()
                 assertEquals(2, strip.childCount)
                 assertTrue("+ is not visible", a.newTabButtonForTest().isShown)
+                val lp = IntArray(2); val lc = IntArray(2)
+                a.newTabButtonForTest().getLocationOnScreen(lp); strip.getChildAt(0).getLocationOnScreen(lc)
+                assertTrue("+ should be on the left of the tabs", lp[0] < lc[0])
             }
         }
     }

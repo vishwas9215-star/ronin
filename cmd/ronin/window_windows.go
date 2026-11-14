@@ -770,6 +770,8 @@ func (w *Window) onUIMessage(raw string) {
 		w.overlay("settings", settingsData())
 	case "restart":
 		restartRonin()
+	case "checkupdate":
+		checkUpdateNow(w)
 	case "vpncheck":
 		openContainer(containers.Private, "https://www.cloudflare.com/cdn-cgi/trace") // private windows always use the VPN
 	case "unlock":

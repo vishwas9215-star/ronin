@@ -133,8 +133,11 @@ func TestDueAndState(t *testing.T) {
 	if !Due(State{}, now) {
 		t.Fatal("first check should be due")
 	}
-	if Due(State{LastCheck: now.Add(-2 * time.Hour)}, now) {
-		t.Fatal("checked 2h ago, not due")
+	if Due(State{LastCheck: now.Add(-20 * time.Minute)}, now) {
+		t.Fatal("checked 20 min ago, not due")
+	}
+	if !Due(State{LastCheck: now.Add(-2 * time.Hour)}, now) {
+		t.Fatal("checked 2h ago: due (checks every hour)")
 	}
 	if !Due(State{LastCheck: now.Add(-25 * time.Hour)}, now) {
 		t.Fatal("checked 25h ago, due")

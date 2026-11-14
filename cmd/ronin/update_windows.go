@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -33,11 +34,59 @@ func backgroundUpdater() {
 			logf("updater panic: %v", r)
 		}
 	}()
-	time.Sleep(90 * time.Second) // let the browser start first
+	time.Sleep(60 * time.Second) // let the browser start first
 	for {
 		checkForUpdate()
-		time.Sleep(time.Hour)
+		time.Sleep(15 * time.Minute)
 	}
+}
+
+// checkUpdateNow is Menu -> "Check for updates": checks at once and says what happened.
+func checkUpdateNow(w *Window) {
+	runOnUI(func() { w.bar(nil, "info", "⟳ नया Ronin देख रहा हूँ... (Checking for updates)", nil) })
+	go func() {
+		channel := store.Get().UpdateChannel
+		if channel == "" {
+			runOnUI(func() { w.bar(nil, "info", "Updates बंद हैं (Settings).", nil) })
+			return
+		}
+		stateMu.Lock()
+		st := updater.LoadState(statePath())
+		stateMu.Unlock()
+		err := tryUpdate(channel, &st)
+		stateMu.Lock()
+		fresh := updater.LoadState(statePath())
+		fresh.LastCheck = time.Now()
+		fresh.AppVersion = Version
+		fresh.PendingNote = st.PendingNote
+		fresh.LastError = ""
+		if err != nil {
+			fresh.LastError = err.Error()
+		}
+		_ = updater.SaveState(statePath(), fresh)
+		stateMu.Unlock()
+		runOnUI(func() {
+			switch {
+			case err != nil:
+				w.bar(nil, "error", "Update नहीं हो सका: "+err.Error(), nil)
+			case st.PendingNote != "":
+				w.bar(nil, "ok", "✔ "+st.PendingNote, []map[string]string{{"label": "अभी Restart करें", "cmd": "restart"}})
+			default:
+				w.bar(nil, "ok", "✔ Ronin "+Version+" सबसे नया है (up to date).", nil)
+			}
+		})
+	}()
+}
+
+// tellRestart shows "new Ronin is ready - Restart" in every window (after a background update).
+func tellRestart(note string) {
+	runOnUI(func() {
+		for _, w := range windowsByHwnd {
+			if !w.closing {
+				w.bar(nil, "ok", "✔ "+note, []map[string]string{{"label": "अभी Restart करें", "cmd": "restart"}})
+			}
+		}
+	})
 }
 
 func checkForUpdate() {
@@ -58,7 +107,11 @@ func checkForUpdate() {
 	if !updater.Due(st, time.Now()) {
 		return
 	}
+	before := st.PendingNote
 	err := tryUpdate(channel, &st)
+	if err == nil && st.PendingNote != "" && st.PendingNote != before {
+		tellRestart(st.PendingNote)
+	}
 	stateMu.Lock()
 	defer stateMu.Unlock()
 	fresh := updater.LoadState(statePath())
@@ -91,7 +144,11 @@ func tryUpdate(channel string, st *updater.State) error {
 		return err
 	}
 	if m.App != "ronin" || !updater.Newer(m.Version, Version) {
+		st.PendingNote = ""
 		return nil
+	}
+	if strings.Contains(st.PendingNote, " "+m.Version+" ") {
+		return nil // already installed, waiting for a restart
 	}
 	exe, err := os.Executable()
 	if err != nil {
@@ -111,7 +168,7 @@ func tryUpdate(channel string, st *updater.State) error {
 			return err
 		}
 	}
-	st.PendingNote = fmt.Sprintf("Ronin %s is installed. It starts the next time you open Ronin.", m.Version)
+	st.PendingNote = fmt.Sprintf("नया Ronin %s आ गया (installed). Restart करते ही खुल जाएगा, आपके tabs वैसे ही रहेंगे।", m.Version)
 	logf("updated to %s", m.Version)
 	return nil
 }
