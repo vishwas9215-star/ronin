@@ -116,4 +116,21 @@ class LogicTest {
         assertTrue(rules.quickLinks.any { it.name == "UDISE+ All Modules" && it.section == "School" })
         assertTrue(rules.quickLinks.any { it.name == "Fyers" && it.section == "Trading" })
     }
+
+    @Test fun tableExportExcelLikeWindows() {
+        val t = TableExport(File("../../internal/tablexport/testdata/result.json").readText())
+        assertEquals(21, t.rows.size)
+        assertEquals("AA", TableExport.colName(26))
+        val x = t.xlsx()
+        val z = java.util.zip.ZipInputStream(x.inputStream())
+        val parts = HashMap<String, String>()
+        while (true) { val e = z.nextEntry ?: break; parts[e.name] = z.readBytes().toString(Charsets.UTF_8) }
+        val sheet = parts["xl/worksheets/sheet1.xml"]!!
+        assertTrue(sheet.contains("Rahul Kumr") && sheet.contains("s=\"4\"") && sheet.contains("s=\"3\"") && sheet.contains("s=\"2\""))
+        assertEquals(22, Regex("<row ").findAll(sheet).count())
+        assertTrue(parts.keys.containsAll(listOf("[Content_Types].xml", "xl/workbook.xml", "xl/styles.xml", "xl/worksheets/sheet2.xml")))
+        // well-formed XML
+        parts.values.forEach { javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(it.byteInputStream()) }
+        java.io.File("build/test-table.xlsx").writeBytes(x)
+    }
 }

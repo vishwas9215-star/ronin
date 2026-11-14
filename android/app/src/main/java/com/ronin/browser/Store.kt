@@ -112,4 +112,24 @@ class Store(ctx: Context) {
         val own = ownLinks()
         if (own.any { it.url == url }) saveOwn(own.filter { it.url != url }) else hiddenLinks = hiddenLinks + url
     }
+
+    // ---- "Data -> Excel + PDF" button: sites where the user switched it on ---------------
+
+    var dataSites: Set<String>
+        get() = p.getStringSet("dataSites", emptySet()) ?: emptySet()
+        set(v) = p.edit().putStringSet("dataSites", v).apply()
+
+    fun isDataSite(host: String): Boolean {
+        val h = host.lowercase().removePrefix("www.")
+        return h.isNotEmpty() && dataSites.any { h == it || h.endsWith(".$it") }
+    }
+
+    /** Switches the Data button on / off for a site; returns the new state. */
+    fun toggleDataSite(host: String): Boolean {
+        val h = host.lowercase().removePrefix("www.")
+        if (h.isEmpty()) return false
+        val on = !isDataSite(h)
+        dataSites = if (on) dataSites + h else dataSites.filter { !(h == it || h.endsWith(".$it")) }.toSet()
+        return on
+    }
 }

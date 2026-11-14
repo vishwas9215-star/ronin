@@ -294,6 +294,7 @@ class MainActivity : AppCompatActivity() {
     private fun makeWebView(t: () -> Tab): RoninWebView {
         val w = RoninWebView(this)
         w.setBackgroundColor(homeBg()) // a new tab opens dark, like its page (no white flash)
+        w.settings.userAgentString = phoneUa
         w.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -406,6 +407,7 @@ class MainActivity : AppCompatActivity() {
     fun tabStripForTest(): LinearLayout = tabStrip
     fun newTabButtonForTest(): View = newTabButton
     fun goHomeForTest() { current?.let { load(it, HOME) } }
+    fun exportDataForTest() { current?.let { exportData(it) } }
 
     private fun showTabs() {
         val names = tabs.map { (if (it == current) "▶ " else "") + it.title.ifBlank { display(it.url) } }.toMutableList()
@@ -432,6 +434,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (openSafeMoneyIfBank(url)) return
+        t.web.settings.userAgentString = uaFor(url)
         t.url = url
         t.topHost = Rules.hostOf(url)
         t.web.loadUrl(url)
@@ -490,7 +493,14 @@ class MainActivity : AppCompatActivity() {
             }
             if (url == BACK_TO_SAFETY) { leaveDangerPage(tab()); return true }
             if (url.startsWith("https://ronin.newtab/")) { quickLinkChange(tab(), req.url); return true }
+            if (url.startsWith("https://ronin.data/")) { if (req.url.getQueryParameter("k") == pageKey) exportData(tab()); return true }
             if (url.startsWith(TRUST_PREFIX)) { trustFromRedPage(tab(), req.url); return true }
+            if (req.isForMainFrame && (scheme == "http" || scheme == "https") && view.settings.userAgentString != uaFor(url)) {
+                // Google Sheets / Docs open as the full (computer) version, other sites as normal
+                view.settings.userAgentString = uaFor(url)
+                view.loadUrl(url)
+                return true
+            }
             if (req.isForMainFrame && (scheme == "http" || scheme == "https")) {
                 // also short links and redirects that end at a dangerous site
                 stopPage(url)?.let { html ->
@@ -530,6 +540,7 @@ class MainActivity : AppCompatActivity() {
             val t = tab()
             t.title = view.title ?: ""
             updateTabsButton()
+            showDataButton(t)
             if (url.startsWith("http") && !url.startsWith("https://ronin.home") && !t.title.startsWith("⛔")) app.store.addHistory(t.title, url)
         }
 
@@ -636,6 +647,22 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
 <a id="back" href="$BACK_TO_SAFETY">वापस जाएँ — Go back</a>$trust</main></body></html>"""
     }
 
+    /** The engine's own name without "wv" (Google refuses sign-in in apps that show it). */
+    private val phoneUa: String by lazy {
+        WebSettings.getDefaultUserAgent(this).replace("; wv", "").replace(Regex("Version/\\d+(\\.\\d+)* "), "")
+    }
+
+    /** Google Sheets / Docs on a phone or tablet are view-only; the computer version lets you fill them. */
+    private val desktopUa: String by lazy {
+        val ver = Regex("Chrome/([\\d.]+)").find(phoneUa)?.groupValues?.get(1) ?: "130.0.0.0"
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$ver Safari/537.36"
+    }
+
+    fun uaFor(url: String): String {
+        val h = Rules.hostOf(url)
+        return if (h == "docs.google.com" || h.endsWith(".docs.google.com")) desktopUa else phoneUa
+    }
+
     private fun homeBg() = Color.parseColor(if (app.store.night) "#14171F" else "#EEF0F4")
 
     /** "I know this site" on the fake-bank page: only from Ronin's own page (key), and only after a question. */
@@ -681,6 +708,103 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             val d = Rules.hostOf(if (txt.contains("://")) txt else "https://$txt").removePrefix("www.")
             if (d.contains('.')) app.store.trustedSites = app.store.trustedSites + d
         }.setNegativeButton("Close", null).show()
+    }
+
+    // ---- Data -> Excel + PDF ---------------------------------------------------------------
+
+    private val tableJs: String by lazy { assets.open("ronin/table_export.js").bufferedReader().readText() }
+    private var exporting = false
+
+    /** The green "Excel + PDF" button on sites where the user switched it on. */
+    private fun showDataButton(t: Tab) {
+        if (!t.url.startsWith("http") || !app.store.isDataSite(t.topHost)) return
+        t.web.evaluateJavascript("(function(){if(document.getElementById('ronin-data-btn')||!document.body)return;var b=document.createElement('button');" +
+            "b.id='ronin-data-btn';b.textContent='\uD83D\uDCCA Excel + PDF';" +
+            "b.style.cssText='position:fixed;right:16px;bottom:16px;z-index:2147483647;min-height:52px;padding:0 22px;border-radius:26px;border:0;background:#16a34a;color:#fff;font:600 17px sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.35)';" +
+            "b.onclick=function(){location.href='https://ronin.data/go?k=$pageKey'};document.body.appendChild(b);})()", null)
+    }
+
+    private fun jsString(raw: String?): String = try { JSONArray("[$raw]").getString(0) } catch (e: Exception) { "" }
+
+    /** Reads every page of the biggest table, then saves Excel + PDF in Downloads/Ronin. */
+    fun exportData(t: Tab) {
+        if (exporting) return
+        exporting = true
+        Toast.makeText(this, "📊 Table पढ़ रहा हूँ... (Reading the table)", Toast.LENGTH_SHORT).show()
+        val started = System.currentTimeMillis()
+        t.web.evaluateJavascript("$tableJs;window.__roninTable.start()") {
+            val poll = object : Runnable {
+                override fun run() {
+                    t.web.evaluateJavascript("window.__roninTable?window.__roninTable.state():''") { raw ->
+                        val st = try { JSONObject(jsString(raw)) } catch (e: Exception) { JSONObject() }
+                        when (st.optString("phase")) {
+                            "reading" -> if (System.currentTimeMillis() - started < 15 * 60_000) {
+                                readNote.text = "📊 पेज ${st.optInt("page")} · ${st.optInt("rows")} पंक्तियाँ"
+                                readBar.visibility = View.VISIBLE
+                                ui.postDelayed(this, 600)
+                            } else finishExport(null, "बहुत देर लगी / took too long")
+                            "done" -> t.web.evaluateJavascript("window.__roninTable.result()") { res -> finishExport(jsString(res), null) }
+                            else -> finishExport(null, st.optString("error").ifEmpty { "No table found on this page." })
+                        }
+                    }
+                }
+            }
+            poll.run()
+        }
+    }
+
+    private fun finishExport(json: String?, error: String?) {
+        readBar.visibility = View.GONE
+        if (json == null) {
+            exporting = false
+            Toast.makeText(this, "📊 Table नहीं मिली / could not read the table: $error", Toast.LENGTH_LONG).show(); return
+        }
+        kotlin.concurrent.thread(name = "ronin-export") {
+            try {
+                val te = TableExport(json)
+                val base = (te.title.ifBlank { te.site }).replace(Regex("[\\\\/:*?\"<>|]+"), " ").trim().take(60).ifEmpty { "Table" } +
+                    " " + java.text.SimpleDateFormat("yyyy-MM-dd HH.mm", java.util.Locale.US).format(java.util.Date())
+                val x = saveToDownloads("$base.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", te.xlsx())
+                val p = saveToDownloads("$base.pdf", "application/pdf", te.pdf())
+                runOnUiThread {
+                    exporting = false
+                    val c = te.counts
+                    AlertDialog.Builder(this).setTitle("📊 Excel + PDF बन गई")
+                        .setMessage("${te.rows.size} पंक्तियाँ\nदोहराए: ${(c["dupRows"] ?: 0) + (c["dupNames"] ?: 0)} · मिलते-जुलते नाम: ${c["similar"] ?: 0} · संभावित ग़लतियाँ: ${c["spell"] ?: 0}\n\nDownloads → Ronin में save है।")
+                        .setPositiveButton("PDF खोलें") { _, _ -> openFile(p, "application/pdf") }
+                        .setNeutralButton("Excel खोलें") { _, _ -> openFile(x, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") }
+                        .setNegativeButton("ठीक है", null).show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread { exporting = false; Toast.makeText(this, "📊 File नहीं बन सकी: ${e.message}", Toast.LENGTH_LONG).show() }
+            }
+        }
+    }
+
+    /** Saves a file in Downloads/Ronin (visible in the Files app). */
+    private fun saveToDownloads(name: String, mime: String, bytes: ByteArray): Uri? {
+        if (Build.VERSION.SDK_INT >= 29) {
+            val cv = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/Ronin")
+            }
+            val uri = contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv) ?: return null
+            contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+            return uri
+        }
+        val f = java.io.File(getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS), name)
+        f.writeBytes(bytes)
+        return androidx.core.content.FileProvider.getUriForFile(this, "$packageName.files", f)
+    }
+
+    private fun openFile(uri: Uri?, mime: String) {
+        if (uri == null) return
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(this, "इसे खोलने वाला app नहीं मिला (Downloads → Ronin में file है)", Toast.LENGTH_LONG).show()
+        }
     }
 
     // ---- downloads ----------------------------------------------------------------------
@@ -807,6 +931,16 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         if (web) items["This is my bank (open in Safe Money)"] = {
             val h = t!!.topHost.removePrefix("www.")
             if (h.isNotEmpty()) { app.store.userBanks = app.store.userBanks + h; load(t, t.url) }
+        }
+        if (web) {
+            val on = app.store.isDataSite(t!!.topHost)
+            if (on) items["📊 Data → Excel + PDF (इस page की पूरी table)"] = { exportData(t) }
+            items[if (on) "📊 Data बटन इस साइट पर बंद करें" else "📊 Data बटन इस साइट पर चालू करें (Excel + PDF)"] = {
+                if (app.store.toggleDataSite(t.topHost)) {
+                    Toast.makeText(this, "📊 Data बटन चालू: page के नीचे दाईं ओर हरा बटन", Toast.LENGTH_LONG).show()
+                    showDataButton(t)
+                } else t.web.evaluateJavascript("(function(){var b=document.getElementById('ronin-data-btn');if(b)b.remove()})()", null)
+            }
         }
         items["🛡 Safe sites (stopped by mistake)"] = { showSafeSites() }
         items["Ronin Safe Money (banking)"] = { startActivity(Intent(this, SafeMoneyActivity::class.java)) }

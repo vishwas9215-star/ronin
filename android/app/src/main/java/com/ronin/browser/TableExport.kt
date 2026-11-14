@@ -1,0 +1,207 @@
+package com.ronin.browser
+
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.pdf.PdfDocument
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
+
+/**
+ * "Data -> Excel + PDF" (same as Ronin for Windows, internal/tablexport): the table read by
+ * table_export.js becomes an Excel file and a coloured PDF report.
+ */
+class TableExport(json: String) {
+    val title: String
+    val site: String
+    val head: List<String>
+    val rows: List<List<String>>
+    private val issues = HashMap<Pair<Int, Int>, Pair<String, String>>()
+    val counts = HashMap<String, Int>()
+
+    init {
+        val o = JSONObject(json)
+        title = o.optString("title")
+        site = o.optString("site")
+        head = o.getJSONArray("head").let { a -> (0 until a.length()).map { a.getString(it) } }
+        rows = o.getJSONArray("rows").let { a -> (0 until a.length()).map { i -> a.getJSONArray(i).let { r -> (0 until r.length()).map { r.optString(it) } } } }
+        require(rows.isNotEmpty()) { "the table is empty" }
+        val ch = o.optJSONObject("check") ?: JSONObject()
+        ch.optJSONArray("cells")?.let { a ->
+            for (i in 0 until a.length()) {
+                val c = a.getJSONArray(i)
+                issues[c.getInt(0) to c.getInt(1)] = c.getString(2) to c.getString(3)
+            }
+        }
+        ch.optJSONObject("counts")?.let { c -> c.keys().forEach { counts[it] = c.optInt(it) } }
+    }
+
+    fun issue(r: Int, c: Int) = issues[r to c]
+
+    fun rowNotes(r: Int): String {
+        val out = LinkedHashSet<String>()
+        for (c in head.indices) issue(r, c)?.let { (kind, note) -> out.add(if (kind != "dup" && head[c].isNotEmpty()) "${head[c]}: $note" else note) }
+        return out.joinToString("; ")
+    }
+
+    fun summary(): List<Pair<String, String>> = listOf(
+        "Page / पेज" to title,
+        "Site" to site,
+        "Made / बनाया" to SimpleDateFormat("dd-MM-yyyy HH:mm", Locale.US).format(Date()),
+        "Rows / कुल पंक्तियाँ" to rows.size.toString(),
+        "Repeated rows / दोहराई पंक्तियाँ" to (counts["dupRows"] ?: 0).toString(),
+        "Repeated names / दोहराए नाम" to (counts["dupNames"] ?: 0).toString(),
+        "Look-alike names / मिलते-जुलते नाम" to (counts["similar"] ?: 0).toString(),
+        "Possible spelling mistakes / संभावित ग़लतियाँ" to (counts["spell"] ?: 0).toString(),
+    )
+
+    // ---- Excel -------------------------------------------------------------------------
+
+    private fun styleOf(kind: String?) = when (kind) { "dup", "dupname" -> 2; "spell" -> 3; "similar" -> 4; else -> 0 }
+
+    private fun esc(s: String): String {
+        val b = StringBuilder()
+        for (ch in s) {
+            when {
+                ch == '&' -> b.append("&amp;"); ch == '<' -> b.append("&lt;"); ch == '>' -> b.append("&gt;")
+                ch == '"' -> b.append("&quot;")
+                ch == '\t' || ch == '\n' || ch == '\r' || ch.code >= 0x20 -> b.append(ch)
+            }
+        }
+        return b.toString()
+    }
+
+    fun xlsx(): ByteArray {
+        val n = head.size
+        val sh = StringBuilder("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>""")
+        for (c in 0..n) {
+            var w = if (c == n) 50 else 14
+            if (c < n) rows.forEach { r -> if (c < r.size && r[c].length + 2 > w) w = r[c].length + 2 }
+            if (w > 60) w = 60
+            sh.append("""<col min="${c + 1}" max="${c + 1}" width="$w" customWidth="1"/>""")
+        }
+        sh.append("</cols><sheetData>")
+        fun cell(row: Int, col: Int, style: Int, v: String) {
+            sh.append("""<c r="${colName(col)}$row" t="inlineStr" s="$style"><is><t xml:space="preserve">${esc(v)}</t></is></c>""")
+        }
+        sh.append("""<row r="1">"""); head.forEachIndexed { c, h -> cell(1, c, 1, h) }; cell(1, n, 1, "जाँच / Check"); sh.append("</row>")
+        rows.forEachIndexed { r, row ->
+            sh.append("""<row r="${r + 2}">""")
+            for (c in 0 until n) cell(r + 2, c, styleOf(issue(r, c)?.first), row.getOrElse(c) { "" })
+            cell(r + 2, n, 0, rowNotes(r))
+            sh.append("</row>")
+        }
+        sh.append("""</sheetData><autoFilter ref="A1:${colName(n)}${rows.size + 1}"/></worksheet>""")
+
+        val sum = StringBuilder("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="1" width="44" customWidth="1"/><col min="2" max="2" width="70" customWidth="1"/></cols><sheetData>""")
+        var sr = 0
+        fun line(a: String, b: String, style: Int) {
+            sr++
+            sum.append("""<row r="$sr"><c r="A$sr" t="inlineStr" s="$style"><is><t>${esc(a)}</t></is></c><c r="B$sr" t="inlineStr"><is><t>${esc(b)}</t></is></c></row>""")
+        }
+        summary().forEach { line(it.first, it.second, 1) }
+        line("पीला / Yellow", "दोहराई गई पंक्ति या दोहराया नाम", 2)
+        line("नारंगी / Orange", "मिलता-जुलता नाम (शायद एक की spelling ग़लत)", 4)
+        line("लाल / Red", "spelling या लिखावट में ग़लती की संभावना", 3)
+        sum.append("</sheetData></worksheet>")
+
+        val files = linkedMapOf(
+            "[Content_Types].xml" to """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>""",
+            "_rels/.rels" to """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>""",
+            "xl/workbook.xml" to """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Data" sheetId="1" r:id="rId1"/><sheet name="Summary" sheetId="2" r:id="rId2"/></sheets><definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">Data!${'$'}A${'$'}1:${'$'}${colName(n)}${'$'}${rows.size + 1}</definedName></definedNames></workbook>""",
+            "xl/_rels/workbook.xml.rels" to """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>""",
+            "xl/styles.xml" to STYLES,
+            "xl/worksheets/sheet1.xml" to sh.toString(),
+            "xl/worksheets/sheet2.xml" to sum.toString(),
+        )
+        val bos = ByteArrayOutputStream()
+        ZipOutputStream(bos).use { z -> files.forEach { (name, body) -> z.putNextEntry(ZipEntry(name)); z.write(body.toByteArray(Charsets.UTF_8)); z.closeEntry() } }
+        return bos.toByteArray()
+    }
+
+    // ---- PDF (landscape A4, the same colours) -----------------------------------------------
+
+    fun pdf(): ByteArray {
+        val pw = 842; val ph = 595; val m = 24f
+        val doc = PdfDocument()
+        val text = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 7.5f; color = Color.BLACK }
+        val bold = TextPaint(text).apply { isFakeBoldText = true }
+        val big = TextPaint(bold).apply { textSize = 12f }
+        val line = Paint().apply { color = Color.parseColor("#999999"); strokeWidth = 0.5f; style = Paint.Style.STROKE }
+        val fill = Paint().apply { style = Paint.Style.FILL }
+        val cols = head.size + 1
+        // column widths by content (names wider), the Check column gets the rest
+        val weights = FloatArray(cols) { c ->
+            if (c == head.size) 3f else {
+                var w = head[c].length.toFloat()
+                rows.take(200).forEach { r -> w = maxOf(w, r.getOrElse(c) { "" }.length.toFloat()) }
+                w.coerceIn(3f, 30f)
+            }
+        }
+        val total = weights.sum()
+        val widths = FloatArray(cols) { (pw - 2 * m) * weights[it] / total }
+        fun layout(s: String, p: TextPaint, w: Float) =
+            StaticLayout.Builder.obtain(s, 0, s.length, p, maxOf(10, (w - 6).toInt())).setAlignment(Layout.Alignment.ALIGN_NORMAL).build()
+        fun color(kind: String?) = when (kind) { "dup", "dupname" -> "#FFF2A8"; "spell" -> "#F8B4B4"; "similar" -> "#FFD3A1"; else -> null }
+
+        var pageNo = 0
+        var page: PdfDocument.Page? = null
+        var y = 0f
+        fun drawRow(cells: List<String>, kinds: List<String?>, p: TextPaint, headBg: Boolean) {
+            val ls = cells.mapIndexed { c, s -> layout(s, p, widths[c]) }
+            val h = (ls.maxOf { it.height } + 6).toFloat()
+            if (page == null || y + h > ph - m) {
+                page?.let { doc.finishPage(it) }
+                pageNo++
+                page = doc.startPage(PdfDocument.PageInfo.Builder(pw, ph, pageNo).create())
+                y = m
+                val cv = page!!.canvas
+                if (pageNo == 1) {
+                    val t = layout(title, big, pw - 2 * m); cv.save(); cv.translate(m, y); t.draw(cv); cv.restore(); y += t.height + 4
+                    val s = summary().drop(1).joinToString("  ·  ") { "${it.first}: ${it.second}" } + "     पीला = दोहराया · नारंगी = मिलता-जुलता नाम · लाल = संभावित ग़लती"
+                    val sl = layout(s, text, pw - 2 * m); cv.save(); cv.translate(m, y); sl.draw(cv); cv.restore(); y += sl.height + 8
+                }
+                if (!headBg) drawHeader()
+            }
+            val cv = page!!.canvas
+            var x = m
+            cells.indices.forEach { c ->
+                val bg = if (headBg) "#DDE6F5" else color(kinds[c])
+                if (bg != null) { fill.color = Color.parseColor(bg); cv.drawRect(x, y, x + widths[c], y + h, fill) }
+                cv.drawRect(x, y, x + widths[c], y + h, line)
+                cv.save(); cv.translate(x + 3, y + 3); ls[c].draw(cv); cv.restore()
+                x += widths[c]
+            }
+            y += h
+        }
+        fun header() = drawRow(head + "जाँच / Check", List(cols) { null }, bold, true)
+        drawHeaderRef = { header() }
+        rows.forEachIndexed { r, row ->
+            drawRow(List(head.size) { row.getOrElse(it) { "" } } + rowNotes(r), List(head.size) { issue(r, it)?.first } + null, text, false)
+        }
+        page?.let { doc.finishPage(it) }
+        val bos = ByteArrayOutputStream()
+        doc.writeTo(bos); doc.close()
+        return bos.toByteArray()
+    }
+
+    private var drawHeaderRef: () -> Unit = {}
+    private fun drawHeader() = drawHeaderRef()
+
+    companion object {
+        fun colName(i0: Int): String {
+            var i = i0 + 1; var s = ""
+            while (i > 0) { s = ('A' + (i - 1) % 26).toString() + s; i = (i - 1) / 26 }
+            return s
+        }
+
+        private const val STYLES = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="6"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDDE6F5"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF2A8"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF8B4B4"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFD3A1"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="5" borderId="1" xfId="0" applyFill="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"""
+    }
+}

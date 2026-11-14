@@ -259,4 +259,77 @@ class DeviceTest {
             assertTrue("remove did not work", waitFor(10) { !pageText(sc).contains("Zerodha") })
         }
     }
+
+    @Test
+    fun signInWorksAndSheetsOpenAsTheComputerVersion() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            var phone = ""; var sheets = ""
+            sc.onActivity { a -> phone = a.uaFor("https://mail.google.com/"); sheets = a.uaFor("https://docs.google.com/spreadsheets/d/x/edit") }
+            assertTrue("Google refuses sign-in when the name says wv: $phone", !phone.contains("; wv") && phone.contains("Chrome/"))
+            assertTrue("Sheets not the computer version: $sheets", sheets.contains("X11; Linux x86_64") && !sheets.contains("Mobile"))
+            assertEquals("\"" + phone + "\"", eval(sc, "navigator.userAgent"))
+        }
+    }
+
+    @Test
+    fun dataButtonSavesExcelAndPdfOfEveryPage() {
+        val names = listOf("Rahul Kumar", "Priya Singh", "Rahul Kumr", "Anita Devi", "Sunil Yadav", "Pooja  Verma", "Ravi2 Kumar", "Anita Devi", "Sita Ram", "Geeta Kumari", "Neha Gupta", "Karan Singh")
+        val js = org.json.JSONArray(names).toString()
+        val page = "<html><head><title>Student list test</title></head><body><table id=t><thead><tr><th>S.No.</th><th>Student Name</th><th>Class</th></tr></thead><tbody></tbody></table>" +
+            "<ul class=pagination><li id=nl><a href='#' id=next>Next</a></li></ul><script>var k=$js,p=0;function d(){var b=document.querySelector('#t tbody');b.innerHTML='';" +
+            "for(var i=p*5;i<Math.min(k.length,(p+1)*5);i++)b.insertAdjacentHTML('beforeend','<tr><td>'+(i+1)+'</td><td>'+k[i]+'</td><td>5</td></tr>');" +
+            "document.getElementById('nl').className=(p+1)*5>=k.length?'disabled':''}document.getElementById('next').onclick=function(e){e.preventDefault();if((p+1)*5<k.length){p++;d()}};d();</script></body></html>"
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            sc.onActivity { a -> a.loadHtmlForTest(page, "https://school.example/students") }
+            Thread.sleep(1500)
+            shot("08-data-page")
+            val before = System.currentTimeMillis()
+            sc.onActivity { a -> a.exportDataForTest() }
+            var found = emptyList<Pair<String, Long>>()
+            assertTrue("Excel + PDF not saved", waitFor(40) {
+                found = recentDownloads(before)
+                found.any { it.first.endsWith(".xlsx") } && found.any { it.first.endsWith(".pdf") }
+            })
+            assertTrue("files are empty: $found", found.all { it.second > 500 })
+            Thread.sleep(800)
+            shot("09-data-saved")
+        }
+    }
+
+    private fun recentDownloads(since: Long): List<Pair<String, Long>> {
+        if (Build.VERSION.SDK_INT < 29) return emptyList()
+        val out = ArrayList<Pair<String, Long>>()
+        app.contentResolver.query(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            arrayOf(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, android.provider.MediaStore.MediaColumns.SIZE, android.provider.MediaStore.MediaColumns.DATE_ADDED),
+            null, null, null)?.use { c ->
+            while (c.moveToNext()) if (c.getLong(2) * 1000 >= since - 2000 && c.getString(0).startsWith("Student list test")) out.add(c.getString(0) to c.getLong(1))
+        }
+        return out
+    }
+
+    /** A tour of real sites of every kind the owner uses: each must open (or be stopped on purpose) without a crash. */
+    @Test
+    fun siteTour() {
+        val sites = listOf(
+            "music" to "https://music.youtube.com/", "youtube" to "https://m.youtube.com/", "gmail" to "https://mail.google.com/",
+            "sheets" to "https://docs.google.com/spreadsheets/", "whatsapp" to "https://web.whatsapp.com/",
+            "manav-sampada" to "https://ehrms.upsdc.gov.in/", "prerna" to "https://prernaup.in/", "udise" to "https://udiseplus.gov.in/#/en/page/oldlink/109",
+            "diksha" to "https://diksha.gov.in/", "wikipedia" to "https://hi.wikipedia.org/", "fyers" to "https://trade.fyers.in/",
+            "tradingview" to "https://in.tradingview.com/chart/", "news" to "https://www.amarujala.com/", "downloads" to "https://archive.org/",
+            "chat" to "https://chatgpt.com/", "maps" to "https://www.google.com/maps",
+        )
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            sites.forEachIndexed { i, (name, url) ->
+                sc.onActivity { a -> a.go(url) }
+                Thread.sleep(9000)
+                var alive = false
+                sc.onActivity { a -> alive = !a.isFinishing }
+                assertTrue("app closed on $name", alive)
+                shot("tour-%02d-%s".format(i + 1, name))
+            }
+        }
+    }
 }
