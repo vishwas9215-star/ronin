@@ -1,7 +1,5 @@
 package com.ronin.browser
 
-import android.net.Uri
-
 /**
  * Adult and gambling sites (same words as Ronin for Windows, internal/kids LooksAdult).
  * They open in a private tab and are never written to the history.
@@ -19,7 +17,7 @@ object Sensitive {
 
     fun site(url: String): Boolean {
         if (!url.startsWith("http")) return false
-        val host = try { Uri.parse(url).host?.lowercase() ?: return false } catch (e: Exception) { return false }
+        val host = try { java.net.URI(url).host?.lowercase() ?: return false } catch (e: Exception) { return false }
         val parts = host.split('.', '-', '_').filter { it.isNotEmpty() }
         for (p in parts) for (w in words) {
             if (p == w) return true
