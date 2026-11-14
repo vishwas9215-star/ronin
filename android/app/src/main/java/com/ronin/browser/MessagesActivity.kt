@@ -51,7 +51,7 @@ class MessagesActivity : PhonePage() {
             "readAll" -> bg { done(SmsStore.markAllRead(this)) }
             "savedSms" -> bg { done(SmsStore.saved(this)) }
             "saveSms" -> bg { done(SmsStore.save(this, a.optJSONObject("msg") ?: JSONObject())) }
-            "unsaveSms" -> bg { done(SmsStore.unsave(this, a.optLong("sid"))) }
+            "unsaveSms" -> bg { done(SmsStore.unsave(this, a.optString("key"))) }
             "block" -> bg { done(SmsStore.block(this, a.optString("address"))) }
             "unblock" -> bg { done(SmsStore.unblock(this, a.optString("address"))) }
             "blocked" -> bg { done(SmsStore.blocked(this)) }

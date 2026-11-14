@@ -9,7 +9,7 @@ import java.net.URL
 /**
  * The company's own small website icon (like a browser tab shows) for Ronin Messages: fetched once
  * over https from the company's own site (owner allowed this, 15 Nov), kept in the app's files, and
- * re-tried at most once a week when a site has none. Only the domain goes out, never an SMS.
+ * re-tried once a day when a site has none (or the phone was offline). Only the domain goes out, never an SMS.
  */
 object SenderIcons {
     private val domainRe = Regex("^[a-z0-9-]+(\\.[a-z0-9-]+)+$")
@@ -22,7 +22,7 @@ object SenderIcons {
         val dir = File(ctx.filesDir, "sender-icons").apply { mkdirs() }
         val f = File(dir, "$d.img"); val none = File(dir, "$d.none")
         if (f.exists() && f.length() > 0) return dataUrl(f.readBytes())
-        if (none.exists() && System.currentTimeMillis() - none.lastModified() < 7L * 24 * 3600_000) return null
+        if (none.exists() && System.currentTimeMillis() - none.lastModified() < 24L * 3600_000) return null
         val hosts = if (d.startsWith("www.")) listOf(d) else listOf(d, "www.$d")
         for (h in hosts) for (path in listOf("/apple-touch-icon.png", "/favicon.ico")) {
             val b = fetch("https://$h$path") ?: continue

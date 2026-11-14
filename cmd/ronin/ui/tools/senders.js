@@ -2,9 +2,11 @@
 // message list reads like the caller-ID apps (HDFC Bank in blue, Kotak in red...). Data only: add a line
 // to add a company. Each has its colour + short letters; with the company's own website (last item)
 // Ronin shows that site's own icon (like a browser tab does), fetched once from that site and kept.
-// Codes are matched in full; "prefix" entries match the start of a code (e.g. every "SBI..." code).
+// Codes are matched in full; "prefix" entries only colour other codes of the same group (e.g. "SBICRD" =
+// SBI Card, a different company): they show their own code, no website icon, and their own row.
 window.RONIN_SENDERS = {
   exact: {
+    SBIINB: ['State Bank of India', '#22409a', 'SBI', 'sbi.co.in'], SBIOTP: ['State Bank of India', '#22409a', 'SBI', 'sbi.co.in'], SBIBNK: ['State Bank of India', '#22409a', 'SBI', 'sbi.co.in'], SBIPSG: ['State Bank of India', '#22409a', 'SBI', 'sbi.co.in'], SBYONO: ['State Bank of India', '#22409a', 'SBI', 'sbi.co.in'], CBSSBI: ['State Bank of India', '#22409a', 'SBI', 'sbi.co.in'], ATMSBI: ['State Bank of India', '#22409a', 'SBI', 'sbi.co.in'], SBIUPI: ['State Bank of India', '#22409a', 'SBI', 'sbi.co.in'], SBIBKS: ['State Bank of India', '#22409a', 'SBI', 'sbi.co.in'],
     HDFCBK: ['HDFC Bank', '#004c8f', 'HDFC', 'hdfcbank.com'], HDFCBN: ['HDFC Bank', '#004c8f', 'HDFC', 'hdfcbank.com'], HDFCCC: ['HDFC Bank Card', '#004c8f', 'HDFC', 'hdfcbank.com'],
     KOTAKB: ['Kotak Bank', '#ed1c24', 'KO', 'kotak.com'], KOTAKD: ['Kotak Bank', '#ed1c24', 'KO', 'kotak.com'], KOTAKM: ['Kotak Bank', '#ed1c24', 'KO', 'kotak.com'],
     ICICIB: ['ICICI Bank', '#f37e20', 'IC', 'icicibank.com'], ICICIT: ['ICICI Bank', '#f37e20', 'IC', 'icicibank.com'], AXISBK: ['Axis Bank', '#97144d', 'AX', 'axisbank.com'],

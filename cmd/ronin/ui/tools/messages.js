@@ -41,9 +41,11 @@
   const brand = a => {
     if (!isName(a)) return null;
     const c = core(a), e = SND.exact[c];
-    if (e) return { name: e[0], color: e[1], short: e[2], site: e[3] || '' };
+    if (e) return { name: e[0], color: e[1], short: e[2], site: e[3] || '', exact: true };
+    // a prefix match (e.g. "SBICRD") may be another company of the group: its colour, its own code as name,
+    // no website icon, and its own row
     const p = SND.prefix.find(x => c.indexOf(x[0]) === 0);
-    return p ? { name: p[1], color: p[2], short: p[3], site: p[4] || '' } : null;
+    return p ? { name: c, color: p[2], short: p[3], site: '', exact: false } : null;
   };
   const who = t => t.name || (brand(t.address) || {}).name || (isName(t.address) ? core(t.address) : t.address);
   // the company's own website icon (fetched once by the phone from that site, then kept)
@@ -60,7 +62,7 @@
     return h('div', { cls: 'av' }, (who(t)[0] || '?').toUpperCase());
   };
   // the OTP / code in a message (same rule as Otp.kt): shown big and blue, one tap copies only the digits
-  const OTP_BEFORE = /(otp|one.?time|code|pin|password|passcode|verification|ओटीपी|कोड|पासवर्ड)[^0-9]{0,40}?(?<!\d)(\d{4,8})(?!\d)/i;
+  const OTP_BEFORE = /(otp|one.?time|\bcode|\bpin\b(?! ?code)|password|passcode|verification|ओटीपी|कोड|पासवर्ड)[^0-9]{0,40}?(?<!\d)(\d{4,8})(?!\d)/i;
   const OTP_AFTER = /(?<!\d)(\d{4,8})(?!\d)[^0-9]{0,30}?(is your|is the|is ur|as your|otp|one.?time|code|ओटीपी|कोड)/i;
   const otpOf = t => { const a = OTP_BEFORE.exec(t); if (a) return a[2]; const b = OTP_AFTER.exec(t); return b ? b[1] : ''; };
   const URL_RE = /(https?:\/\/[^\s<>"']+|\b(?:[a-z0-9-]+\.)+[a-z]{2,}\/[^\s<>"']*)/gi;
@@ -90,7 +92,7 @@
     const by = new Map();
     list.forEach(t => {
       const b = brand(t.address);
-      const key = t.cat + '|' + (b ? 'b:' + b.name : isName(t.address) ? core(t.address) : 'n' + t.thread);
+      const key = t.cat + '|' + (b && b.exact ? 'b:' + b.name : isName(t.address) ? core(t.address) : 'n' + t.thread);
       const g = by.get(key);
       if (!g) { by.set(key, Object.assign({}, t, { threads: [t.thread], addresses: [t.address] })); return; }
       g.threads.push(t.thread); g.addresses.push(t.address);
@@ -155,20 +157,20 @@
   async function savedList() {
     view = 'saved'; cur = null;
     const all = ((await ask('savedSms')) || []).slice().sort((a, b) => b.date - a.date);
-    savedIds = new Set(all.map(m => m.id));
+    savedIds = new Set(all.map(m => m.key));
     app.replaceChildren(
       h('div', { cls: 'top' }, h('h1', {}, L('⭐ सहेजे संदेश', '⭐ Saved messages')), h('button', { cls: 'pill', id: 'settings', on: { click: settings } }, '⚙')),
       h('p', { cls: 'note' }, L('यहाँ रखे SMS कहीं और से नहीं मिटते: बातचीत मिटाने या पुराने SMS अपने-आप हटने पर भी ये बने रहते हैं। हटाना हो तो यहीं से 🗑 दबाएँ।',
         'SMS kept here are never deleted from anywhere else: not when a conversation is deleted, not by any clean-up. To remove one, tap 🗑 here.')),
       h('div', { id: 'savedList', cls: 'msgs' }, all.length ? all.map(m => {
         const t = { address: m.address, name: '', cat: 'work' };
-        return h('div', { cls: 'saved', 'data-saved': m.id },
+        return h('div', { cls: 'saved', 'data-saved': m.key },
           h('div', { cls: 'shead' }, badge(t), h('b', {}, who(t)), h('small', {}, when(m.date)),
-            h('button', { cls: 'pill', 'data-unsave': m.id, on: { click: async () => {
+            h('button', { cls: 'pill', 'data-unsave': m.key, on: { click: async () => {
               if (!confirm(L('यह सहेजा SMS हटा दें?', 'Remove this saved SMS?'))) return;
-              await ask('unsaveSms', { sid: m.id }); savedList();
+              await ask('unsaveSms', { key: m.key }); savedList();
             } } }, '🗑')),
-          h('div', { cls: 'b in' }, smsBody(m.body, true)));
+          h('div', { cls: 'b in' }, smsBody(m.body, !(window.RoninScam && window.RoninScam.text(m.body).level))));
       }) : h('div', { cls: 'empty' }, L('अभी कुछ नहीं। किसी SMS के नीचे ☆ दबाकर उसे यहाँ रखें।', 'Nothing yet. Tap ☆ under any SMS to keep it here.'))),
       nav(null));
   }
@@ -183,7 +185,8 @@
     view = 'thread'; cur = t;
     // a company's SMS from all its sender names, oldest first
     const parts = await Promise.all((t.threads || [t.thread]).map(id => ask('messages', { thread: id })));
-    savedIds = new Set(((await ask('savedSms')) || []).map(m => m.id));
+    savedIds = new Set(((await ask('savedSms')) || []).map(m => m.key));
+    const keyOf = m => (m.address || t.address) + '|' + m.date + '|' + String(m.body || '').length;
     const msgs = [].concat(...parts.map(x => x || [])).sort((a, b) => a.date - b.date);
     // several OTPs: the newest one says "Latest", the older ones are dimmed (moves on when a new one comes)
     let latest = -1;
@@ -191,13 +194,13 @@
     const body = h('div', { cls: 'msgs', id: 'msgs' }, msgs.map((m, i) => h('div', {},
       m.type === 1 && m.level ? warnBox(m.level, m.reasons) : '',
       i === latest ? h('div', { cls: 'latest' }, L('🆕 सबसे नया OTP', '🆕 Latest OTP')) : '',
-      h('div', { cls: 'b ' + (m.type === 1 ? 'in' : 'out') + (m.type === 1 && otpOf(m.body) && i !== latest ? ' oldotp' : ''), 'data-level': m.level || '' }, smsBody(m.body, t.cat !== 'scam'),
-        h('button', { cls: 'star' + (savedIds.has(m.id) ? ' on' : ''), 'data-star': m.id, title: L('सहेजें', 'Save'), on: { click: async e => {
+      h('div', { cls: 'b ' + (m.type === 1 ? 'in' : 'out') + (m.type === 1 && otpOf(m.body) && i !== latest ? ' oldotp' : ''), 'data-level': m.level || '' }, smsBody(m.body, t.cat !== 'scam' && !m.level),
+        h('button', { cls: 'star' + (savedIds.has(keyOf(m)) ? ' on' : ''), 'data-star': m.id, title: L('सहेजें', 'Save'), on: { click: async e => {
           e.stopPropagation();
-          const b = e.currentTarget, on = savedIds.has(m.id);
-          const all = (await ask(on ? 'unsaveSms' : 'saveSms', on ? { sid: m.id } : { msg: { id: m.id, address: t.address, body: m.body, date: m.date } })) || [];
-          savedIds = new Set(all.map(x => x.id)); b.classList.toggle('on', savedIds.has(m.id)); b.textContent = savedIds.has(m.id) ? '⭐' : '☆';
-        } } }, savedIds.has(m.id) ? '⭐' : '☆'), h('small', {}, when(m.date) + (m.type === 5 ? L(' • ✖ नहीं गया', ' • ✖ not sent') : m.type === 4 ? L(' • भेज रहा...', ' • sending...') : ''))))));
+          const b = e.currentTarget, k = keyOf(m), on = savedIds.has(k);
+          const all = (await ask(on ? 'unsaveSms' : 'saveSms', on ? { key: k } : { msg: { key: k, address: m.address || t.address, body: m.body, date: m.date } })) || [];
+          savedIds = new Set(all.map(x => x.key)); b.classList.toggle('on', savedIds.has(k)); b.textContent = savedIds.has(k) ? '⭐' : '☆';
+        } } }, savedIds.has(keyOf(m)) ? '⭐' : '☆'), h('small', {}, when(m.date) + (m.type === 5 ? L(' • ✖ नहीं गया', ' • ✖ not sent') : m.type === 4 ? L(' • भेज रहा...', ' • sending...') : ''))))));
     // a new SMS arriving while you type must not wipe what you are writing
     const old = again && document.getElementById('text');
     const box = h('textarea', { placeholder: st.isDefault ? L('संदेश लिखें...', 'Type a message...') : L('भेजने के लिए Ronin Messages चालू करें', 'Turn on Ronin Messages to send'), id: 'text' });
@@ -297,7 +300,8 @@
     await list();
     // sender names ("JD-SBIOTP") compare as names, phone numbers by their last 10 digits
     const core = a => a.toUpperCase().replace(/^[A-Z]{2}-/, '').replace(/-[PSTG]$/, '');
-    const t = to && threads.find(x => /[a-z]/i.test(to) ? core(x.address) === core(to) : x.address.replace(/\D/g, '').slice(-10) === to.replace(/\D/g, '').slice(-10));
+    const same = a => /[a-z]/i.test(to) ? core(a) === core(to) : a.replace(/\D/g, '').slice(-10) === to.replace(/\D/g, '').slice(-10);
+    const t = to && threads.find(x => (x.addresses || [x.address]).some(same));
     if (t && !body) thread(t); else compose(to, body);
   };
   // the phone's Back: inside the app first (conversation -> list -> Important), then out of the app

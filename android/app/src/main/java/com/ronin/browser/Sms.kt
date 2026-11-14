@@ -36,11 +36,14 @@ object SmsSort {
     // banks and offices never go to ads, even when they write "cashback" or "free"
     private val bankish = Regex("(BK|BNK|BANK|SBI|HDFC|ICICI|AXIS|PNB|KOTAK|CANARA|UIDAI|EPFO|IRCTC|UPPCL|GOV|NIC)", RegexOption.IGNORE_CASE)
     // a real transaction / OTP / bill: never hidden as an ad, whatever else it says
-    private val transaction = Regex("(\\botp\\b|one.?time|verification|\\bcode\\b|password|debited|credited|a/c|\\bacct|account no|\\bbal(ance)?\\b|txn|transaction|\\bupi\\b|\\bnach\\b|\\bemi\\b|\\bdue\\b|overdue|\\bpaid\\b|payment|received|\\bsent\\b|statement|policy no|premium|booking|\\bpnr\\b|ticket|order|delivered|refund|blocked|unblock|login|kyc|ओटीपी|खाता|जमा|निकासी|भुगतान)", RegexOption.IGNORE_CASE)
+    private val transaction = Regex("(\\botp\\b|one.?time|verification|\\bcode\\b|password|debited|credited|a/c|\\bacct|account no|\\bbal(ance)?\\b|txn|transaction|\\bupi\\b|\\bnach\\b|\\bemi\\b|\\bdue\\b|overdue|\\bpaid\\b|payment|received|\\bsent\\b|statement|policy no|premium|booking|\\bpnr\\b|ticket|order|delivered|refund|blocked|unblock|login|kyc|disburs|sanction|settled|approved|credited|selected|appointment|joining|claim|ओटीपी|खाता|खाते|जमा|निकासी|भुगतान|स्वीकृत|चयन)", RegexOption.IGNORE_CASE)
     // selling / loan offers (the owner does not want to see them at all)
-    private val offer = Regex("(loan (approval|offer|eligib|limit|amount|up ?to|ready|sanction)|pre-?approved|instant loan|personal loan|get (up ?to|a loan)|apply now|apply today|lowest (rate|price|emi)|\\boffer\\b|cashback|discount|% ?off|limited (time|period)|hurry|shop now|buy now|free trial|upgrade now|lucky|congratulations|लोन|ऑफर)", RegexOption.IGNORE_CASE)
+    private val offer = Regex("(loan (approval|offer|eligib|limit|amount|up ?to|ready|sanction)|pre-?approved|instant loan|personal loan|get (up ?to|a loan)|apply now|apply today|lowest (rate|price|emi)|cashback|discount|% ?off|limited (time|period)|hurry|shop now|buy now|free trial|upgrade now|ऑफर)", RegexOption.IGNORE_CASE)
     /** An offer / loan / selling SMS that is not a transaction. */
     fun isOffer(body: String) = offer.containsMatchIn(body) && !transaction.containsMatchIn(body)
+
+    /** A registered promotional sender ("VM-SHOPPR-P"). */
+    fun isPromoSender(address: String) = header.find(address.trim())?.groupValues?.get(2)?.uppercase() == "P"
 
     /** A registered service / transaction / government sender ("-S", "-T", "-G"). */
     fun trustedHeader(address: String) = header.find(address.trim())?.groupValues?.get(2)?.uppercase() in setOf("S", "T", "G")
@@ -61,7 +64,7 @@ object SmsSort {
 
 /** The OTP / code in a message: shown big and blue, one tap copies only the digits. */
 object Otp {
-    private val before = Regex("(otp|one.?time|code|pin|password|passcode|verification|ओटीपी|कोड|पासवर्ड)[^0-9]{0,40}?(?<!\\d)(\\d{4,8})(?!\\d)", RegexOption.IGNORE_CASE)
+    private val before = Regex("(otp|one.?time|\\bcode|\\bpin\\b(?! ?code)|password|passcode|verification|ओटीपी|कोड|पासवर्ड)[^0-9]{0,40}?(?<!\\d)(\\d{4,8})(?!\\d)", RegexOption.IGNORE_CASE)
     private val after = Regex("(?<!\\d)(\\d{4,8})(?!\\d)[^0-9]{0,30}?(is your|is the|is ur|as your|otp|one.?time|code|ओटीपी|कोड)", RegexOption.IGNORE_CASE)
     fun find(body: String): String? = before.find(body)?.groupValues?.get(2) ?: after.find(body)?.groupValues?.get(1)
 
@@ -150,7 +153,7 @@ object SmsStore {
                 while (c.moveToNext() && rows++ < 400) {
                     val body = c.str("body"); val type = c.getInt(c.getColumnIndexOrThrow("type"))
                     val r = if (type == Telephony.Sms.MESSAGE_TYPE_INBOX) RoninApp.instance.rules.scam.text(body) else null
-                    out.put(JSONObject().put("id", c.lng("_id")).put("body", body).put("date", c.lng("date")).put("type", type)
+                    out.put(JSONObject().put("id", c.lng("_id")).put("address", c.str("address")).put("body", body).put("date", c.lng("date")).put("type", type)
                         .put("level", r?.level ?: "").put("reasons", JSONArray(r?.reasons?.take(3) ?: emptyList<String>())))
                 }
             }
@@ -173,10 +176,12 @@ object SmsStore {
         val cut = (now - 30L * 24 * 3600_000L).toString()
         val gone = ArrayList<Long>()
         try {
-            ctx.contentResolver.query(Telephony.Sms.Inbox.CONTENT_URI, arrayOf("_id", "address", "body"), "date<?", arrayOf(cut), null)?.use { c ->
+            // only registered promotional senders ("-P"): a bank / office / person's SMS is never deleted by
+            // itself, even when it looks like an offer (it stays hidden instead); locked SMS are never touched
+            ctx.contentResolver.query(Telephony.Sms.Inbox.CONTENT_URI, arrayOf("_id", "address", "body"), "date<? AND locked=0", arrayOf(cut), null)?.use { c ->
                 while (c.moveToNext()) {
                     val addr = c.str("address"); val body = c.str("body")
-                    if (SmsSort.category(addr, body, contactName(ctx, addr) != null, "") == "ads") gone.add(c.lng("_id"))
+                    if (SmsSort.isPromoSender(addr) && RoninApp.instance.rules.scam.text(body).level.isEmpty()) gone.add(c.lng("_id"))
                 }
             }
             for (id in gone) ctx.contentResolver.delete(Uri.parse("content://sms/$id"), null, null)
@@ -191,21 +196,33 @@ object SmsStore {
 
     // ---- ⭐ Saved: the family's own copies of important SMS (an OTP, a booking...). A copy, so deleting a
     // conversation, the 30-day ad clean-up or any other app never removes it; only "remove" in Saved does.
-    private fun savedFile(ctx: Context) = java.io.File(ctx.filesDir, "saved-sms.json")
-    @Synchronized fun saved(ctx: Context): JSONArray = try { JSONArray(savedFile(ctx).readText()) } catch (e: Exception) { JSONArray() }
+    private fun savedFile(ctx: Context) = android.util.AtomicFile(java.io.File(ctx.filesDir, "saved-sms.json"))
+    /** null = the file could not be read: then nothing is written over it. */
+    private fun readSaved(ctx: Context): JSONArray? {
+        val f = savedFile(ctx)
+        if (!f.baseFile.exists()) return JSONArray()
+        return try { JSONArray(String(f.readFully(), Charsets.UTF_8)) } catch (e: Exception) { null }
+    }
+    private fun writeSaved(ctx: Context, a: JSONArray) {
+        val f = savedFile(ctx); val out = f.startWrite()
+        try { out.write(a.toString().toByteArray(Charsets.UTF_8)); f.finishWrite(out) } catch (e: Exception) { f.failWrite(out) }
+    }
+    @Synchronized fun saved(ctx: Context): JSONArray = readSaved(ctx) ?: JSONArray()
+    /** A saved SMS is known by sender + time + text (the phone's own SMS numbers are reused after a delete). */
     @Synchronized fun save(ctx: Context, m: JSONObject): JSONArray {
-        val all = saved(ctx)
-        val id = m.optLong("id")
-        for (i in 0 until all.length()) if (all.getJSONObject(i).optLong("id") == id) return all
-        all.put(JSONObject().put("id", id).put("address", m.optString("address").take(40)).put("body", m.optString("body").take(2000))
+        val all = readSaved(ctx) ?: return JSONArray()
+        val key = m.optString("key").take(200)
+        if (key.isEmpty()) return all
+        for (i in 0 until all.length()) if (all.getJSONObject(i).optString("key") == key) return all
+        all.put(JSONObject().put("key", key).put("address", m.optString("address").take(40)).put("body", m.optString("body").take(2000))
             .put("date", m.optLong("date")).put("saved", System.currentTimeMillis()))
-        savedFile(ctx).writeText(all.toString())
+        writeSaved(ctx, all)
         return all
     }
-    @Synchronized fun unsave(ctx: Context, id: Long): JSONArray {
-        val all = saved(ctx); val keep = JSONArray()
-        for (i in 0 until all.length()) all.getJSONObject(i).let { if (it.optLong("id") != id) keep.put(it) }
-        savedFile(ctx).writeText(keep.toString())
+    @Synchronized fun unsave(ctx: Context, key: String): JSONArray {
+        val all = readSaved(ctx) ?: return JSONArray(); val keep = JSONArray()
+        for (i in 0 until all.length()) all.getJSONObject(i).let { if (it.optString("key") != key) keep.put(it) }
+        writeSaved(ctx, keep)
         return keep
     }
 

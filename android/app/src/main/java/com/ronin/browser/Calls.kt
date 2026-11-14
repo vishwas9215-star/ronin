@@ -66,6 +66,9 @@ object CallInfo {
     /** CNAP (DoT, from 1 Nov 2026 on 4G/5G): the caller's KYC name from the SIM, sent by the network. */
     fun cnap(c: Call?): String {
         val d = c?.details ?: return ""
+        // only a real SIM call carries the network's name (an internet-call app could put any name here)
+        val sim = try { RoninApp.instance.getSystemService(TelecomManager::class.java).getPhoneAccount(d.accountHandle)?.hasCapabilities(android.telecom.PhoneAccount.CAPABILITY_SIM_SUBSCRIPTION) == true } catch (e: Exception) { false }
+        if (!sim) return ""
         val n = d.callerDisplayName?.toString()?.trim() ?: ""
         return if (n.isNotEmpty() && d.callerDisplayNamePresentation == TelecomManager.PRESENTATION_ALLOWED) n.take(60) else ""
     }
@@ -161,7 +164,7 @@ class CallsActivity : PhonePage() {
                 .put("mic", has(Manifest.permission.RECORD_AUDIO)))
             "skip" -> { CallRecorder.setSkip(this, a.optString("number"), a.optBoolean("on")); done(JSONArray(CallRecorder.skipList(this))) }
             "recordings" -> bg { done(CallRecorder.list(this)) }
-            "play" -> { CallRecorder.play(this, a.optLong("id")); done(true) }
+            "play" -> { CallRecorder.play(this, a.optLong("rid")); done(true) }
             "accessibility" -> { startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)); done(true) }
             else -> done(null)
         }
@@ -400,7 +403,7 @@ class InCallActivity : AppCompatActivity() {
         who.text = SmsStore.contactName(this, num) ?: num.ifEmpty { "Private number" }
         val saved = SmsStore.contactName(this, num) != null
         val sim = if (saved) "" else CallInfo.cnap(c).ifEmpty { CallInfo.cnapOf(this, num) }
-        simName.text = L("📛 SIM पर असली नाम: ", "📛 Real name on the SIM: ") + sim
+        simName.text = L("📛 नेटवर्क से नाम (SIM का KYC): ", "📛 Name from the network (SIM KYC): ") + sim
         simName.visibility = if (sim.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
         val base = CallInfo.label(this, num)
         // unknown / foreign / private callers also get the "police threat" line

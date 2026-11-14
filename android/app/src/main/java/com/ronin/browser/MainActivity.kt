@@ -154,7 +154,7 @@ open class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         buildUi()
         app.store.removeHistory { Sensitive.site(it) } // old visits of adult / gambling sites go away
-        wipePrivate() // left over if Ronin was closed with a private tab open
+        if (!isApp) wipePrivate() // left over if Ronin was closed with a private tab open (never while the browser has one)
         if (!isApp) PlayerBridge.control = { a -> ui.post { mediaControl(a) } }
 
         val restore = savedInstanceState?.getStringArrayList("tabs")
@@ -368,7 +368,7 @@ open class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(0, dp(52), 1f)
             setOnClickListener { act() }
         }
-        socialBar.addView(socialButton(L("← पीछे", "← Back"), "socialBack") { current?.let { t -> if (t.web.canGoBack()) t.web.goBack() else load(t, SOCIAL) } })
+        socialBar.addView(socialButton(L("← पीछे", "← Back"), "socialBack") { current?.let { t -> if (t.isSocial) socialBack(t) } })
         if (appMode != "mail") socialBar.addView(socialButton(L("⊞ मेरे ऐप", "⊞ My apps"), "socialApps") { current?.let { load(it, SOCIAL) } })
         socialBar.addView(socialButton(L("✕ बंद", "✕ Close"), "socialClose") { current?.let { if (it.isSocial) leaveSocial(it) } })
         root.addView(bar); root.addView(progress); root.addView(holder); root.addView(readBar); root.addView(socialBar)
@@ -1040,6 +1040,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         val list = t.web.copyBackForwardList()
         val prev = if (list.currentIndex > 0) list.getItemAtIndex(list.currentIndex - 1)?.url else null
         when {
+            t.url.startsWith(SOCIAL) || (t.web.url ?: "").startsWith(SOCIAL) -> leaveSocial(t) // on the app list: out (no loop)
             prev != null && !prev.startsWith(SOCIAL) -> t.web.goBack()
             appMode == "social" && !t.url.startsWith(SOCIAL) -> load(t, SOCIAL) // the Social app's own home
             else -> leaveSocial(t)
@@ -1241,7 +1242,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                     val c = te.counts
                     AlertDialog.Builder(this).setTitle(L("📊 Excel + PDF बन गई", "📊 Excel + PDF ready"))
                         .setMessage(if (te.info.isNotEmpty()) te.info.joinToString("\n") { "${it.first}: ${it.second}" }.take(1500) + L("\n\nDownloads → Ronin में save है।", "\n\nSaved in Downloads → Ronin.")
-                            else (if (te.partial.isNotEmpty()) "⚠ अधूरा / NOT complete: ${te.partial}\n\n" else "") + "${te.rows.size} पंक्तियाँ\nदोहराए: ${(c["dupRows"] ?: 0) + (c["dupNames"] ?: 0)} · मिलते-जुलते नाम: ${c["similar"] ?: 0} · संभावित ग़लतियाँ: ${c["spell"] ?: 0}\n\nDownloads → Ronin में save है।")
+                            else (if (te.partial.isNotEmpty()) L("⚠ अधूरा: ", "⚠ NOT complete: ") + te.partial + "\n\n" else "") + L("${te.rows.size} पंक्तियाँ\nदोहराए: ${(c["dupRows"] ?: 0) + (c["dupNames"] ?: 0)} · मिलते-जुलते नाम: ${c["similar"] ?: 0} · संभावित ग़लतियाँ: ${c["spell"] ?: 0}\n\nDownloads → Ronin में save है।", "${te.rows.size} rows\nRepeated: ${(c["dupRows"] ?: 0) + (c["dupNames"] ?: 0)} · Look-alike names: ${c["similar"] ?: 0} · Possible mistakes: ${c["spell"] ?: 0}\n\nSaved in Downloads → Ronin."))
                         .setPositiveButton(L("PDF खोलें", "Open PDF")) { _, _ -> openFile(p, "application/pdf") }
                         .setNeutralButton(L("Excel खोलें", "Open Excel")) { _, _ -> openFile(x, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") }
                         .setNegativeButton("PDF Share") { _, _ -> shareFile(p, "application/pdf") }.show()
