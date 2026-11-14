@@ -62,7 +62,7 @@
       pick.replaceChildren(...(q ? all.filter(c => c.name.toLowerCase().includes(q) || c.number.includes(q)).slice(0, 15).map(c => h('div', { cls: 'row' }, h('span', {}, c.name + ' ', h('small', { cls: 'note' }, c.number)),
         h('button', { cls: 'pill green', 'data-add': c.number, on: { click: () => { if (fam.length < 5 && !fam.some(x => x.number === c.number)) fam.push({ name: c.name, number: c.number }); search.value = ''; pick.replaceChildren(); drawChosen(); } } }, '➕'))) : []));
     });
-    app.replaceChildren(h('div', { cls: 'top' }, h('button', { cls: 'pill', on: { click: home } }, L('← वापस', '← Back')), h('h1', {}, L('⚙ SOS: किसे भेजें', '⚙ SOS: who gets it')), h('span')),
+    app.replaceChildren(h('div', { cls: 'top' }, h('button', { cls: 'pill', on: { click: () => (st.contacts || []).length ? home() : ask('close') } }, L('← वापस', '← Back')), h('h1', {}, L('⚙ SOS: किसे भेजें', '⚙ SOS: who gets it')), h('span')),
       h('div', { cls: 'card' }, h('h2', {}, L('🙂 आपका नाम', '🙂 Your name')), name),
       h('div', { cls: 'card' }, h('h2', {}, L('👨‍👩‍👧 परिवार (1-5 लोग)', '👨‍👩‍👧 Family (1-5 people)')), chosen, search, pick),
       h('button', { cls: 'pill green', id: 'save', style: 'width:100%;min-height:56px', on: { click: async () => {
@@ -74,5 +74,6 @@
   }
   window.__roninSos = { home }; // for the tests
   home();
-  window.__roninBack = () => { if (inSetup) { home(); return true; } return false; };
+  // Back: from the family list to the SOS button; with no family saved yet, out of the app
+  window.__roninBack = () => { if (inSetup && (st.contacts || []).length) { home(); return true; } return false; };
 })();

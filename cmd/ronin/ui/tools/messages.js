@@ -33,7 +33,22 @@
   // sender names ("VM-HDFCBK-S", "AD-HDFCBK-S") are one company: "HDFCBK"
   const isName = a => /[a-z]/i.test(a || '');
   const core = a => (a || '').toUpperCase().replace(/^[A-Z]{2}-/, '').replace(/-[PSTG]$/, '');
-  const who = t => t.name || (isName(t.address) ? core(t.address) : t.address);
+  // the company behind a sender code (senders.js): name, colour, short letters for the badge
+  const SND = window.RONIN_SENDERS || { exact: {}, prefix: [] };
+  const brand = a => {
+    if (!isName(a)) return null;
+    const c = core(a), e = SND.exact[c];
+    if (e) return { name: e[0], color: e[1], short: e[2] };
+    const p = SND.prefix.find(x => c.indexOf(x[0]) === 0);
+    return p ? { name: p[1], color: p[2], short: p[3] } : null;
+  };
+  const who = t => t.name || (brand(t.address) || {}).name || (isName(t.address) ? core(t.address) : t.address);
+  const badge = t => {
+    const b = !t.name && brand(t.address);
+    if (t.cat === 'scam') return h('div', { cls: 'av', style: 'background:#7f1d1d' }, (who(t)[0] || '?').toUpperCase());
+    if (b) return h('div', { cls: 'av brand', style: 'background:' + b.color + (b.short.length > 2 ? ';font-size:' + (b.short.length > 3 ? 12 : 14) + 'px' : '') }, b.short);
+    return h('div', { cls: 'av' }, (who(t)[0] || '?').toUpperCase());
+  };
   // the OTP / code in a message (same rule as Otp.kt): shown big and blue, one tap copies only the digits
   const OTP_BEFORE = /(otp|one.?time|code|pin|password|passcode|verification|ओटीपी|कोड|पासवर्ड)[^0-9]{0,40}?(?<!\d)(\d{4,8})(?!\d)/i;
   const OTP_AFTER = /(?<!\d)(\d{4,8})(?!\d)[^0-9]{0,30}?(is your|is the|is ur|as your|otp|one.?time|code|ओटीपी|कोड)/i;
@@ -64,7 +79,8 @@
   function group(list) {
     const by = new Map();
     list.forEach(t => {
-      const key = t.cat + '|' + (isName(t.address) ? core(t.address) : 'n' + t.thread);
+      const b = brand(t.address);
+      const key = t.cat + '|' + (b ? 'b:' + b.name : isName(t.address) ? core(t.address) : 'n' + t.thread);
       const g = by.get(key);
       if (!g) { by.set(key, Object.assign({}, t, { threads: [t.thread], addresses: [t.address] })); return; }
       g.threads.push(t.thread); g.addresses.push(t.address);
@@ -107,7 +123,7 @@
         const mine = threads.filter(t => t.cat === tab);
         if (!mine.length) return h('div', { cls: 'empty' }, st.isDefault || st.read ? L('यहाँ कोई संदेश नहीं', 'No messages here') : L('संदेश देखने के लिए ऊपर "चालू करें" दबाएँ', 'Tap "Turn on" above to see your messages'));
         return mine.map(t => h('div', { cls: 'th', 'data-thread': t.thread, on: { click: () => thread(t) } },
-          h('div', { cls: 'av', style: t.cat === 'scam' ? 'background:#7f1d1d' : '' }, (who(t)[0] || '?').toUpperCase()),
+          badge(t),
           h('div', { cls: 'mid' }, h('b', {}, who(t), t.cat !== 'work' ? h('span', { cls: 'tag ' + t.cat }, TABS.find(x => x[0] === t.cat)[2]) : ''), h('small', {}, t.snippet)),
           h('div', { cls: 'tm' }, when(t.date), t.unread ? h('div', {}, h('span', { cls: 'dot' }, t.unread)) : '')));
       })()),
@@ -142,7 +158,7 @@
     if (!st.isDefault) box.disabled = true;
     const isNumber = /^\+?\d{7,}$/.test(t.address.replace(/[\s-]/g, ''));
     app.replaceChildren(
-      h('div', { cls: 'top' }, h('button', { cls: 'pill', id: 'back', on: { click: list } }, L('← वापस', '← Back')), h('h1', {}, who(t)),
+      h('div', { cls: 'top' }, h('button', { cls: 'pill', id: 'back', on: { click: list } }, L('← वापस', '← Back')), badge(t), h('h1', {}, who(t)),
         h('div', {}, isNumber ? h('button', { cls: 'pill', on: { click: () => ask('open', { url: 'tel:' + t.address }) } }, '📞') : '', ' ',
           h('button', { cls: 'pill', id: 'block', on: { click: () => block(t) } }, '🚫'), ' ',
           h('button', { cls: 'pill', id: 'del', on: { click: () => del(t) } }, '🗑'))),

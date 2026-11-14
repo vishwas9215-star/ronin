@@ -41,6 +41,7 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   await serve(p2); await p2.addInitScript(phone({ isDefault: true, read: true, contacts: true }));
   await p2.goto('https://ronin.home/tools/messages.html'); await p2.waitForSelector('.th');
   const work = await p2.$$eval('.th', a => a.map(x => x.dataset.thread));
+  if (!(await p2.$eval('.th[data-thread="2"] b', e => e.textContent)).startsWith('State Bank of India')) bad('SBI name');
   if (work.join() !== '2,4') bad('काम के tab: ' + work);
   await p2.screenshot({ path: path.join(out, 'messages-work.png') });
   await p2.click('[data-tab=scam]'); await p2.waitForTimeout(100);
@@ -127,7 +128,8 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
     msgs: { 11: [{ id: 1, body: 'Bal Rs 100', date: Date.now() - 1000, type: 1 }], 12: [{ id: 2, body: 'Biometric login on', date: Date.now() - 2000, type: 1 }], 13: [{ id: 3, body: 'IMPS sent', date: Date.now() - 3000, type: 1 }] } }));
   await p6.goto('https://ronin.home/tools/messages.html'); await p6.waitForSelector('.th');
   const rows = await p6.$$eval('.th b', a => a.map(x => x.textContent));
-  if (rows.join() !== 'HDFCBK,KOTAKB') bad('not one row per company: ' + rows);
+  if (rows.join() !== 'HDFC Bank,Kotak Bank') bad('not one row per company: ' + rows);
+  if ((await p6.$$('.av.brand')).length !== 2) bad('company badges missing');
   const hindi = await p6.evaluate(() => /[\u0900-\u097F]/.test(document.body.innerText));
   if (hindi) bad('Hindi text on an English phone: ' + (await p6.evaluate(() => document.body.innerText.match(/.*[\u0900-\u097F].*/)[0])));
   const nav = await p6.$eval('.nav', n => ({ bottom: n.getBoundingClientRect().bottom, top: n.getBoundingClientRect().top }));

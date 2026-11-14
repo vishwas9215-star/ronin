@@ -65,7 +65,7 @@ abstract class PhonePage : AppCompatActivity() {
                 val u = req.url
                 if (u.host != "ronin.home") return WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), "".byteInputStream())
                 val name = (u.path ?: "").removePrefix("/tools/")
-                if (name !in setOf(page, page.replace(".html", ".js"), "scamcheck.js")) return WebResourceResponse("text/plain", "utf-8", 404, "No", emptyMap(), "".byteInputStream())
+                if (name !in setOf(page, page.replace(".html", ".js"), "scamcheck.js", "senders.js")) return WebResourceResponse("text/plain", "utf-8", 404, "No", emptyMap(), "".byteInputStream())
                 val mime = if (name.endsWith(".js")) "text/javascript" else "text/html"
                 return try { WebResourceResponse(mime, "utf-8", assets.open("ronin/tools/$name")) } catch (e: Exception) { null }
             }
@@ -138,6 +138,7 @@ abstract class PhonePage : AppCompatActivity() {
             "notifyAccess" -> { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)); done(true) }
             "watcher" -> done(NotifyWatch.enabled(this))
             "copy" -> { val c = a.optString("text").filter { it.isDigit() }.take(8); if (c.length >= 4) Otp.copy(this, c); done(c.length >= 4) }
+            "close" -> { done(true); runOnUiThread { finish() } }
             "lang" -> done(Lang.choice(this))
             "setLang" -> { Lang.set(this, a.optString("value")); done(true); runOnUiThread { recreate() } }
             "check" -> { val r = RoninApp.instance.rules.scam.text(a.optString("text")); done(JSONObject().put("level", r.level).put("reasons", org.json.JSONArray(r.reasons))) }
