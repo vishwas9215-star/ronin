@@ -1,0 +1,148 @@
+//go:build windows
+
+package main
+
+import (
+	_ "embed"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+	"unsafe"
+
+	"golang.org/x/sys/windows"
+
+	"roninbrowser/internal/containers"
+	"roninbrowser/internal/tablexport"
+)
+
+// ---- "Data -> Excel + PDF": the biggest table on the page, every page of it ----------
+
+//go:embed ui/table_export.js
+var tableExportJS string
+
+// showDataButton puts the green "Excel + PDF" button on pages of sites where
+// the user switched it on (Menu -> Data button on this site).
+func (t *Tab) showDataButton() {
+	if t.destroyed || t.w.container == containers.Banking || !strings.HasPrefix(t.url, "http") || !store.IsDataSite(hostOf(t.url)) {
+		return
+	}
+	js := `(function(){if(document.getElementById('ronin-data-btn')||!document.body)return;var b=document.createElement('button');` +
+		`b.id='ronin-data-btn';b.textContent='📊 Excel + PDF';b.title='Ronin: is page ki table ka sara data Excel aur PDF mein';` +
+		`b.style.cssText='position:fixed;right:18px;bottom:18px;z-index:2147483647;padding:12px 20px;border-radius:24px;border:0;background:#16a34a;color:#fff;font:600 15px Segoe UI,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer';` +
+		`b.onclick=function(){location.href='https://ronin.data/go?k=` + newTabKey + `'};document.body.appendChild(b);})()`
+	t.runScript(js, func(string) {})
+}
+
+// exportData reads the table (all pages), then saves an Excel file and a PDF
+// in Downloads and shows the coloured report in a new tab.
+func (t *Tab) exportData() {
+	if t.destroyed || t.w.container == containers.Banking || t.exporting {
+		return
+	}
+	t.exporting = true
+	w := t.w
+	w.bar(t, "info", "📊 इस page की table पढ़ रहा हूँ... (Reading the table)", nil)
+	t.runScript(tableExportJS+";window.__roninTable.start()", func(string) {
+		start := time.Now()
+		var poll func()
+		poll = func() {
+			if t.destroyed {
+				return
+			}
+			t.runScript("window.__roninTable?window.__roninTable.state():''", func(raw string) {
+				var js string
+				_ = json.Unmarshal([]byte(raw), &js)
+				var s struct {
+					Phase, Error string
+					Page, Rows   int
+				}
+				_ = json.Unmarshal([]byte(js), &s)
+				switch {
+				case s.Phase == "reading" && time.Since(start) < 15*time.Minute:
+					w.bar(t, "info", fmt.Sprintf("📊 पेज %d पढ़ लिया, %d पंक्तियाँ... (Reading page %d, %d rows)", s.Page, s.Rows, s.Page, s.Rows), nil)
+					time.AfterFunc(600*time.Millisecond, func() { runOnUI(poll) })
+				case s.Phase == "done":
+					t.runScript("window.__roninTable.result()", func(res string) {
+						var body string
+						_ = json.Unmarshal([]byte(res), &body)
+						t.saveData(body)
+					})
+				default:
+					t.exporting = false
+					msg := s.Error
+					if msg == "" {
+						msg = "the page did not answer"
+					}
+					w.bar(t, "error", "📊 Table नहीं मिली / could not read the table: "+msg, nil)
+				}
+			})
+		}
+		poll()
+	})
+}
+
+func (t *Tab) saveData(body string) {
+	w := t.w
+	t.exporting = false
+	d, err := tablexport.Parse(body)
+	if err != nil {
+		w.bar(t, "error", "📊 Table खाली है / the table is empty.", nil)
+		return
+	}
+	x, err := d.XLSX()
+	if err != nil {
+		w.bar(t, "error", "📊 Excel file नहीं बन सकी: "+err.Error(), nil)
+		return
+	}
+	base := strings.TrimSuffix(pageFileName(t, ".xlsx"), ".xlsx")
+	xlsx := base + ".xlsx"
+	if err := os.WriteFile(xlsx, x, 0o644); err != nil {
+		w.bar(t, "error", "📊 Excel file save नहीं हुई: "+err.Error(), nil)
+		return
+	}
+	savePageFile(w, xlsx, true)
+	c := d.Check.Counts
+	w.bar(t, "ok", fmt.Sprintf("📊 Excel बन गई: %d पंक्तियाँ · दोहराए %d · मिलते-जुलते नाम %d · संभावित ग़लतियाँ %d. PDF बन रही है...",
+		len(d.Rows), c["dupRows"]+c["dupNames"], c["similar"], c["spell"]), nil)
+
+	// the coloured report opens in a new tab and is printed to PDF from there
+	tmp := filepath.Join(os.TempDir(), "ronin-report-"+fmt.Sprint(time.Now().UnixNano())+".html")
+	if err := os.WriteFile(tmp, []byte(d.ReportHTML()), 0o600); err != nil {
+		return
+	}
+	rt := w.newTab("file:///"+filepath.ToSlash(tmp), false)
+	if rt == nil {
+		return
+	}
+	pdf := base + ".pdf"
+	rt.afterLoad = func() {
+		rt.savePDFTo(pdf, func(ok bool) {
+			_ = os.Remove(tmp)
+			savePageFile(w, pdf, ok)
+		})
+	}
+}
+
+// savePDFTo prints the tab to a PDF file.
+func (t *Tab) savePDFTo(path string, done func(ok bool)) {
+	w7 := queryInterface(uintptr(t.wv), &iidICoreWebView2_7)
+	if w7 == 0 {
+		done(false)
+		return
+	}
+	defer release(w7)
+	p, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		done(false)
+		return
+	}
+	h := newHandler(func(errCode, success uintptr) uintptr {
+		ok := uint32(errCode) == 0 && uint32(success) != 0
+		runOnUI(func() { done(ok) })
+		return sOK
+	})
+	call(w7, wv7PrintToPdf, uintptr(unsafe.Pointer(p)), 0, uintptr(unsafe.Pointer(h)))
+}

@@ -394,6 +394,8 @@ function showMenu(){
   }
   if (web && CONTAINER !== "BANKING") {
     item("Save page as PDF   (Ctrl+P)", () => post({cmd:"savepdf"}));
+    if (S.dataSite) item("\uD83D\uDCCA Data \u2192 Excel + PDF (\u0907\u0938 page \u0915\u0940 \u092a\u0942\u0930\u0940 table)", () => post({cmd:"dataexport"}));
+    item(S.dataSite ? "\uD83D\uDCCA Data \u092c\u091f\u0928 \u0907\u0938 \u0938\u093e\u0907\u091f \u092a\u0930 \u092c\u0902\u0926 \u0915\u0930\u0947\u0902" : "\uD83D\uDCCA Data \u092c\u091f\u0928 \u0907\u0938 \u0938\u093e\u0907\u091f \u092a\u0930 \u091a\u093e\u0932\u0942 \u0915\u0930\u0947\u0902 (Excel + PDF)", () => post({cmd:"datasite"}));
     item("Picture of this page (screenshot)", () => post({cmd:"screenshot"}));
   }
   if (CONTAINER !== "BANKING") item("Reopen closed tab   (Ctrl+Shift+T)", () => post({cmd:"reopentab"}));
@@ -690,6 +692,11 @@ const overlays = {
     if (!(o.trusted||[]).length) ul2.appendChild(el("li", "muted", "None."));
     (o.trusted||[]).forEach(h => { const li = el("li", "", h); const x = el("button", "link", "Remove"); x.onclick = () => post({cmd:"untrust", host:h}); li.appendChild(x); ul2.appendChild(li); });
     c.appendChild(ul2);
+    c.appendChild(el("p", "muted", "\uD83D\uDCCA Data \u2192 Excel + PDF \u092c\u091f\u0928 \u0907\u0928 \u0938\u093e\u0907\u091f\u094b\u0902 \u092a\u0930 \u091a\u093e\u0932\u0942 (\u091a\u093e\u0932\u0942 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093f\u090f: site \u0916\u094b\u0932\u0947\u0902 \u2192 Menu \u2192 Data \u092c\u091f\u0928)"));
+    const ul3 = el("ul", "list");
+    if (!(o.dataSites||[]).length) ul3.appendChild(el("li", "muted", "None."));
+    (o.dataSites||[]).forEach(h => { const li = el("li", "", h); const x = el("button", "link", "Remove"); x.onclick = () => post({cmd:"datasiteremove", host:h}); li.appendChild(x); ul3.appendChild(li); });
+    c.appendChild(ul3);
     const tsr = el("div", "row"); const ti = el("input"); ti.placeholder = "A safe site Ronin stopped by mistake, e.g. example.com"; ti.style.flex = "1";
     tsr.append(ti, btn("Add", "", () => { if (ti.value.trim()) post({cmd:"trustadd", url: ti.value.trim()}); }));
     c.appendChild(tsr);

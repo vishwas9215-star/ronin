@@ -296,7 +296,7 @@ func settingsData() map[string]any {
 	_, confErr := os.Stat(wgConfPath())
 	vs, vp := vpnStatus()
 	return map[string]any{
-		"banks": s.UserBanks, "trusted": s.TrustedSites, "remember": s.RememberBankLogin,
+		"banks": s.UserBanks, "trusted": s.TrustedSites, "remember": s.RememberBankLogin, "dataSites": s.DataSites,
 		"idle": s.SafeMoneyIdleMins, "version": Version,
 		"tradingSites": s.TradingSites, "adblockOff": s.AdblockOff, "sitePerms": sitePermsData(), "newTabFront": s.NewTabFront,
 		"vpn": map[string]any{

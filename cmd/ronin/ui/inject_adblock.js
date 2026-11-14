@@ -23,6 +23,46 @@
   if (document.documentElement) addStyle();
   else document.addEventListener("DOMContentLoaded", addStyle);
 
+  // ---- pop-up guard: on download pages every click opened an advert ----
+  // 1. A click on a real link that makes the page open a DIFFERENT site in a new
+  //    window is a hijack: the new window is not opened (the link itself still works).
+  // 2. Invisible links laid over the whole page that lead to another site are removed.
+  // Sign-in and payment windows are never touched.
+  try {
+    var bare = function (h) { return (h || "").toLowerCase().replace(/^www\./, ""); };
+    var me = bare(host);
+    var hostOfUrl = function (u) { try { return bare(new URL(u, location.href).hostname); } catch (e) { return ""; } };
+    var sameSite = function (a, b) { return a === b || (a && b && (a.slice(-b.length - 1) === "." + b || b.slice(-a.length - 1) === "." + a)); };
+    var SAFE = /(^|\.)(google\.com|google\.co\.in|microsoftonline\.com|live\.com|apple\.com|facebook\.com|razorpay\.com|paytm\.com|paytm\.in|payu\.in|ccavenue\.com|billdesk\.com|cashfree\.com|phonepe\.com|stripe\.com|paypal\.com|bank\.in|gov\.in|nic\.in)$/;
+    var last = { t: 0, href: "" };
+    document.addEventListener("click", function (e) {
+      var a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+      last = { t: Date.now(), href: a ? a.href : "" };
+      if (!a) return;
+      var to = hostOfUrl(a.href);
+      if (!to || sameSite(to, me) || SAFE.test(to) || !/^https?:/.test(a.href)) return;
+      var r = a.getBoundingClientRect(), cs = getComputedStyle(a);
+      var covers = r.width * r.height >= innerWidth * innerHeight * 0.4;
+      var empty = !a.textContent.trim() && !a.querySelector("img,svg,video,picture");
+      if (covers && (empty || parseFloat(cs.opacity) < 0.15)) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        a.remove();
+        window.__roninPopBlocked = (window.__roninPopBlocked || 0) + 1;
+      }
+    }, true);
+    var realOpen = window.open;
+    window.open = function (u) {
+      var to = hostOfUrl(u || "");
+      var hijack = Date.now() - last.t < 2000 && last.href && u &&
+        new URL(u, location.href).href !== last.href && to && !sameSite(to, me) && !SAFE.test(to);
+      if (hijack) {
+        window.__roninPopBlocked = (window.__roninPopBlocked || 0) + 1;
+        return null;
+      }
+      return realOpen.apply(window, arguments);
+    };
+  } catch (e) {}
+
   // ---- TradingView: close "Upgrade / Go Pro" pop-ups and hide upgrade buttons ----
   if (/(^|\.)tradingview\.com$/.test(host)) {
     var PROMO = /(upgrade now|upgrade your plan|go pro|try free for|start free trial|black friday|cyber monday|get started for free|unlock .* with|your plan has|several charts per tab|limit of|sale ends|% off)/i;
@@ -165,5 +205,6 @@
       } catch (e) {}
     }, 1500);
   }
+
 })();
 

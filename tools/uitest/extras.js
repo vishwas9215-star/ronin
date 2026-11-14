@@ -78,6 +78,15 @@ const out = process.argv[2] || '/tmp';
   await p.evaluate(() => ronin.overlay({ kind: 'bookmarks', list: [{ title: 'Wiki', url: 'https://hi.wikipedia.org/' }] }));
   await p.click('text=Export bookmarks file'); if (!last('bmexport')) bad('bookmark export');
   await p.click('text=Import from a file'); if (!last('bmimport')) bad('bookmark import');
+  // Data -> Excel + PDF in the menu (only after it is switched on for the site)
+  await p.evaluate(() => ronin.closeOverlay());
+  await p.evaluate(() => ronin.state({ container: 'PERSONAL', tabs: [{ id: 1, title: 'UDISE', url: 'https://udiseplus.gov.in/x', active: true, zoom: 100 }], focus: { on: false }, dataSite: false }));
+  await p.click('#menuBtn');
+  if (await p.isVisible('text=Data → Excel + PDF (')) bad('export item shown before switching on');
+  await p.click('text=Data बटन इस साइट पर चालू करें'); if (!last('datasite')) bad('datasite toggle');
+  await p.evaluate(() => ronin.state({ container: 'PERSONAL', tabs: [{ id: 1, title: 'UDISE', url: 'https://udiseplus.gov.in/x', active: true, zoom: 100 }], focus: { on: false }, dataSite: true }));
+  await p.click('#menuBtn'); await p.click('text=Data → Excel + PDF ('); if (!last('dataexport')) bad('dataexport');
+  await p.evaluate(() => ronin.closeOverlay());
   // dangerous site: red page, only "Go back" (no way to open it from here)
   await p.evaluate(() => ronin.overlay({ kind: 'blocked', tab: 1, host: 'ronin-phishing-test.com', mode: 'DANGER' }));
   const dt = await p.textContent('#ov.show');

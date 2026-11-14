@@ -27,6 +27,8 @@ import (
 
 // Tab is one web page area with its own WebView2.
 type Tab struct {
+	afterLoad    func()    // run once when the next page has loaded (data report -> PDF)
+	exporting    bool      // "Data -> Excel + PDF" is reading the table
 	lastDownload time.Time // when a download last started in this tab
 	navUser      bool      // the latest navigation was started by the user
 	navPage      bool      // ... and it ended as a normal page
@@ -154,6 +156,13 @@ func (t *Tab) create() bool {
 			if getBool(a, 3) {
 				t.pwTake()
 				t.pwOffer()
+			}
+			if getBool(a, 3) {
+				t.showDataButton()
+				if f := t.afterLoad; f != nil && strings.HasPrefix(t.wv.Source(), "file:") {
+					t.afterLoad = nil
+					runOnUI(f)
+				}
 			}
 			if getBool(a, 3) && doneID == t.navID {
 				// the user's latest navigation ended as a page: later downloads
@@ -385,6 +394,14 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 		t.chainUser[navID] = user
 	} else if t.chainUser[navID] {
 		user = true
+	}
+	// the page's "Data -> Excel + PDF" button
+	if strings.HasPrefix(uri, "https://ronin.data/") {
+		call(args, nsSetCancel, 1)
+		if u, err := url.Parse(uri); err == nil && u.Query().Get("k") == newTabKey {
+			runOnUI(func() { t.exportData() })
+		}
+		return
 	}
 	// a change to the quick links, made on Ronin's own new tab page
 	if strings.HasPrefix(uri, "https://ronin.newtab/") {

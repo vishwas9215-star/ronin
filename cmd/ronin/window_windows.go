@@ -265,7 +265,8 @@ func (w *Window) sendState() {
 	w.send(jsCall("state", map[string]any{"container": string(w.container), "tabs": list, "grid": w.grid,
 		"mini": w.mini, "vpn": map[bool]string{true: vs, false: ""}[usesVPN(w.container)], "vpnHere": here,
 		"vpnSmart":   usesVPN(w.container) && !vpnAll && w.container != containers.Private,
-		"bookmarked": w.active != nil && store.HasBookmark(w.active.url), "focus": focusMenuState()}))
+		"bookmarked": w.active != nil && store.HasBookmark(w.active.url), "focus": focusMenuState(),
+		"dataSite": w.active != nil && store.IsDataSite(hostOf(w.active.url))}))
 	w.dirty = true
 	title := ""
 	if w.active != nil {
@@ -435,6 +436,22 @@ func (w *Window) onUIMessage(raw string) {
 		w.panelPending = nil
 	case "panelclose":
 		w.closePanel()
+	case "dataexport":
+		if w.active != nil {
+			w.active.exportData()
+		}
+	case "datasite":
+		if t := w.active; t != nil && strings.HasPrefix(t.url, "http") {
+			on := store.ToggleDataSite(hostOf(t.url))
+			if on {
+				w.bar(t, "ok", "📊 Data बटन इस साइट पर चालू: page के नीचे दाईं ओर हरा बटन (Excel + PDF).", nil)
+				t.showDataButton()
+			} else {
+				w.bar(t, "info", "📊 Data बटन इस साइट पर बंद.", nil)
+				t.runScript("(function(){var b=document.getElementById('ronin-data-btn');if(b)b.remove()})()", func(string) {})
+			}
+			w.sendState()
+		}
 	case "savepdf":
 		if w.active != nil {
 			w.active.savePDF()
@@ -622,6 +639,11 @@ func (w *Window) onUIMessage(raw string) {
 		openContainer(containers.Personal, "https://aistudio.google.com/apikey")
 	case "removebank":
 		_ = store.Update(func(s *settingsT) { s.UserBanks = removeItem(s.UserBanks, m.Host) })
+		w.overlay("settings", settingsData())
+	case "datasiteremove":
+		if store.IsDataSite(m.Host) {
+			store.ToggleDataSite(m.Host)
+		}
 		w.overlay("settings", settingsData())
 	case "trustadd": // Settings: a site wrongly stopped as dangerous
 		store.Trust(m.URL)

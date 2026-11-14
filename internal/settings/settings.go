@@ -49,6 +49,7 @@ type Settings struct {
 	NoHistory         bool              `json:"no_history,omitempty"`   // do not keep visited pages
 	QuickLinks        []quicklinks.Link `json:"quick_links,omitempty"`  // links the user added on the new tab page
 	HiddenLinks       []string          `json:"hidden_links,omitempty"` // built-in quick links the user removed
+	DataSites         []string          `json:"data_sites,omitempty"`   // sites with the "Data -> Excel + PDF" button
 }
 
 // DefaultUpdateChannel is where Ronin looks for new versions (signed manifest).
@@ -153,6 +154,7 @@ func (st *Store) Get() Settings {
 	c.FocusSites = append([]string(nil), st.s.FocusSites...)
 	c.QuickLinks = append([]quicklinks.Link(nil), st.s.QuickLinks...)
 	c.HiddenLinks = append([]string(nil), st.s.HiddenLinks...)
+	c.DataSites = append([]string(nil), st.s.DataSites...)
 	c.ZoomSites = make(map[string]int, len(st.s.ZoomSites))
 	for k, v := range st.s.ZoomSites {
 		c.ZoomSites[k] = v
@@ -467,4 +469,38 @@ func removeString(list []string, v string) []string {
 		}
 	}
 	return out
+}
+
+// IsDataSite reports whether the "Data -> Excel + PDF" button is on for host.
+func (st *Store) IsDataSite(host string) bool {
+	h := strings.TrimPrefix(strings.ToLower(host), "www.")
+	for _, d := range st.Get().DataSites {
+		if h == d || strings.HasSuffix(h, "."+d) {
+			return true
+		}
+	}
+	return false
+}
+
+// ToggleDataSite switches the Data button on or off for a site; it returns the new state.
+func (st *Store) ToggleDataSite(host string) bool {
+	h := strings.TrimPrefix(strings.ToLower(host), "www.")
+	if h == "" {
+		return false
+	}
+	on := !st.IsDataSite(h)
+	_ = st.Update(func(s *Settings) {
+		if on {
+			s.DataSites = append(s.DataSites, h)
+			return
+		}
+		var keep []string
+		for _, d := range s.DataSites {
+			if !(h == d || strings.HasSuffix(h, "."+d)) {
+				keep = append(keep, d)
+			}
+		}
+		s.DataSites = keep
+	})
+	return on
 }
