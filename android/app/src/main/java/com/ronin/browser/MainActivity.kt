@@ -80,6 +80,7 @@ class MainActivity : AppCompatActivity() {
         var title = ""
         @Volatile var url = ""
         @Volatile var topHost = ""
+        @Volatile var isTools = false // Ronin's own PDF / Photo tools page is open in this tab
     }
 
     private val app get() = application as RoninApp
@@ -437,6 +438,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun load(t: Tab, url: String) {
+        if (url.startsWith(TOOLS)) {
+            t.isTools = true
+            t.url = TOOLS
+            t.title = "PDF / Photo tools"
+            t.web.loadUrl(TOOLS + "?k=" + toolsKey + "&dark=" + (if (app.store.night) "1" else "0"))
+            return
+        }
         if (url == MERGE) {
             t.url = MERGE
             t.title = "डेटा मिलाओ"
@@ -484,6 +492,7 @@ class MainActivity : AppCompatActivity() {
         override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? {
             val url = req.url.toString()
             val t = tab()
+            if (url.startsWith(TOOLS)) return toolsFile(t, req.url.path ?: "")
             if (req.isForMainFrame) {
                 stopPage(url, t)?.let { html ->
                     return WebResourceResponse("text/html", "utf-8", 200, "OK", mapOf("Cache-Control" to "no-store"),
@@ -508,8 +517,13 @@ class MainActivity : AppCompatActivity() {
             }
             if (url == BACK_TO_SAFETY) { leaveDangerPage(tab()); return true }
             if (url.startsWith("https://ronin.newtab/")) { quickLinkChange(tab(), req.url); return true }
+            if (url.startsWith("https://ronin.data/save")) {
+                val t = tab()
+                if (req.url.getQueryParameter("k") == toolsKey && t.isTools) saveToolFile(t)
+                return true
+            }
             if (url.startsWith("https://ronin.data/merge")) {
-                if (req.url.getQueryParameter("k") == mergeKey && view.url?.startsWith(MERGE) == true && !exporting) {
+                if (req.url.getQueryParameter("k") == mergeKey && tab().url == MERGE && !exporting) {
                     exporting = true
                     view.evaluateJavascript("window.__roninMerge?window.__roninMerge.result():''") { res ->
                         val json = jsString(res)
@@ -556,6 +570,7 @@ class MainActivity : AppCompatActivity() {
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
             val t = tab()
+            if (!url.startsWith(TOOLS)) t.isTools = false
             view.setBackgroundColor(if (url.startsWith("http") && !url.startsWith("https://ronin.home")) Color.WHITE else homeBg())
             if (url.startsWith("http") && !url.startsWith("https://ronin.home") && !neutralUa(url) && view.settings.userAgentString != uaFor(url) && t.uaFixedFor != url) {
                 t.uaFixedFor = url // once per address: never a reload loop
@@ -764,6 +779,64 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         .replace("{{NONCE}}", pageKey).replace("{{KEY}}", mergeKey).replace("{{DARK}}", if (app.store.night) "1" else "0")
 
     fun openMergeForTest() = newTab(MERGE)
+    fun openToolsForTest() = newTab(TOOLS)
+
+    /** A file of the tools page, from inside the app (only for a tab Ronin opened the tools in). */
+    private fun toolsFile(t: Tab, path: String): WebResourceResponse {
+        val name = path.removePrefix("/tools/").ifEmpty { "index.html" }
+        val ok = t.isTools && !name.contains("..") && Regex("[A-Za-z0-9_./-]+").matches(name)
+        val mime = when {
+            name.endsWith(".js") || name.endsWith(".mjs") -> "text/javascript"
+            name.endsWith(".html") -> "text/html"
+            else -> "text/plain"
+        }
+        return try {
+            if (!ok) throw java.io.FileNotFoundException(name)
+            WebResourceResponse(mime, "utf-8", 200, "OK", mapOf("Cache-Control" to "no-store"), assets.open("ronin/tools/$name"))
+        } catch (e: Exception) {
+            WebResourceResponse("text/plain", "utf-8", 404, "Not Found", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+        }
+    }
+
+    /** The tools page made a file: read it in pieces, save it in Downloads/Ronin. */
+    private fun saveToolFile(t: Tab) {
+        t.web.evaluateJavascript("window.__roninSave?JSON.stringify({name:window.__roninSave.name,mime:window.__roninSave.mime,n:window.__roninSave.n}):''") { raw ->
+            val head = try { JSONObject(jsString(raw)) } catch (e: Exception) { return@evaluateJavascript }
+            val n = head.optInt("n"); val name = head.optString("name").replace(Regex("[\\\\/:*?\"<>|]+"), " ").trim().ifEmpty { "Ronin file" }
+            val mime = head.optString("mime").ifEmpty { "application/octet-stream" }
+            if (n <= 0 || n > 400) return@evaluateJavascript
+            val b64 = StringBuilder()
+            fun done(ok: Boolean) = t.web.evaluateJavascript("if(window.__roninSave)window.__roninSave.state='${if (ok) "saved" else "failed"}'", null)
+            fun part(i: Int) {
+                if (i == n) {
+                    kotlin.concurrent.thread(name = "ronin-tool-save") {
+                        val uri = try { saveToDownloads(name, mime, android.util.Base64.decode(b64.toString(), android.util.Base64.DEFAULT)) } catch (e: Exception) { null }
+                        runOnUiThread {
+                            done(uri != null)
+                            if (uri == null) Toast.makeText(this, "File save नहीं हुई", Toast.LENGTH_LONG).show()
+                            else savedNote(name, uri, mime)
+                        }
+                    }
+                    return
+                }
+                t.web.evaluateJavascript("window.__roninSave?window.__roninSave.part($i):''") { res ->
+                    val s = jsString(res)
+                    if (s.isEmpty()) done(false) else { b64.append(s); part(i + 1) }
+                }
+            }
+            part(0)
+        }
+    }
+
+    private var savedDialog: AlertDialog? = null
+
+    /** "Saved" note with an Open button (one at a time: several photos can follow each other). */
+    private fun savedNote(name: String, uri: Uri, mime: String) {
+        savedDialog?.dismiss()
+        savedDialog = AlertDialog.Builder(this).setMessage("✔ Downloads → Ronin में save:\n$name")
+            .setPositiveButton("खोलें") { _, _ -> openFile(uri, mime) }
+            .setNegativeButton("ठीक है", null).show()
+    }
 
     private val tableJs: String by lazy { assets.open("ronin/table_export.js").bufferedReader().readText() }
     private var exporting = false
@@ -1005,6 +1078,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                 } else t.web.evaluateJavascript("(function(){var b=document.getElementById('ronin-data-btn');if(b)b.remove()})()", null)
             }
         }
+        items["🧰 PDF / Photo tools (छोटा करो, जोड़ो, sign, collage...)"] = { newTab(TOOLS) }
         items["🔀 डेटा मिलाओ (Prerna + UDISE+ / शिक्षक forms)"] = { newTab(MERGE) }
         items["🛡 Safe sites / ग़लती से रुकी साइटें"] = { showSafeSites() }
         items["🏦 Ronin Safe Money (banking)"] = { startActivity(Intent(this, SafeMoneyActivity::class.java)) }
@@ -1108,6 +1182,9 @@ h1{margin:0 0 4px;font-size:24px}p.sub{margin:0 0 6px;opacity:.7}p.note{margin-t
         const val BACK_TO_SAFETY = "https://ronin.home/back"
         const val TRUST_PREFIX = "https://ronin.home/trust"
         const val MERGE = "https://ronin.home/merge"
+        const val TOOLS = "https://ronin.home/tools/"
+        /** Proves "save this file" came from the tools page. */
+        val toolsKey: String = java.util.UUID.randomUUID().toString().replace("-", "")
         /** Proves "save the merged table" came from Ronin's own merge page. */
         val mergeKey: String = java.util.UUID.randomUUID().toString().replace("-", "")
         /** Proves a link came from Ronin's own page (new tab page, red page). New each start. */

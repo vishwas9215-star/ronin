@@ -438,6 +438,8 @@ func (w *Window) onUIMessage(raw string) {
 		w.closePanel()
 	case "merge":
 		w.showMerge()
+	case "tools":
+		w.showTools()
 	case "dataexport":
 		if w.active != nil {
 			w.active.exportData()

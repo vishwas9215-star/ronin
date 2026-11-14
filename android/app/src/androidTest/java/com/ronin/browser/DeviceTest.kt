@@ -328,6 +328,23 @@ class DeviceTest {
         }
     }
 
+    @Test
+    fun pdfToolsWorkOnThisDevice() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            sc.onActivity { a -> a.openToolsForTest() }
+            assertTrue("tools page did not open", waitFor(20) { eval(sc, "document.querySelectorAll('.tile').length") == "11" })
+            shot("13-tools")
+            val before = System.currentTimeMillis()
+            eval(sc, "window.__roninToolsSelfTest().then(function(r){window.__selfTest=r},function(e){window.__selfTest='error '+e.message}),1")
+            assertTrue("self test: " + eval(sc, "window.__selfTest"), waitFor(60) { eval(sc, "window.__selfTest||''").contains("ok 2") })
+            var found = emptyList<Pair<String, Long>>()
+            assertTrue("tools file not saved", waitFor(20) { found = recentDownloads(before, "Ronin tools self-test"); found.any { it.first.endsWith(".pdf") && it.second > 1000 } })
+            Thread.sleep(800)
+            shot("14-tools-saved")
+        }
+    }
+
     private fun recentDownloads(since: Long, prefix: String = "Student list test"): List<Pair<String, Long>> {
         if (Build.VERSION.SDK_INT < 29) return emptyList()
         val out = ArrayList<Pair<String, Long>>()

@@ -37,7 +37,7 @@ func saveSession(skip *Window) {
 		}
 		sw := session.Window{Container: string(w.container), Grid: w.grid}
 		for i, t := range w.tabs {
-			if t.isNewTab || t.url == "" {
+			if t.isNewTab || t.isTools || t.isMerge || t.url == "" {
 				continue
 			}
 			if t == w.active {

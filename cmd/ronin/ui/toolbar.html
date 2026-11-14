@@ -392,6 +392,7 @@ function showMenu(){
     item("Night mode looks wrong on this site? Turn it off here", () => post({cmd:"darkoff", value: true}));
     item("Night mode on this site again", () => post({cmd:"darkoff", value: false}));
   }
+  if (CONTAINER !== "BANKING") item("\uD83E\uDDF0 PDF / Photo tools (\u091b\u094b\u091f\u093e \u0915\u0930\u094b, \u091c\u094b\u0921\u093c\u094b, sign, collage...)", () => post({cmd:"tools"}));
   if (CONTAINER !== "BANKING") item("\uD83D\uDD00 \u0921\u0947\u091f\u093e \u092e\u093f\u0932\u093e\u0913 (Prerna + UDISE+ / \u0936\u093f\u0915\u094d\u0937\u0915 forms)", () => post({cmd:"merge"}));
   if (web && CONTAINER !== "BANKING") {
     item("Save page as PDF   (Ctrl+P)", () => post({cmd:"savepdf"}));

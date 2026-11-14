@@ -140,12 +140,15 @@ func (t *Tab) hookAdblock() {
 	c := t.c
 	cont := t.w.container
 	c.WebResourceRequestedCallback = func(req *edge.ICoreWebView2WebResourceRequest, args *edge.ICoreWebView2WebResourceRequestedEventArgs) {
-		e := blocker.Load()
-		if e == nil {
-			return
-		}
 		uri, err := req.GetUri()
 		if err != nil || uri == "" {
+			return
+		}
+		if t.serveTools(uri, args) { // Ronin's own PDF / Photo tools page (from memory)
+			return
+		}
+		e := blocker.Load()
+		if e == nil {
 			return
 		}
 		if t.kidsHeaders {

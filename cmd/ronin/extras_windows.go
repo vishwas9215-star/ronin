@@ -35,7 +35,7 @@ func keepsHistory(c containers.Container) bool {
 }
 
 func (t *Tab) recordVisit() {
-	if hist != nil && keepsHistory(t.w.container) && !t.isNewTab && t.errURL == "" {
+	if hist != nil && keepsHistory(t.w.container) && !t.isNewTab && !t.isTools && t.errURL == "" {
 		hist.Add(t.title, t.url)
 	}
 }

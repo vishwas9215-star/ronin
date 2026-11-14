@@ -91,6 +91,20 @@ func writeAssets(dir string) error {
 			return err
 		}
 	}
+	// the PDF / Photo tools page with its libraries
+	for _, f := range []string{"index.html", "tools.js", "lib/pdf-lib.min.js", "lib/pdf.min.mjs", "lib/pdf.worker.min.mjs", "lib/LICENSE-pdf-lib.md", "lib/LICENSE-pdfjs.txt"} {
+		src, err := os.ReadFile(filepath.Join("cmd", "ronin", "ui", "tools", f))
+		if err != nil {
+			return err
+		}
+		dst := filepath.Join(dir, "tools", filepath.FromSlash(f))
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(dst, src, 0o644); err != nil {
+			return err
+		}
+	}
 	fmt.Printf("assets: %d ad domains, %d bank sites\n", len(block), len(safemoney.Export()["bank"]))
 	return nil
 }

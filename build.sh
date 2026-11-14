@@ -19,6 +19,7 @@ NODE_PATH=$(npm root -g) node tools/uitest/tableexport.js
 NODE_PATH=$(npm root -g) node tools/uitest/tableexport2.js
 NODE_PATH=$(npm root -g) node tools/uitest/darkcsp.js
 NODE_PATH=$(npm root -g) node tools/uitest/merge.js /tmp/ronin-ui
+python3 tools/uitest/make_tool_fixtures.py /tmp/toolfx && NODE_PATH=$(npm root -g) node tools/uitest/pdftools.js /tmp/ronin-ui
 go build -trimpath -ldflags "-H=windowsgui -s -w -X main.Version=$VERSION" -o build/Ronin.exe ./cmd/ronin
 mkdir -p cmd/setup/payload
 cp build/Ronin.exe cmd/setup/payload/Ronin.exe
