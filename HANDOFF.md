@@ -211,6 +211,10 @@ top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped p
   toolbar menu + danger page (LG via navigator.language) and table_export.js progress badges. The Excel check
   reasons (पीला / लाल / नारंगी) and the Hindi words in scam / pager regexes stay (they are data, not UI).
   extras.js UI test checks Hindi (hi-IN) and English (en-US). All 23 UI tests pass.
+- 15 Nov 01:14: while I tested Ronin Calls on his real phone, a tap on a name in Recent placed a real call to one of
+  his contacts. Cause: tapping the name row dialled at once. Fixed: the name only fills the keypad; only the green
+  📞 calls (phone.js test 'tap on a name placed a call'). Rule: never tap call rows / green buttons on his real
+  phone; test calling only on the emulator.
 - Still to do before publish: tablet (OnePlus Pad) check when he connects it; he turns on recording Accessibility
   himself if wanted; then he names the version ("हाँ, V3.11.0 publish करो").
 

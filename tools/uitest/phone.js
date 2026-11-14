@@ -96,6 +96,12 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   await p3.screenshot({ path: path.join(out, 'calls-pad.png') });
   if (await p3.$('a:has-text("112"), a:has-text("1930")')) bad('emergency / fraud numbers shown all the time');
   await p3.click('[data-tab=recent]'); await p3.waitForSelector('.th');
+  // a tap on a name must NOT call: it only puts the number on the keypad
+  { const before = await p3.evaluate(() => window.__log.filter(m => m.op === 'call').length);
+    await p3.click('.th .mid'); await p3.waitForTimeout(200);
+    if ((await p3.evaluate(() => window.__log.filter(m => m.op === 'call').length)) !== before) bad('tap on a name placed a call');
+    if (!(await p3.$('#num')) || !(await p3.inputValue('#num'))) bad('tap on a name did not fill the keypad');
+    await p3.click('[data-tab=recent]'); await p3.waitForSelector('.th'); }
   if (!await p3.$('.lbl:has-text("विदेश")')) bad('foreign caller not marked');
   await p3.screenshot({ path: path.join(out, 'calls-recent.png') });
   await p3.click('[data-tab=contacts]'); await p3.waitForSelector('.th[data-number="+919811111111"]'); await p3.fill('#search', 'ram');

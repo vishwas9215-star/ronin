@@ -58,7 +58,8 @@
       const mine = rows.filter(r => !q || (r.name || '').toLowerCase().includes(q) || (r.number || '').includes(q)).slice(0, 300);
       list.replaceChildren(...(mine.length ? mine.map(r => h('div', { cls: 'th', 'data-number': r.number },
         h('div', { cls: 'av', style: r.label ? 'background:#7c5d12' : '' }, ((r.name || r.number || '?')[0] || '?').toUpperCase()),
-        h('div', { cls: 'mid', on: { click: () => call(r.number) } }, h('b', {}, r.name || r.number), h('small', {}, (r.name ? r.number + ' ' : '') + (TYPE[r.type] || '') + (r.date ? ' • ' + when(r.date) : '')), r.label ? h('span', { cls: 'lbl' }, r.label) : ''),
+        h('div', { cls: 'mid', on: { click: () => window.__roninDial(r.number) } }, // a tap on the name only puts the number on the keypad: only the green 📞 calls (a stray tap once called someone at night)
+         h('b', {}, r.name || r.number), h('small', {}, (r.name ? r.number + ' ' : '') + (TYPE[r.type] || '') + (r.date ? ' • ' + when(r.date) : '')), r.label ? h('span', { cls: 'lbl' }, r.label) : ''),
         h('button', { cls: 'pill', on: { click: () => ask('sms', { number: r.number }) } }, '💬'),
         r.label ? h('button', { cls: 'pill', on: { click: async () => { if (confirm(L(r.number + ' block करें? इनकी calls और SMS नहीं आएँगे।', 'Block ' + r.number + '? Their calls and SMS will stop.'))) alert((await ask('block', { number: r.number })) ? L('🚫 Block कर दिया', '🚫 Blocked') : L('Block नहीं हुआ', 'Could not block')); } } }, '🚫') : '',
         h('button', { cls: 'pill green', on: { click: () => call(r.number) } }, '📞')))
