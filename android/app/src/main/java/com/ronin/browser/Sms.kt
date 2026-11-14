@@ -158,12 +158,6 @@ object SmsStore {
         return out
     }
 
-    /** "Mark all read": every unread SMS at once. */
-    fun markAllRead(ctx: Context): Boolean {
-        if (!isDefault(ctx)) return false
-        return try { ctx.contentResolver.update(Telephony.Sms.CONTENT_URI, ContentValues().apply { put("read", 1); put("seen", 1) }, "read=0", null); true } catch (e: Exception) { false }
-    }
-
     fun markRead(ctx: Context, thread: Long) {
         if (!isDefault(ctx)) return
         try { ctx.contentResolver.update(Telephony.Sms.CONTENT_URI, ContentValues().apply { put("read", 1); put("seen", 1) }, "thread_id=? AND read=0", arrayOf(thread.toString())) } catch (e: Exception) { }
