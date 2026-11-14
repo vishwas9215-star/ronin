@@ -128,9 +128,13 @@
     // a company's SMS from all its sender names, oldest first
     const parts = await Promise.all((t.threads || [t.thread]).map(id => ask('messages', { thread: id })));
     const msgs = [].concat(...parts.map(x => x || [])).sort((a, b) => a.date - b.date);
-    const body = h('div', { cls: 'msgs', id: 'msgs' }, msgs.map(m => h('div', {},
+    // several OTPs: the newest one says "Latest", the older ones are dimmed (moves on when a new one comes)
+    let latest = -1;
+    msgs.forEach((m, i) => { if (m.type === 1 && otpOf(m.body)) latest = i; });
+    const body = h('div', { cls: 'msgs', id: 'msgs' }, msgs.map((m, i) => h('div', {},
       m.type === 1 && m.level ? warnBox(m.level, m.reasons) : '',
-      h('div', { cls: 'b ' + (m.type === 1 ? 'in' : 'out'), 'data-level': m.level || '' }, smsBody(m.body, t.cat !== 'scam'), h('small', {}, when(m.date) + (m.type === 5 ? L(' • ✖ नहीं गया', ' • ✖ not sent') : m.type === 4 ? L(' • भेज रहा...', ' • sending...') : ''))))));
+      i === latest ? h('div', { cls: 'latest' }, L('🆕 सबसे नया OTP', '🆕 Latest OTP')) : '',
+      h('div', { cls: 'b ' + (m.type === 1 ? 'in' : 'out') + (m.type === 1 && otpOf(m.body) && i !== latest ? ' oldotp' : ''), 'data-level': m.level || '' }, smsBody(m.body, t.cat !== 'scam'), h('small', {}, when(m.date) + (m.type === 5 ? L(' • ✖ नहीं गया', ' • ✖ not sent') : m.type === 4 ? L(' • भेज रहा...', ' • sending...') : ''))))));
     // a new SMS arriving while you type must not wipe what you are writing
     const old = again && document.getElementById('text');
     const box = h('textarea', { placeholder: st.isDefault ? L('संदेश लिखें...', 'Type a message...') : L('भेजने के लिए Ronin Messages चालू करें', 'Turn on Ronin Messages to send'), id: 'text' });
