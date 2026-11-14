@@ -1,7 +1,7 @@
-# Ronin Browser 3 — HANDOFF 8 (14 Nov 2026, 3.9.0 published; 3.10.0 built + CI green, waiting for approval)
+# Ronin Browser 3 — HANDOFF 8 (14 Nov 2026, 3.10.0 published)
 
 Owner: Vishwas (Hindi; both hands injured: fewest taps/typing). Not a coder: explain in Hindi, technical words in English.
-Current version: **3.9.0** published (Windows + Android); 3.10.0 built, waiting. Rollback: 3.8.0 / 3.7.1 releases on GitHub; Windows
+Current version: **3.10.0** published 14 Nov 23:15 IST (run 43618950937). Rollback: 3.9.0 / 3.8.0 releases on GitHub; Windows
 RoninSetup-3.5.1 / 3.4.0 in Downloads\Ronin Browser 3 Handoff.
 Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + test history: FEATURES.md.
 
@@ -110,7 +110,7 @@ Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + tes
 - Tests: tools/uitest/social.js, DeviceTest safeSocialOpensFullScreenAndCloses.
 - Review prompt for another AI given to owner (Ronin_review_prompt.txt); his answers will come back as suggestions.
 
-## 3.10.0 in progress (owner: everything in 3.10; NOT published)
+## 3.10.0 (published 14 Nov 2026)
 - Phase A done: shared engine ui/tools/scamcheck.js; rules data internal/safelinks/{lists.json, scamrules.json,
   cases.json} used by Go (safelinks.Check), Kotlin (SafeLinks.kt, ScamCheck.kt via rules.json "safeLinks"/"scamRules")
   and JS (native injects window.__roninLinkLists / __roninScamRules). Score: 1 heavy or 2 normal signs; advice with no
