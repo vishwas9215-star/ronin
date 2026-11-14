@@ -1,8 +1,10 @@
-# Ronin Browser 3 — HANDOFF 5 (14 Nov 2026, after 3.5.0)
+# Ronin Browser 3 — HANDOFF 6 (14 Nov 2026, after 3.6.0 = first Windows + Android release)
 
 Owner: Vishwas (Hindi; hands injured: fewest clicks/typing). Not a coder: explain in Hindi, UI text in English.
-Current version: **3.5.0**, installed + tested on his laptop (C:\Ronin Ecosystem\Ronin Browser).
-Source: Downloads\Ronin Browser 3 Handoff\RoninBrowser3-source-3.5.0.zip. Rollback: RoninSetup-3.4.0.exe (same folder).
+Current version: **3.6.0** (Windows + Android, one release). Windows 3.6.0 installed on the laptop and its
+update check says "Up to date" (reads the signed manifest from GitHub).
+Source of truth: **GitHub repo vishwas9215-star/ronin (public)**. Rollback for Windows: RoninSetup-3.5.1.exe /
+3.4.0 in Downloads\Ronin Browser 3 Handoff.
 Feature list + test history: FEATURES.md (bottom = latest).
 
 ## Owner's standing rules (must follow)
@@ -41,6 +43,28 @@ Feature list + test history: FEATURES.md (bottom = latest).
 - Video call window opens behind the current window (Windows focus rule) - cosmetic.
 - Google passkey sign-in: engine limit, use "Try another way".
 - Not tried live: Safe Money idle logout / clipboard clear / remote-tool warning, Kids, sleeping tabs.
+
+## Release system (since 3.6.0)
+- Repo: https://github.com/vishwas9215-star/ronin. Claude GitHub App installed for this repo only (owner approved).
+  The session's git proxy allows branch pushes but NOT tag pushes (HTTP 403).
+- VERSION file = one version for Windows + Android. Push to main -> build.yml: Windows build.sh (all Go + JS + UI
+  tests), Android unit tests + signed APK, Android 14 emulator device tests; test lists appear on the run page.
+- Publish = Actions -> build -> Run workflow -> tick "Publish this VERSION" (only when the owner names the version,
+  e.g. "हाँ, V3.6.1 publish करो"). The release job signs manifest.json (Windows) and writes android.json.
+- Keys: keys/ronin-keys.tar.enc (AES-256, password only in secret RONIN_KEYS_PASS + owner's
+  RONIN_KEYS_PASS-BACKUP.txt in the handoff folder). Never read/print the password.
+- ad-lists.yml: daily public lists -> release "lists" (adblock-domains.txt.gz, ~357k domains) for Android.
+- Android app (android/): Kotlin WebView app com.ronin.browser. Rules.kt + AdBlocker.kt use rules.json exported from
+  the Go code (tools/exportlists) = same bank/trading/call/ad rules. YouTube player mode = PageScripts.BACKGROUND_PLAY
+  + RoninWebView.keepPlaying + MediaPlaybackService (MediaSession notification / lock screen / car buttons).
+  Safe Money = FLAG_SECURE + own WebView profile. Update = android.json from latest release (1 tap install).
+
+## Open after 3.6.0
+- Owner to install Ronin.apk on his Motorola phone + Android tablet and try: YouTube song, swipe app away, lock
+  screen controls, car Bluetooth; voice search; Safe Money; Check for updates.
+- Not yet in Android: VPN, passwords, video download, Kids, study time, page-size memory, sync, TV app.
+- Owner's laptop has C:\Ronin Ecosystem\EMERGENCY-BACKUP\tablet-tools (scrcpy/adb from an earlier session) -
+  rule 3: never touch that folder.
 
 ## NEXT PHASE (agreed with owner 14 Nov) — Android
 1. GitHub: owner approved that Claude creates repo "ronin" in his account (vishwas9215-star) in the built-in browser
