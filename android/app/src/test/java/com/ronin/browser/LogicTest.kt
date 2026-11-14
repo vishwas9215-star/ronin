@@ -87,7 +87,8 @@ class LogicTest {
             "https://kotakcollege.edu.in/", "https://www.barodatimes.com/", "https://sbi.example.com/",
             "https://www.youtube.com/watch?v=hdfc", "https://en.wikipedia.org/wiki/State_Bank_of_India",
             "https://www.dhanbank.com/", "https://www.onlinemarket.in/", "https://sbi.bank.in/",
-            "https://netbanking.hdfcbank.com/")
+            "https://netbanking.hdfcbank.com/", "https://www.icicisecurities.com/", "https://www.hdfccredila.com/",
+            "https://www.indusindnipponlife.com/", "https://www.yesbankltd.in/", "https://www.axisbankfoundation.org/")
         for (u in good) assertNull("$u wrongly flagged", rules.fakeBank(u))
         assertNull(rules.fakeBank("https://sbi-pension-help.org/", trusted = setOf("sbi-pension-help.org")))
         assertEquals("sbi", rules.fakeBank("https://sbi-pension-help.org/"))
@@ -105,5 +106,14 @@ class LogicTest {
         assertFalse(b.dangerous("notphish.example"))
         assertTrue("danger sites are blocked as page parts too", b.blocked("https://phish.example/x.js"))
         assertTrue(b.dangerous("ronin-phishing-test.com")) // the test site stays after a list update
+    }
+
+    @Test fun quickLinksLikeWindows() {
+        assertEquals("https://kite.zerodha.com/", QuickLink.clean("Trading", " Zerodha ", "kite.zerodha.com", rules.quickSections)?.url)
+        assertNull(QuickLink.clean("School", "x", "javascript:alert(1)", rules.quickSections))
+        assertNull(QuickLink.clean("School", "x", "notasite", rules.quickSections))
+        assertEquals("Quick links", QuickLink.clean("Nope", "", "https://www.example.com", rules.quickSections)?.section)
+        assertTrue(rules.quickLinks.any { it.name == "UDISE+ All Modules" && it.section == "School" })
+        assertTrue(rules.quickLinks.any { it.name == "Fyers" && it.section == "Trading" })
     }
 }

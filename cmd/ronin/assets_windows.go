@@ -3,9 +3,14 @@
 package main
 
 import (
+	"crypto/rand"
 	_ "embed"
+	"encoding/hex"
+	"encoding/json"
 	"html"
 	"strings"
+
+	"roninbrowser/internal/quicklinks"
 
 	"roninbrowser/internal/containers"
 )
@@ -15,6 +20,48 @@ var toolbarTemplate string
 
 //go:embed ui/newtab.html
 var newTabTemplate string
+
+//go:embed ui/quicklinks.js
+var quickLinksJS string
+
+// newTabKey proves that a quick-link change came from Ronin's own new tab page.
+var newTabKey = func() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}()
+
+var sectionTitles = map[string]string{"Quick links": "Quick links", "School": "स्कूल / School", "Trading": "Trading", "Video calls": "Video calls"}
+
+// quickLinksBlock is the small, editable quick links for the given sections.
+func quickLinksBlock(sections ...string) string {
+	type jl struct {
+		N string `json:"n"`
+		U string `json:"u"`
+	}
+	type js struct {
+		ID    string `json:"id"`
+		Title string `json:"title"`
+		Links []jl   `json:"links"`
+	}
+	all := quicklinks.List(nil, nil)
+	if store != nil {
+		all = store.QuickLinks()
+	}
+	data := struct {
+		K        string `json:"k"`
+		Sections []js   `json:"sections"`
+	}{K: newTabKey}
+	for _, sec := range sections {
+		x := js{ID: sec, Title: sectionTitles[sec]}
+		for _, l := range quicklinks.In(all, sec) {
+			x.Links = append(x.Links, jl{l.Name, l.URL})
+		}
+		data.Sections = append(data.Sections, x)
+	}
+	b, _ := json.Marshal(data) // escapes <, > and & so it is safe inside <script>
+	return `<div id="ql"></div><script nonce="` + newTabKey + `">window.RONIN_QL=` + string(b) + `;</script><script nonce="` + newTabKey + `">` + quickLinksJS + `</script>`
+}
 
 func toolbarHTML(c containers.Container) string {
 	return strings.NewReplacer("{{CONTAINER}}", string(c), "{{PANEL}}", "0", "{{THEME}}", themeName()).Replace(toolbarTemplate)
@@ -94,7 +141,7 @@ func newTabHTML(c containers.Container) string {
 	case containers.Trading:
 		heading = "Ronin Trading"
 		sub = "Ronin Terminal, Dhan and TradingView in one window."
-		sections = append(sections, linksSection("Trading", tradingLinks))
+		sections = append(sections, quickLinksBlock("Trading"))
 		note = `<div class="note"><b>Remember:</b> A SEBI-registered adviser never takes your money to trade for you. Profit that needs a "fee" before withdrawal is always a scam.</div>`
 	case containers.Kids:
 		heading = "Ronin Kids"
@@ -108,17 +155,18 @@ func newTabHTML(c containers.Container) string {
 	case containers.Calls:
 		heading = "Ronin Video Call"
 		sub = "Video calls at full quality: no VPN slow-down, camera and microphone ready, calls keep running in the background."
-		sections = append(sections, linksSection("Video calls", callLinks))
+		sections = append(sections, quickLinksBlock("Video calls"))
 		note = `<div class="note"><b>Tip:</b> Sign in once here (Google, WhatsApp). This window keeps its own sign-in. Never share an OTP or screen with a stranger on a call.</div>`
 	case containers.Private:
 		heading = "Private window"
 		sub = "Nothing from this window is kept after you close it."
 	default:
-		sections = append(sections, linksSection("Quick links", personalLinks), linksSection("Trading", tradingLinks), linksSection("Video calls", callLinks))
+		sections = append(sections, quickLinksBlock(quicklinks.Sections...))
 		note = `<div class="note">Bank websites open automatically in <b>Ronin Safe Money</b>, the protected banking window.</div>`
 	}
 	r := strings.NewReplacer(
 		"{{CONTAINER}}", string(c),
+		"{{NONCE}}", newTabKey,
 		"{{THEME}}", themeName(),
 		"{{HEADING}}", html.EscapeString(heading),
 		"{{SUBTITLE}}", html.EscapeString(sub),

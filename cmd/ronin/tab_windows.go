@@ -19,6 +19,7 @@ import (
 	"roninbrowser/internal/downloadguard"
 	"roninbrowser/internal/httpsonly"
 	"roninbrowser/internal/omnibox"
+	"roninbrowser/internal/quicklinks"
 	"roninbrowser/internal/safemoney"
 	"roninbrowser/internal/videodl"
 	"roninbrowser/internal/vpn"
@@ -385,6 +386,16 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 	} else if t.chainUser[navID] {
 		user = true
 	}
+	// a change to the quick links, made on Ronin's own new tab page
+	if strings.HasPrefix(uri, "https://ronin.newtab/") {
+		call(args, nsSetCancel, 1)
+		if t.isNewTab {
+			if quickLinkChange(uri) {
+				runOnUI(func() { t.showNewTab() })
+			}
+		}
+		return
+	}
 	// for the "did the user ask for this download?" check
 	if strings.HasPrefix(uri, "http") { // Ronin's own pages (new tab, error page) do not count
 		t.navUser, t.navPage, t.navAt, t.navID = user, false, time.Now(), navID
@@ -443,7 +454,7 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 		runOnUI(func() { t.apply(d, uri) })
 		return
 	}
-	t.setBase(strings.HasPrefix(uri, "http"))
+	t.setBase(!strings.HasPrefix(uri, "data:") && !strings.HasPrefix(uri, "about:")) // Ronin's own pages stay dark
 	t.loading = true
 	t.lastNavURL = uri
 	t.top.Store(uri) // so the page's own first request is not treated as an advert
@@ -858,4 +869,25 @@ func (t *Tab) httpsOnly(args uintptr, uri string, redirected, user bool) bool {
 		_ = t.wv.Navigate(secure)
 	})
 	return true
+}
+
+// quickLinkChange applies https://ronin.newtab/add?... or /del?... from the
+// new tab page. The key proves the page is Ronin's own.
+func quickLinkChange(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host != "ronin.newtab" {
+		return false
+	}
+	q := u.Query()
+	if q.Get("k") != newTabKey {
+		return false
+	}
+	switch u.Path {
+	case "/add":
+		return store.AddQuickLink(quicklinks.Link{Section: q.Get("s"), Name: q.Get("n"), URL: q.Get("u")})
+	case "/del":
+		store.RemoveQuickLink(q.Get("u"))
+		return true
+	}
+	return false
 }

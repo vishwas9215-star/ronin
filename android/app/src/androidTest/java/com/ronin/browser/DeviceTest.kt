@@ -175,7 +175,7 @@ class DeviceTest {
         ActivityScenario.launch(MainActivity::class.java).use { sc ->
             Thread.sleep(1500)
             var newTabBtn: android.view.View? = null
-            sc.onActivity { a -> newTabBtn = a.tabStripForTest().findViewWithTag<android.view.View>("newtab") }
+            sc.onActivity { a -> newTabBtn = a.newTabButtonForTest() }
             assertNotNull("no + (new tab) button on screen", newTabBtn)
             sc.onActivity { newTabBtn!!.performClick() }
             Thread.sleep(800)
@@ -194,7 +194,8 @@ class DeviceTest {
             Thread.sleep(500)
             sc.onActivity { a ->
                 val strip = a.tabStripForTest()
-                assertEquals(3, strip.childCount) // 2 tabs + "+"
+                assertEquals(2, strip.childCount)
+                assertTrue("+ is not visible", a.newTabButtonForTest().isShown)
             }
         }
     }
@@ -215,7 +216,7 @@ class DeviceTest {
             Thread.sleep(2500)
             shot("01-home")
             var plus: android.view.View? = null
-            sc.onActivity { a -> plus = a.tabStripForTest().findViewWithTag<android.view.View>("newtab") }
+            sc.onActivity { a -> plus = a.newTabButtonForTest() }
             sc.onActivity { plus!!.performClick() }
             sc.onActivity { a -> a.loadHtmlForTest("<html><head><title>Wikipedia - test page</title></head><body style='font:20px sans-serif'><h1>Wikipedia</h1><p>Second tab</p></body></html>", "https://hi.wikipedia.org/") }
             Thread.sleep(1500)
@@ -228,6 +229,34 @@ class DeviceTest {
             shot("04-fake-bank")
             sc.onActivity { a -> a.showMenuForTest() }
             shot("05-menu")
+        }
+    }
+
+    @Test
+    fun quickLinksAreSmallAndCanBeAddedFromTheNewTabPage() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(2000)
+            assertTrue("school links missing", waitFor(10) { pageText(sc).contains("UDISE+ All Modules") && pageText(sc).contains("मानव संपदा") })
+            assertTrue("addresses must not show", !pageText(sc).contains("https://"))
+            val h = eval(sc, "Math.max.apply(null, [].map.call(document.querySelectorAll('#ql .chip'), function(c){return c.getBoundingClientRect().height}))").toDoubleOrNull() ?: 99.0
+            assertTrue("quick links too big ($h)", h <= 48)
+            shot("06-home-quick-links")
+            eval(sc, "document.querySelector('.edbtn').click(); document.querySelector('#ql .chips[data-s=\"Trading\"] .add').click(); 1")
+            eval(sc, "var f=document.querySelector('#ql form.new'); f.querySelectorAll('input')[0].value='Zerodha'; f.querySelectorAll('input')[1].value='kite.zerodha.com'; 1")
+            shot("07-add-quick-link")
+            eval(sc, "document.querySelector('#ql form.new button').click(); 1")
+            assertTrue("added link not shown", waitFor(10) { pageText(sc).contains("Zerodha") })
+            // a web page cannot add links (no key)
+            sc.onActivity { a -> a.loadHtmlForTest("<a id=x href='https://ronin.newtab/add?k=bad&s=Trading&n=Evil&u=evil.example'>x</a>", "https://evil.example/") }
+            Thread.sleep(1500)
+            eval(sc, "document.getElementById('x').click(); 1")
+            Thread.sleep(1500)
+            sc.onActivity { a -> a.goHomeForTest() }
+            Thread.sleep(1500)
+            assertTrue("a web page added a link", !pageText(sc).contains("Evil"))
+            // remove our test link again
+            eval(sc, "document.querySelector('.edbtn').click(); [].filter.call(document.querySelectorAll('#ql .chip'), function(c){return c.textContent.indexOf('Zerodha')>=0})[0].querySelector('.x').click(); 1")
+            assertTrue("remove did not work", waitFor(10) { !pageText(sc).contains("Zerodha") })
         }
     }
 }

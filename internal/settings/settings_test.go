@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"roninbrowser/internal/quicklinks"
 )
 
 func TestStore(t *testing.T) {
@@ -126,5 +128,32 @@ func TestBookmarksFile(t *testing.T) {
 	st2.ToggleBookmark("W", "https://hi.wikipedia.org/")
 	if n := st2.AddBookmarks(ParseBookmarksHTML(other)); n != 1 || len(st2.Get().Bookmarks) != 2 {
 		t.Errorf("import added %d", n)
+	}
+}
+
+func TestQuickLinksAddRemove(t *testing.T) {
+	st := Open(t.TempDir())
+	if !st.AddQuickLink(quicklinks.Link{Section: "Trading", Name: "Zerodha", URL: "kite.zerodha.com"}) {
+		t.Fatal("add failed")
+	}
+	if st.AddQuickLink(quicklinks.Link{Section: "Trading", Name: "bad", URL: "javascript:x"}) {
+		t.Fatal("bad link added")
+	}
+	st.RemoveQuickLink("https://trade.fyers.in/") // built-in: hidden
+	names := map[string]bool{}
+	for _, l := range st.QuickLinks() {
+		names[l.Name] = true
+	}
+	if !names["Zerodha"] || names["Fyers"] {
+		t.Fatalf("%v", names)
+	}
+	st.RemoveQuickLink("https://kite.zerodha.com/") // own: deleted
+	st.AddQuickLink(quicklinks.Link{Section: "Trading", Name: "Fyers", URL: "https://trade.fyers.in/"})
+	names = map[string]bool{}
+	for _, l := range st.QuickLinks() {
+		names[l.Name] = true
+	}
+	if names["Zerodha"] || !names["Fyers"] || len(st.Get().QuickLinks) != 0 {
+		t.Fatalf("%v %v", names, st.Get().QuickLinks)
 	}
 }

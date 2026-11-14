@@ -166,6 +166,9 @@ func (t *Tab) hookAdblock() {
 		if !e.BlockedFrom(uri, hostOf(t.topURL())) {
 			return
 		}
+		if trustedHost(strings.TrimPrefix(hostOf(uri), "www.")) {
+			return // "a safe site Ronin stopped by mistake": the user said it is fine
+		}
 		debugBlocked(uri)
 		// never break a bank or payment page, whatever a list says
 		if v := safemoney.Classify(uri, store.Lists()); v.Kind == safemoney.Bank || v.Kind == safemoney.Payment || v.Kind == safemoney.Trading {

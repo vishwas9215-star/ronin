@@ -90,6 +90,8 @@ func TestLookalikes(t *testing.T) {
 		"https://en.wikipedia.org/wiki/State_Bank_of_India",
 		"https://www.dhanbank.com/",
 		"https://www.onlinemarket.in/",
+		"https://www.icicisecurities.com/", "https://www.hdfccredila.com/", "https://www.indusindnipponlife.com/",
+		"https://www.yesbankltd.in/", "https://www.axisbankfoundation.org/",
 	}
 	for _, u := range good {
 		if v := Classify(u, Lists{}); v.Lookalike {

@@ -130,10 +130,10 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Device tests on an Android 15 emulator (${{ matrix.device }})
+      - name: Device tests on an emulator (${{ matrix.device }}: phone Android 15, tablet Android 16)
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: ${{ matrix.device == 'tablet' && 36 || 35 }}
           profile: ${{ matrix.device == 'tablet' && 'pixel_tablet' || 'pixel_6' }}
           target: google_apis
           arch: x86_64
@@ -149,7 +149,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls qa 2>/dev/null || exit 0
-          gh release view qa >/dev/null 2>&1 || gh release create qa --title "QA screenshots" --notes "Emulator screenshots from the last build (not a Ronin release)." --prerelease
+          gh release view qa >/dev/null 2>&1 || gh release create qa --title "QA screenshots" --notes "Emulator screenshots from the last build (not a Ronin release)." --prerelease || true
+          sleep 3
           for f in qa/*.png; do cp "$f" "${{ matrix.device }}-$(basename "$f")"; gh release upload qa "${{ matrix.device }}-$(basename "$f")" --clobber; done
       - name: Fail if a device test failed
         run: test ! -f device-tests-failed

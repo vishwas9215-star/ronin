@@ -247,7 +247,15 @@ func initWin32() error {
 	h, _, _ := pGetModuleHandleW.Call(0)
 	hInstance = h
 	cursor, _, _ := pLoadCursorW.Call(0, idcArrow)
-	appIcon, _, _ = pLoadImageW.Call(hInstance, 2, imageIcon, 0, 0, lrDefaultSize|lrShared) // icon group resource #2 (1 is the manifest)
+	// the Ronin logo: icon group #1 in the exe (the manifest is a different resource type)
+	appIcon, _, _ = pLoadImageW.Call(hInstance, 1, imageIcon, 0, 0, lrDefaultSize|lrShared)
+	if appIcon == 0 {
+		appIcon, _, _ = pLoadImageW.Call(hInstance, 2, imageIcon, 0, 0, lrDefaultSize|lrShared)
+	}
+	smallIcon, _, _ := pLoadImageW.Call(hInstance, 1, imageIcon, 16, 16, lrShared)
+	if smallIcon == 0 {
+		smallIcon = appIcon
+	}
 	darkBrush, _, _ = pCreateSolidBrush.Call(rgb(0x14, 0x17, 0x1f))
 	lightBrush, _, _ = pCreateSolidBrush.Call(rgb(0xee, 0xf0, 0xf4))
 	greenBrush, _, _ = pCreateSolidBrush.Call(rgb(0x16, 0xa3, 0x4a))
@@ -262,7 +270,7 @@ func initWin32() error {
 		hCursor:       cursor,
 		hbrBackground: darkBrush,
 		lpszClassName: utf16(appClass),
-		hIconSm:       appIcon,
+		hIconSm:       smallIcon,
 	}
 	if r, _, err := pRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc))); r == 0 {
 		return err
@@ -289,7 +297,23 @@ func createAppWindow(title string) uintptr {
 		cwUseDefault, cwUseDefault, cwUseDefault, cwUseDefault,
 		0, 0, hInstance, 0,
 	)
+	setDarkTitleBar(hwnd, themeName() != "light")
 	return hwnd
+}
+
+var pDwmSetWindowAttribute = windows.NewLazySystemDLL("dwmapi.dll").NewProc("DwmSetWindowAttribute")
+
+// setDarkTitleBar gives the window frame Ronin's dark colour in Night mode
+// (DWMWA_USE_IMMERSIVE_DARK_MODE = 20, Windows 10 20H1 and later).
+func setDarkTitleBar(hwnd uintptr, dark bool) {
+	if hwnd == 0 || pDwmSetWindowAttribute.Find() != nil {
+		return
+	}
+	v := int32(0)
+	if dark {
+		v = 1
+	}
+	pDwmSetWindowAttribute.Call(hwnd, 20, uintptr(unsafe.Pointer(&v)), 4)
 }
 
 func runMessageLoop() {

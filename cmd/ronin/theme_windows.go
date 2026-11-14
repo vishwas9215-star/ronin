@@ -73,6 +73,7 @@ func toggleTheme() {
 		if w.closing {
 			continue
 		}
+		setDarkTitleBar(w.hwnd, next != "light")
 		if w.ui != nil {
 			w.ui.SetBackgroundColour(r, g, b, 255)
 		}

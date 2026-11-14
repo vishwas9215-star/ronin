@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"roninbrowser/internal/focus"
+	"roninbrowser/internal/quicklinks"
 	"roninbrowser/internal/safemoney"
 )
 
@@ -39,13 +40,15 @@ type Settings struct {
 	NewTabFront       bool              `json:"new_tab_front,omitempty"` // true: a link's new tab comes to the front
 	Theme             string            `json:"theme,omitempty"`         // "" = night (dark), "light" = day
 	Bookmarks         []Bookmark        `json:"bookmarks,omitempty"`
-	ZoomSites         map[string]int    `json:"zoom_sites,omitempty"`  // "site.com" -> 125 (per cent)
-	FocusOn           bool              `json:"focus_on,omitempty"`    // daily study time
-	FocusFrom         string            `json:"focus_from,omitempty"`  // "18:00"
-	FocusTo           string            `json:"focus_to,omitempty"`    // "21:00"
-	FocusSites        []string          `json:"focus_sites,omitempty"` // empty = built-in list
-	FocusUntil        int64             `json:"focus_until,omitempty"` // "study 1 hour now" ends (unix)
-	NoHistory         bool              `json:"no_history,omitempty"`  // do not keep visited pages
+	ZoomSites         map[string]int    `json:"zoom_sites,omitempty"`   // "site.com" -> 125 (per cent)
+	FocusOn           bool              `json:"focus_on,omitempty"`     // daily study time
+	FocusFrom         string            `json:"focus_from,omitempty"`   // "18:00"
+	FocusTo           string            `json:"focus_to,omitempty"`     // "21:00"
+	FocusSites        []string          `json:"focus_sites,omitempty"`  // empty = built-in list
+	FocusUntil        int64             `json:"focus_until,omitempty"`  // "study 1 hour now" ends (unix)
+	NoHistory         bool              `json:"no_history,omitempty"`   // do not keep visited pages
+	QuickLinks        []quicklinks.Link `json:"quick_links,omitempty"`  // links the user added on the new tab page
+	HiddenLinks       []string          `json:"hidden_links,omitempty"` // built-in quick links the user removed
 }
 
 // DefaultUpdateChannel is where Ronin looks for new versions (signed manifest).
@@ -148,6 +151,8 @@ func (st *Store) Get() Settings {
 	c.TradingSites = append([]string(nil), st.s.TradingSites...)
 	c.KidsSites = append([]string(nil), st.s.KidsSites...)
 	c.FocusSites = append([]string(nil), st.s.FocusSites...)
+	c.QuickLinks = append([]quicklinks.Link(nil), st.s.QuickLinks...)
+	c.HiddenLinks = append([]string(nil), st.s.HiddenLinks...)
 	c.ZoomSites = make(map[string]int, len(st.s.ZoomSites))
 	for k, v := range st.s.ZoomSites {
 		c.ZoomSites[k] = v
@@ -410,4 +415,56 @@ func (st *Store) AddBookmarks(in []Bookmark) int {
 		}
 	})
 	return n
+}
+
+// QuickLinks returns the new tab page links (built-in ones not hidden + the user's).
+func (st *Store) QuickLinks() []quicklinks.Link {
+	s := st.Get()
+	return quicklinks.List(s.QuickLinks, s.HiddenLinks)
+}
+
+// AddQuickLink adds a link the user typed on the new tab page.
+func (st *Store) AddQuickLink(l quicklinks.Link) bool {
+	l, ok := quicklinks.Clean(l)
+	if !ok {
+		return false
+	}
+	return st.Update(func(s *Settings) {
+		for _, h := range s.HiddenLinks {
+			if h == l.URL { // adding a built-in link back un-hides it
+				s.HiddenLinks = removeString(s.HiddenLinks, h)
+				return
+			}
+		}
+		s.QuickLinks = append(s.QuickLinks, l)
+	}) == nil
+}
+
+// RemoveQuickLink removes the user's own link, or hides a built-in one.
+func (st *Store) RemoveQuickLink(u string) {
+	_ = st.Update(func(s *Settings) {
+		var keep []quicklinks.Link
+		mine := false
+		for _, l := range s.QuickLinks {
+			if l.URL == u {
+				mine = true
+				continue
+			}
+			keep = append(keep, l)
+		}
+		s.QuickLinks = keep
+		if !mine {
+			s.HiddenLinks = append(s.HiddenLinks, u)
+		}
+	})
+}
+
+func removeString(list []string, v string) []string {
+	var out []string
+	for _, x := range list {
+		if x != v {
+			out = append(out, x)
+		}
+	}
+	return out
 }

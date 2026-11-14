@@ -17,8 +17,8 @@ class AdBlocker(rules: Rules) {
 
     val threatSize: Int get() = threats.size
 
-    /** Loads the phishing / malware list (one domain per line). */
-    fun loadThreats(reader: BufferedReader): Int {
+    /** Reads a phishing / malware list (one domain per line) without using it yet. */
+    fun parseThreats(reader: BufferedReader): LongArray {
         val tmp = LongArrayBuilder()
         reader.forEachLine { line ->
             val d = line.trim().lowercase()
@@ -26,9 +26,13 @@ class AdBlocker(rules: Rules) {
         }
         val arr = tmp.toArray()
         arr.sort()
-        threats = arr
-        return arr.size
+        return arr
     }
+
+    fun setThreats(arr: LongArray) { threats = arr }
+
+    /** Reads and uses a phishing / malware list. */
+    fun loadThreats(reader: BufferedReader): Int = parseThreats(reader).also { setThreats(it) }.size
 
     /** host (or a parent domain) is a known phishing or malware site. */
     fun dangerous(host0: String): Boolean {

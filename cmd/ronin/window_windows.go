@@ -172,9 +172,7 @@ func windowTitle(c containers.Container, page string) string {
 	case containers.Kids:
 		name = "Ronin Kids"
 	}
-	if page != "" {
-		return page + " - " + name
-	}
+	_ = page // the frame shows only Ronin's name (the page title is in the tab)
 	return name
 }
 

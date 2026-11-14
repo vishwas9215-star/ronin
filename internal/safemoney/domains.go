@@ -35,6 +35,11 @@ var familyDomains = []string{
 	"kotaksecurities.com", "kotaklife.com", "kotakmf.com", "axismf.com", "axisdirect.in",
 	"axismaxlife.com", "hdfcsky.com", "pnbhousing.com", "barodabnpparibasmf.in", "canarahsbclife.com",
 	"yesinvest.in", "bobcard.co.in", "dhan.co",
+	"icicisecurities.com", "icicibank.co.in", "hdfccredila.com", "indusindnipponlife.com", "yesbankltd.in",
+	"yessecurities.co.in", "axisbankfoundation.org", "axisfinance.in", "kotak.com", "kotakbank.com",
+	"pnbmetlife.com", "sbipensionfunds.com", "sbifoundation.in", "idfcfirstbank.com", "bandhanmutual.com",
+	"canarabank.com", "unionbankofindia.co.in", "bankofbaroda.in", "bankofbaroda.com", "pnbindia.in",
+	"onlinesbi.sbi", "sbi.co.in", "hdfcbank.com", "icicibank.com", "axisbank.com",
 }
 
 // brands are the name-parts scammers copy into fake addresses.

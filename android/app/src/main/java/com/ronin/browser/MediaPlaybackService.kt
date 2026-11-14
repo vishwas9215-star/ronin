@@ -41,6 +41,7 @@ class MediaPlaybackService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        running = true
         session = MediaSessionCompat(this, "Ronin").apply {
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlay() = send("play")
@@ -145,18 +146,24 @@ class MediaPlaybackService : Service() {
         holdWake(playing)
     }
 
+    private val wakeHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val releaseWake = Runnable { wake?.let { if (it.isHeld) it.release() }; wake = null }
+
+    /** Keeps the phone awake while playing, and for 90 s after a pause (the next song starts in that gap). */
     private fun holdWake(on: Boolean) {
+        wakeHandler.removeCallbacks(releaseWake)
         if (on && wake == null) {
             wake = (getSystemService(Context.POWER_SERVICE) as PowerManager)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Ronin:media").apply { acquire(6 * 60 * 60 * 1000L) }
         } else if (!on) {
-            wake?.let { if (it.isHeld) it.release() }
-            wake = null
+            wakeHandler.postDelayed(releaseWake, 90_000)
         }
     }
 
+    private fun dropWake() { wakeHandler.removeCallbacks(releaseWake); releaseWake.run() }
+
     private fun stopEverything() {
-        holdWake(false)
+        dropWake()
         session.isActive = false
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         foreground = false
@@ -164,12 +171,14 @@ class MediaPlaybackService : Service() {
     }
 
     override fun onDestroy() {
-        holdWake(false)
+        running = false
+        dropWake()
         session.release()
         super.onDestroy()
     }
 
     companion object {
+        @Volatile var running = false
         const val CHANNEL = "media"
         const val NOTIFICATION_ID = 77
         const val ACTION_UPDATE = "com.ronin.browser.UPDATE"
@@ -182,7 +191,10 @@ class MediaPlaybackService : Service() {
             val i = Intent(ctx, MediaPlaybackService::class.java).setAction(ACTION_UPDATE)
                 .putExtra("title", title).putExtra("artist", artist).putExtra("playing", playing)
             try {
-                if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
+                // a running player service only needs the news; starting a new one needs the foreground start
+                if (running || Build.VERSION.SDK_INT < 26) {
+                    try { ctx.startService(i) } catch (e: IllegalStateException) { if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) }
+                } else ctx.startForegroundService(i)
             } catch (e: Exception) {
                 // the app is in the background and Android refused: the service is already running then
             }

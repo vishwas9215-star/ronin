@@ -23,6 +23,7 @@ import (
 
 	"roninbrowser/internal/adblock"
 	"roninbrowser/internal/focus"
+	"roninbrowser/internal/quicklinks"
 	"roninbrowser/internal/safemoney"
 )
 
@@ -62,14 +63,16 @@ func writeAssets(dir string) error {
 	block, allow := adblock.New().Snapshot()
 	third, paths := adblock.Extra()
 	rules := map[string]any{
-		"sites":      safemoney.Export(),
-		"adBlock":    sorted(block),
-		"adAllow":    sorted(allow),
-		"thirdParty": third,
-		"adPaths":    paths,
-		"focusSites": focus.DefaultSites,
-		"lookalike":  safemoney.LookalikeData(),
-		"testThreat": adblock.TestThreat,
+		"sites":         safemoney.Export(),
+		"adBlock":       sorted(block),
+		"adAllow":       sorted(allow),
+		"thirdParty":    third,
+		"adPaths":       paths,
+		"focusSites":    focus.DefaultSites,
+		"lookalike":     safemoney.LookalikeData(),
+		"quickLinks":    quicklinks.Defaults,
+		"quickSections": quicklinks.Sections,
+		"testThreat":    adblock.TestThreat,
 	}
 	b, err := json.MarshalIndent(rules, "", " ")
 	if err != nil {
@@ -79,7 +82,7 @@ func writeAssets(dir string) error {
 		return err
 	}
 	// page scripts shared with Windows
-	for _, f := range []string{"inject_adblock.js"} {
+	for _, f := range []string{"inject_adblock.js", "quicklinks.js"} {
 		src, err := os.ReadFile(filepath.Join("cmd", "ronin", "ui", f))
 		if err != nil {
 			return err
@@ -123,7 +126,7 @@ func writeLists(dir string) error {
 		}
 	}
 	if err := writeThreats(dir, e.Threats()); err != nil {
-		return err
+		fmt.Println("danger list skipped:", err) // the ad list is still published
 	}
 	block, allow := e.Snapshot()
 	if len(block) < 50000 {

@@ -77,4 +77,39 @@ class Store(ctx: Context) {
     var threatsUpdated: Long
         get() = p.getLong("threatsUpdated", 0)
         set(v) = p.edit().putLong("threatsUpdated", v).apply()
+
+    // ---- quick links on the new tab page -------------------------------------------------
+
+    private var hiddenLinks: Set<String>
+        get() = p.getStringSet("hiddenLinks", emptySet()) ?: emptySet()
+        set(v) = p.edit().putStringSet("hiddenLinks", v).apply()
+
+    private fun ownLinks(): List<QuickLink> = try {
+        val a = org.json.JSONArray(p.getString("quickLinks", "[]"))
+        (0 until a.length()).map { a.getJSONObject(it).let { j -> QuickLink(j.getString("s"), j.getString("n"), j.getString("u")) } }
+    } catch (e: Exception) { emptyList() }
+
+    private fun saveOwn(list: List<QuickLink>) {
+        val a = org.json.JSONArray()
+        list.forEach { a.put(org.json.JSONObject().put("s", it.section).put("n", it.name).put("u", it.url)) }
+        p.edit().putString("quickLinks", a.toString()).apply()
+    }
+
+    /** Built-in links the user did not remove, then his own. */
+    fun quickLinks(defaults: List<QuickLink>): List<QuickLink> {
+        val hide = hiddenLinks
+        return (defaults + ownLinks()).filter { it.url !in hide }
+    }
+
+    fun addQuickLink(section: String, name: String, url: String, sections: List<String> = listOf("Quick links", "School", "Trading", "Video calls")): Boolean {
+        val l = QuickLink.clean(section, name, url, sections) ?: return false
+        if (l.url in hiddenLinks) { hiddenLinks = hiddenLinks - l.url; return true } // a built-in link comes back
+        saveOwn(ownLinks() + l)
+        return true
+    }
+
+    fun removeQuickLink(url: String) {
+        val own = ownLinks()
+        if (own.any { it.url == url }) saveOwn(own.filter { it.url != url }) else hiddenLinks = hiddenLinks + url
+    }
 }

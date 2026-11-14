@@ -91,6 +91,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var address: EditText
     private lateinit var tabsButton: Button
     private lateinit var tabStrip: LinearLayout
+    private lateinit var newTabButton: Button
     private lateinit var progress: ProgressBar
     private lateinit var holder: FrameLayout
     private lateinit var readBar: LinearLayout
@@ -234,10 +235,32 @@ class MainActivity : AppCompatActivity() {
         }
         val stripScroll = android.widget.HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
-            setBackgroundColor(Color.parseColor("#0E1016"))
             addView(tabStrip)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
-        root.addView(stripScroll)
+        // "+" is pinned at the right edge, so it never scrolls out of sight
+        newTabButton = Button(this).apply {
+            text = "+"
+            textSize = 24f
+            contentDescription = "New tab"
+            tag = "newtab"
+            setTextColor(Color.parseColor("#E8EAF0"))
+            setBackgroundColor(Color.TRANSPARENT)
+            minWidth = 0; minimumWidth = 0
+            layoutParams = LinearLayout.LayoutParams(dp(60), dp(50))
+            setOnClickListener {
+                newTab(HOME)
+                address.requestFocus()
+                (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(address, InputMethodManager.SHOW_IMPLICIT)
+            }
+        }
+        val stripRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(Color.parseColor("#0E1016"))
+            addView(stripScroll); addView(newTabButton)
+        }
+        root.addView(stripRow)
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(3))
@@ -270,6 +293,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     private fun makeWebView(t: () -> Tab): RoninWebView {
         val w = RoninWebView(this)
+        w.setBackgroundColor(homeBg()) // a new tab opens dark, like its page (no white flash)
         w.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -349,7 +373,7 @@ class MainActivity : AppCompatActivity() {
                     cornerRadii = floatArrayOf(dp(10).toFloat(), dp(10).toFloat(), dp(10).toFloat(), dp(10).toFloat(), 0f, 0f, 0f, 0f)
                     setColor(Color.parseColor(if (on) "#14171F" else "#1B1F29"))
                 }
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(42)).apply { marginEnd = dp(4) }
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)).apply { marginEnd = dp(4) }
                 contentDescription = "Tab: " + t.title.ifBlank { "New tab" }
                 tag = "tab"
                 setOnClickListener { select(t) }
@@ -369,29 +393,19 @@ class MainActivity : AppCompatActivity() {
                 setTextColor(Color.parseColor("#9AA3B2"))
                 setBackgroundColor(Color.TRANSPARENT)
                 minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0
-                layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
+                layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
                 setOnClickListener { closeTab(t) }
             }
             chip.addView(name); chip.addView(x)
             tabStrip.addView(chip)
         }
-        val plus = Button(this).apply {
-            text = "+"
-            textSize = 22f
-            contentDescription = "New tab"
-            tag = "newtab"
-            setTextColor(Color.parseColor("#E8EAF0"))
-            setBackgroundColor(Color.TRANSPARENT)
-            minWidth = 0; minimumWidth = 0
-            layoutParams = LinearLayout.LayoutParams(dp(52), dp(42))
-            setOnClickListener { newTab(HOME); address.requestFocus() }
-        }
-        tabStrip.addView(plus)
         val i = tabs.indexOf(current)
         if (i >= 0) tabStrip.post { (tabStrip.parent as? android.widget.HorizontalScrollView)?.smoothScrollTo(tabStrip.getChildAt(i)?.left ?: 0, 0) }
     }
 
     fun tabStripForTest(): LinearLayout = tabStrip
+    fun newTabButtonForTest(): View = newTabButton
+    fun goHomeForTest() { current?.let { load(it, HOME) } }
 
     private fun showTabs() {
         val names = tabs.map { (if (it == current) "▶ " else "") + it.title.ifBlank { display(it.url) } }.toMutableList()
@@ -457,6 +471,7 @@ class MainActivity : AppCompatActivity() {
                     return WebResourceResponse("text/html", "utf-8", 200, "OK", mapOf("Cache-Control" to "no-store"),
                         ByteArrayInputStream(html.toByteArray(Charsets.UTF_8)))
                 }
+                return null // the page itself is never treated as an advert (safe sites stay usable)
             }
             val kind = app.rules.classify(t.topHost.let { if (it.isEmpty()) url else "https://$it/" })
             if (kind == Kind.BANK || kind == Kind.PAYMENT) return null // never break a bank or payment page
@@ -474,6 +489,15 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
             if (url == BACK_TO_SAFETY) { leaveDangerPage(tab()); return true }
+            if (url.startsWith("https://ronin.newtab/")) { quickLinkChange(tab(), req.url); return true }
+            if (url.startsWith(TRUST_PREFIX)) { trustFromRedPage(tab(), req.url); return true }
+            if (req.isForMainFrame && (scheme == "http" || scheme == "https")) {
+                // also short links and redirects that end at a dangerous site
+                stopPage(url)?.let { html ->
+                    view.loadDataWithBaseURL(url, html, "text/html", "utf-8", null)
+                    return true
+                }
+            }
             if (scheme != "http" && scheme != "https") return openOutside(url, view)
             if (req.isForMainFrame && openSafeMoneyIfBank(url)) return true
             return false
@@ -483,12 +507,17 @@ class MainActivity : AppCompatActivity() {
         override fun onSafeBrowsingHit(view: WebView, request: WebResourceRequest, threatType: Int, callback: SafeBrowsingResponse) {
             // Google says the site is dangerous: never open it, show Ronin's own red page
             callback.backToSafety(false)
+            if (!request.isForMainFrame) {
+                Toast.makeText(this@MainActivity, "इस page का एक ख़तरनाक हिस्सा रोका गया", Toast.LENGTH_SHORT).show()
+                return
+            }
             val host = request.url.host ?: ""
             view.post { view.loadDataWithBaseURL("https://ronin.home/danger", dangerHtml(host, null), "text/html", "utf-8", null) }
         }
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
             val t = tab()
+            view.setBackgroundColor(if (url.startsWith("http") && !url.startsWith("https://ronin.home")) Color.WHITE else homeBg())
             if (!url.startsWith("https://ronin.home")) { t.url = url; t.topHost = Rules.hostOf(url) }
             if (t == current && !address.hasFocus()) address.setText(display(url))
             if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
@@ -501,7 +530,7 @@ class MainActivity : AppCompatActivity() {
             val t = tab()
             t.title = view.title ?: ""
             updateTabsButton()
-            if (url.startsWith("http") && !url.startsWith("https://ronin.home")) app.store.addHistory(t.title, url)
+            if (url.startsWith("http") && !url.startsWith("https://ronin.home") && !t.title.startsWith("⛔")) app.store.addHistory(t.title, url)
         }
 
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
@@ -536,7 +565,7 @@ class MainActivity : AppCompatActivity() {
             if (tab() == current) { progress.progress = p; progress.visibility = if (p >= 100) View.INVISIBLE else View.VISIBLE }
         }
 
-        override fun onReceivedTitle(view: WebView, title: String?) { tab().title = title ?: "" }
+        override fun onReceivedTitle(view: WebView, title: String?) { tab().title = title ?: ""; updateTabsButton() }
 
         override fun onShowFileChooser(w: WebView, cb: ValueCallback<Array<Uri>>, p: FileChooserParams): Boolean {
             fileCallback?.onReceiveValue(null)
@@ -590,18 +619,49 @@ class MainActivity : AppCompatActivity() {
 
     private fun dangerHtml(host: String, brand: String?): String {
         val h = android.text.TextUtils.htmlEncode(host)
+        // a fake-bank warning can be wrong for a real company of a bank group: one tap (with a question) opens it
+        val trust = if (brand == null) "" else
+            "<p class=\"m\" style=\"margin-top:26px\"><a id=\"trust\" style=\"background:none;padding:0;color:#c9b4b8;text-decoration:underline;font-weight:normal\" href=\"$TRUST_PREFIX?h=${Uri.encode(host)}&k=$pageKey\">मैं इस साइट को जानता हूँ — I know this site</a></p>"
         val (title, why) = if (brand == null)
             "खतरनाक साइट रोकी गई" to "यह साइट धोखाधड़ी (phishing) या virus फैलाने वाली साइटों की सूची में है। Ronin ने इसे नहीं खोला।"
         else
             "नकली bank साइट" to "यह पता ${android.text.TextUtils.htmlEncode(brand.uppercase())} जैसा दिखता है, पर असली bank नहीं है। ऐसी साइटें password, OTP और card नंबर चुराती हैं।"
         return """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>$title</title><style>body{margin:0;background:#1a0f12;color:#f3e9ea;font:17px sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center}
+<title>⛔ $title</title><style>body{margin:0;background:#1a0f12;color:#f3e9ea;font:17px sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center}
 main{max-width:560px;padding:28px}.i{width:56px;height:56px;border-radius:50%;background:#d93025;color:#fff;font:bold 34px sans-serif;display:flex;align-items:center;justify-content:center}
 h1{font-size:24px;margin:18px 0 10px}code{display:block;background:#2a1a1e;padding:10px;border-radius:8px;word-break:break-all;margin:12px 0}
 p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-top:18px;background:#3b82f6;color:#fff;text-decoration:none;padding:14px 26px;border-radius:10px;font-weight:bold}</style></head>
 <body><main><div class="i">!</div><h1>$title</h1><code>$h</code><p>$why</p>
 <p class="m">Dangerous site blocked by Ronin. The list updates by itself twice a day. If you are sure this site is safe: Menu → Safe sites.</p>
-<a id="back" href="$BACK_TO_SAFETY">वापस जाएँ — Go back</a></main></body></html>"""
+<a id="back" href="$BACK_TO_SAFETY">वापस जाएँ — Go back</a>$trust</main></body></html>"""
+    }
+
+    private fun homeBg() = Color.parseColor(if (app.store.night) "#14171F" else "#EEF0F4")
+
+    /** "I know this site" on the fake-bank page: only from Ronin's own page (key), and only after a question. */
+    private fun trustFromRedPage(t: Tab, u: Uri) {
+        val host = u.getQueryParameter("h") ?: return
+        if (u.getQueryParameter("k") != pageKey || host.isBlank()) return
+        AlertDialog.Builder(this).setTitle("क्या आप पक्का हैं?")
+            .setMessage("$host\n\nBanks कभी SMS, WhatsApp या call में भेजे link से login नहीं करवाते। सिर्फ़ तभी खोलें जब आप इस साइट को अच्छी तरह जानते हों।")
+            .setPositiveButton("नहीं, वापस जाएँ", { _, _ -> leaveDangerPage(t) })
+            .setNegativeButton("हाँ, मैं जानता हूँ") { _, _ ->
+                app.store.trustedSites = app.store.trustedSites + host.removePrefix("www.")
+                load(t, "https://$host/")
+            }.show()
+    }
+
+    /** Add / remove a quick link from the new tab page (only Ronin's own page can do this). */
+    private fun quickLinkChange(t: Tab, u: Uri) {
+        if (t.url != HOME || u.getQueryParameter("k") != pageKey) return
+        when (u.path) {
+            "/add" -> {
+                val ok = app.store.addQuickLink(u.getQueryParameter("s") ?: "", u.getQueryParameter("n") ?: "", u.getQueryParameter("u") ?: "")
+                if (!ok) Toast.makeText(this, "यह पता सही नहीं है", Toast.LENGTH_SHORT).show()
+            }
+            "/del" -> app.store.removeQuickLink(u.getQueryParameter("u") ?: "")
+        }
+        load(t, HOME)
     }
 
     private fun leaveDangerPage(t: Tab) {
@@ -800,23 +860,32 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
 
     // ---- new tab page ----------------------------------------------------------------------
 
+    private val quickLinksJs: String by lazy { assets.open("ronin/quicklinks.js").bufferedReader().readText() }
+
     private fun homeHtml(): String {
-        fun link(n: String, u: String) = "<a href=\"$u\">$n</a>"
         val night = app.store.night
         val bg = if (night) "#14171f" else "#eef0f4"
         val fg = if (night) "#e8eaf0" else "#151922"
         val card = if (night) "#1c2029" else "#ffffff"
-        return """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-<style>body{margin:0;padding:28px 18px;background:$bg;color:$fg;font-family:sans-serif}
-h1{margin:0 0 4px;font-size:26px}p{margin:0 0 22px;opacity:.7}h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.7;margin:22px 0 8px}
-.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
-a{display:block;padding:14px;border-radius:12px;background:$card;color:$fg;text-decoration:none;font-weight:600}</style></head><body>
-<h1>Ronin Browser</h1><p>Safe, private and fast. Songs keep playing in the background.</p>
-<h2>Quick links</h2><div class="g">${link("YouTube", "https://m.youtube.com/")}${link("YouTube Music", "https://music.youtube.com/")}${link("Gmail", "https://mail.google.com/")}${link("DIKSHA", "https://diksha.gov.in/")}${link("Wikipedia", "https://hi.wikipedia.org/")}</div>
-<h2>Trading</h2><div class="g">${link("Dhan", "https://web.dhan.co/")}${link("TradingView", "https://in.tradingview.com/chart/")}</div>
-<h2>Video calls</h2><div class="g">${link("Google Meet", "https://meet.google.com/")}${link("WhatsApp Web", "https://web.whatsapp.com/")}${link("Jitsi Meet", "https://meet.jit.si/")}</div>
-<p style="margin-top:26px">Bank websites open in <b>Ronin Safe Money</b>: no screenshots, nothing else running.</p>
-</body></html>"""
+        val line = if (night) "#2e3441" else "#d3d8e1"
+        val muted = if (night) "#9aa3b2" else "#5a6375"
+        val titles = mapOf("Quick links" to "Quick links", "School" to "स्कूल / School", "Trading" to "Trading", "Video calls" to "Video calls")
+        val all = app.store.quickLinks(app.rules.quickLinks).filter { !it.url.startsWith("http://127.") } // Ronin Terminal runs on the laptop
+        val sections = JSONArray()
+        for (sec in app.rules.quickSections) {
+            val links = JSONArray()
+            all.filter { it.section == sec }.forEach { links.put(JSONObject().put("n", it.name).put("u", it.url)) }
+            sections.put(JSONObject().put("id", sec).put("title", titles[sec] ?: sec).put("links", links))
+        }
+        val data = JSONObject().put("k", pageKey).put("sections", sections).toString().replace("</", "<\\/")
+        return """<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>New tab</title>
+<style>:root{--bg:$bg;--card:$card;--line:$line;--text:$fg;--muted:$muted;--accent:#3b82f6}
+body{margin:0;padding:24px 18px 40px;background:$bg;color:$fg;font-family:sans-serif}main{max-width:820px;margin:0 auto}
+h1{margin:0 0 4px;font-size:24px}p.sub{margin:0 0 6px;opacity:.7}p.note{margin-top:24px;opacity:.7;font-size:14px}</style></head><body><main>
+<h1>Ronin Browser</h1><p class="sub">Safe, private and fast. Songs keep playing in the background.</p>
+<div id="ql"></div><script>window.RONIN_QL=$data;</script><script>$quickLinksJs</script>
+<p class="note">Bank websites open in <b>Ronin Safe Money</b>: no screenshots, nothing else running.</p>
+</main></body></html>"""
     }
 
     /** For the device tests: the address box (must sit below the status bar). */
@@ -837,6 +906,9 @@ a{display:block;padding:14px;border-radius:12px;background:$card;color:$fg;text-
     companion object {
         const val HOME = "ronin://home"
         const val BACK_TO_SAFETY = "https://ronin.home/back"
+        const val TRUST_PREFIX = "https://ronin.home/trust"
+        /** Proves a link came from Ronin's own page (new tab page, red page). New each start. */
+        val pageKey: String = java.util.UUID.randomUUID().toString().replace("-", "")
         /** App files from these sites need no warning (Ronin's own updates come from GitHub). */
         val trustedAppHosts = listOf("github.com", "githubusercontent.com", "f-droid.org")
     }

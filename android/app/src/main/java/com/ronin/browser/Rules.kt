@@ -18,6 +18,8 @@ class Rules(json: String) {
     val adPaths: List<Pair<String, String>>
     val focusSites: List<String>
     val lookalike: Lookalike
+    val quickLinks: List<QuickLink>
+    val quickSections: List<String>
     val testThreat: String
 
     init {
@@ -34,6 +36,9 @@ class Rules(json: String) {
         lookalike = Lookalike(strings(la.optJSONArray("brands")), strings(la.optJSONArray("shortBrands")).toSet(),
             strings(la.optJSONArray("bankingWords")))
         testThreat = o.optString("testThreat", "ronin-phishing-test.com")
+        val ql = o.optJSONArray("quickLinks") ?: JSONArray()
+        quickLinks = (0 until ql.length()).map { ql.getJSONObject(it).let { j -> QuickLink(j.getString("section"), j.getString("name"), j.getString("url")) } }
+        quickSections = strings(o.optJSONArray("quickSections")).ifEmpty { listOf("Quick links", "School", "Trading", "Video calls") }
     }
 
     fun list(name: String): List<String> = sites[name] ?: emptyList()
@@ -116,4 +121,24 @@ class Rules(json: String) {
     }
 
     data class Parts(val scheme: String, val host: String, val path: String)
+}
+
+/** A quick link on the new tab page (same built-in list as Ronin for Windows). */
+data class QuickLink(val section: String, val name: String, val url: String) {
+    companion object {
+        /** Checks a link the user typed; null when it cannot be used. Same rules as Windows. */
+        fun clean(section: String, name0: String, url0: String, sections: List<String>): QuickLink? {
+            var u = url0.trim()
+            if (u.isEmpty()) return null
+            if (!u.contains("://")) u = "https://$u"
+            val p = Rules.parse(u)
+            if (p.scheme != "https" && p.scheme != "http") return null
+            if (!p.host.contains('.')) return null
+            val rest = u.substringAfter("://").let { r -> val i = r.indexOfAny(charArrayOf('/', '?', '#')); if (i < 0) "/" else r.substring(i) }
+            val url = "${p.scheme}://${p.host}${if (rest.startsWith("/")) rest else "/$rest"}"
+            var name = name0.trim().ifEmpty { p.host.removePrefix("www.") }
+            if (name.length > 30) name = name.take(30)
+            return QuickLink(if (section in sections) section else sections.first(), name, url)
+        }
+    }
 }

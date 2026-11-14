@@ -13,6 +13,7 @@ NODE_PATH=$(npm root -g) node tools/uitest/passwords.js
 NODE_PATH=$(npm root -g) node tools/uitest/voice.js /tmp/ronin-voice.png
 NODE_PATH=$(npm root -g) node tools/uitest/listen.js /tmp/ronin-listen.png
 mkdir -p /tmp/ronin-ui && NODE_PATH=$(npm root -g) node tools/uitest/extras.js /tmp/ronin-ui
+mkdir -p /tmp/ronin-ui && NODE_PATH=$(npm root -g) node tools/uitest/newtab.js /tmp/ronin-ui
 go build -trimpath -ldflags "-H=windowsgui -s -w -X main.Version=$VERSION" -o build/Ronin.exe ./cmd/ronin
 mkdir -p cmd/setup/payload
 cp build/Ronin.exe cmd/setup/payload/Ronin.exe

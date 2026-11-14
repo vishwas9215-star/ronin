@@ -110,7 +110,7 @@ func TestBlockedFrom(t *testing.T) {
 
 func TestDangerList(t *testing.T) {
 	e := New()
-	if !e.Dangerous(TestThreat) || !e.Dangerous("www." + TestThreat) {
+	if !e.Dangerous(TestThreat) || !e.Dangerous("www."+TestThreat) {
 		t.Fatal("test danger site not on the list")
 	}
 	n := e.LoadThreat(strings.NewReader("0.0.0.0 phish.example\n||malware.example^\n# comment\n"))

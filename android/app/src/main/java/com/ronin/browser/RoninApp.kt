@@ -19,34 +19,52 @@ class RoninApp : Application() {
         store = Store(this)
         rules = Rules(assets.open("ronin/rules.json").bufferedReader().readText())
         blocker = AdBlocker(rules)
-        thread(name = "ronin-lists") { loadAndRefreshThreats(); loadAndRefreshLists() }
+        thread(name = "ronin-lists") {
+            loadSavedThreats() // saved lists first: protection and ad-block work at once
+            loadAndRefreshLists()
+            loadAndRefreshThreats()
+        }
     }
 
     private val listFile get() = File(filesDir, "adblock-domains.txt.gz")
     private val threatFile get() = File(filesDir, "threat-domains.txt.gz")
 
-    /** The phishing / malware list: saved copy at once, a fresh one every 12 hours. */
-    fun loadAndRefreshThreats(force: Boolean = false) {
+    /** The saved phishing / malware list, at once (no internet needed). A damaged file is deleted. */
+    @Synchronized
+    private fun loadSavedThreats() {
+        if (!threatFile.exists() || blocker.threatSize > 0) return
         try {
-            if (threatFile.exists() && blocker.threatSize == 0) {
-                val n = GZIPInputStream(threatFile.inputStream()).bufferedReader().use { blocker.loadThreats(it) }
-                Log.i(TAG, "danger list loaded: $n")
-            }
-            if (!force && System.currentTimeMillis() - store.threatsUpdated < 12 * 3600 * 1000L && threatFile.exists()) return
-            val tmp = File(filesDir, "threat-domains.tmp")
+            val arr = GZIPInputStream(threatFile.inputStream()).bufferedReader().use { blocker.parseThreats(it) }
+            if (arr.size > 1000) blocker.setThreats(arr) else threatFile.delete()
+        } catch (e: Exception) {
+            Log.w(TAG, "danger list file damaged, fetching again: $e")
+            threatFile.delete()
+        }
+    }
+
+    /** A fresh phishing / malware list every 12 hours. Only one download at a time. */
+    @Synchronized
+    fun loadAndRefreshThreats(force: Boolean = false) {
+        loadSavedThreats()
+        if (!force && System.currentTimeMillis() - store.threatsUpdated < 12 * 3600 * 1000L && threatFile.exists()) return
+        var tmp: File? = null
+        try {
+            tmp = File.createTempFile("threats", ".gz", filesDir)
             val c = URL(THREATS_URL).openConnection() as HttpURLConnection
             c.connectTimeout = 20000; c.readTimeout = 60000
             c.instanceFollowRedirects = true
             if (c.responseCode != 200) return
             c.inputStream.use { inp -> tmp.outputStream().use { inp.copyTo(it) } }
-            val n = GZIPInputStream(tmp.inputStream()).bufferedReader().use { blocker.loadThreats(it) }
-            if (n > 1000) {
-                tmp.renameTo(threatFile)
+            val arr = GZIPInputStream(tmp.inputStream()).bufferedReader().use { blocker.parseThreats(it) }
+            if (arr.size > 1000 && tmp.renameTo(threatFile)) { // only a complete list replaces the old one
+                blocker.setThreats(arr)
                 store.threatsUpdated = System.currentTimeMillis()
-            } else tmp.delete()
-            Log.i(TAG, "danger list updated: $n")
+            }
+            Log.i(TAG, "danger list updated: ${arr.size}")
         } catch (e: Exception) {
             Log.w(TAG, "danger list: $e")
+        } finally {
+            tmp?.let { if (it.exists()) it.delete() }
         }
     }
 
