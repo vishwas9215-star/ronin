@@ -85,6 +85,12 @@ class DeviceTest {
             app.startService(Intent(app, MediaPlaybackService::class.java).setAction(MediaPlaybackService.ACTION_PLAY_PAUSE))
             assertTrue("play button did not play", waitFor(8) { eval(sc, "document.getElementById('v').paused") == "false" })
 
+            // the page keeps getting animation frames (the player uses them to start the next song)
+            eval(sc, "window.__f=0;(function l(){window.__f++;requestAnimationFrame(l)})();1")
+            Thread.sleep(3000)
+            val frames = eval(sc, "window.__f").toIntOrNull() ?: 0
+            assertTrue("no animation frames in the background ($frames)", frames >= 5)
+
             // Next song while in the background: the player pauses for a moment, a new
             // video loads and must start without opening the app
             eval(sc, "document.getElementById('v').pause(); 1")
