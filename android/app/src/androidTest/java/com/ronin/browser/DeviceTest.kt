@@ -70,7 +70,8 @@ class DeviceTest {
             assertTrue("no 'playing' notification", waitFor(10) { ourNotification() })
 
             // swipe away / screen off: the app goes to the background
-            sc.moveToState(Lifecycle.State.CREATED)
+            androidx.test.uiautomator.UiDevice.getInstance(inst).pressHome()
+            Thread.sleep(1500)
             val t1 = eval(sc, "document.getElementById('v').currentTime").toDouble()
             Thread.sleep(6000)
             val t2 = eval(sc, "document.getElementById('v').currentTime").toDouble()

@@ -26,6 +26,23 @@ object PageScripts {
   ['visibilitychange','webkitvisibilitychange','pagehide','freeze'].forEach(function(t){
     window.addEventListener(t, stop, true); document.addEventListener(t, stop, true);
   });
+  // In the background no frames are drawn, so animation-frame callbacks stop and the
+  // player cannot start the next song. Each callback also runs from a short timer if no
+  // frame comes.
+  try {
+    var raf = window.requestAnimationFrame.bind(window), caf = window.cancelAnimationFrame.bind(window);
+    var seq = 0, live = {};
+    window.requestAnimationFrame = function(cb){
+      var id = ++seq, done = false, r = 0, tm = 0;
+      var run = function(ts){ if (done) return; done = true; delete live[id]; caf(r); clearTimeout(tm); cb(ts); };
+      r = raf(run);
+      tm = setTimeout(function(){ run(performance.now()); }, 250);
+      live[id] = [r, tm]; return id;
+    };
+    window.cancelAnimationFrame = function(id){
+      var e = live[id]; if (!e) return; delete live[id]; caf(e[0]); clearTimeout(e[1]);
+    };
+  } catch (e) {}
   window.__roninMS = {};
   try {
     var ms = navigator.mediaSession;
