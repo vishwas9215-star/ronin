@@ -75,7 +75,8 @@ fun keepClearOfSystemBars(root: View) {
 class MainActivity : AppCompatActivity() {
 
     inner class Tab(val web: RoninWebView) {
-        @Volatile var dangerHost = "" // the fake-bank red page now showing (its "I know this site" link works only for it)
+        @Volatile var dangerHost = ""
+        var uaFixedFor = "" // the last address reloaded with another browser version // the fake-bank red page now showing (its "I know this site" link works only for it)
         var title = ""
         @Volatile var url = ""
         @Volatile var topHost = ""
@@ -439,7 +440,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (openSafeMoneyIfBank(url)) return
-        t.web.settings.userAgentString = uaFor(url)
+        if (!neutralUa(url)) t.web.settings.userAgentString = uaFor(url)
         t.url = url
         t.topHost = Rules.hostOf(url)
         t.web.loadUrl(url)
@@ -504,7 +505,7 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
             if (url.startsWith(TRUST_PREFIX)) { trustFromRedPage(tab(), req.url); return true }
-            if (req.isForMainFrame && (scheme == "http" || scheme == "https") && view.settings.userAgentString != uaFor(url)) {
+            if (req.isForMainFrame && (scheme == "http" || scheme == "https") && !neutralUa(url) && view.settings.userAgentString != uaFor(url)) {
                 // Google Sheets / Docs open as the full (computer) version, other sites as normal
                 view.settings.userAgentString = uaFor(url)
                 view.loadUrl(url)
@@ -537,7 +538,8 @@ class MainActivity : AppCompatActivity() {
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
             val t = tab()
             view.setBackgroundColor(if (url.startsWith("http") && !url.startsWith("https://ronin.home")) Color.WHITE else homeBg())
-            if (url.startsWith("http") && !url.startsWith("https://ronin.home") && view.settings.userAgentString != uaFor(url)) {
+            if (url.startsWith("http") && !url.startsWith("https://ronin.home") && !neutralUa(url) && view.settings.userAgentString != uaFor(url) && t.uaFixedFor != url) {
+                t.uaFixedFor = url // once per address: never a reload loop
                 // Back / Reload into a site that needs the other version: load it again with the right one
                 view.settings.userAgentString = uaFor(url)
                 view.stopLoading(); view.loadUrl(url)
@@ -672,6 +674,12 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     private val desktopUa: String by lazy {
         val ver = Regex("Chrome/([\\d.]+)").find(phoneUa)?.groupValues?.get(1) ?: "130.0.0.0"
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$ver Safari/537.36"
+    }
+
+    /** Sign-in pages keep whichever version the site that sent you there uses (no back-and-forth). */
+    private fun neutralUa(url: String): Boolean {
+        val h = Rules.hostOf(url)
+        return h == "accounts.google.com" || h.endsWith(".accounts.google.com") || h == "accounts.youtube.com"
     }
 
     fun uaFor(url: String): String {

@@ -138,12 +138,13 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
+          ram-size: 4096M
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           working-directory: android
           script: |
-            ./gradlew --no-daemon connectedDebugAndroidTest || echo failed > ../device-tests-failed
-            adb pull /data/local/tmp/qa ../qa || true
-            adb logcat -d -b crash > ../crash.txt || true
+            timeout 30m ./gradlew --no-daemon connectedDebugAndroidTest || echo failed > ../device-tests-failed
+            timeout 120 adb pull /data/local/tmp/qa ../qa || true
+            timeout 60 adb logcat -d -b crash > ../crash.txt || true
       - name: Screenshots for checking (release "qa")
         if: always() && github.event_name != 'pull_request'
         env:
