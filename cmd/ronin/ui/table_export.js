@@ -6,6 +6,9 @@
   "use strict";
   if (window.__roninTable) return;
   var st = { phase: "idle", page: 0, rows: 0, error: "" }, out = null;
+  // progress notes in the device's language (the check reasons in the Excel stay as they are)
+  var HI = String(window.__roninLang || navigator.language || "en").toLowerCase().indexOf("hi") === 0;
+  var LG = function (hi, en) { return HI ? hi : en; };
 
   var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
   // textContent keeps the spaces exactly as typed (a double space is a mistake to show)
@@ -202,7 +205,7 @@
     var pct = st.total ? Math.round(st.rows * 100 / st.total) : st.pages ? Math.round(st.page * 100 / st.pages) : null;
     if (pct != null) pct = Math.min(99, pct); // 100 only when the files are made
     st.pct = pct;
-    badge("📊 Data पढ़ रहा हूँ" + (pct != null ? ": " + pct + "%" : "...") + "\nपेज " + st.page + (st.pages ? " / " + st.pages : "") + " · " + st.rows + (st.total ? " / " + st.total : "") + " पंक्तियाँ", pct);
+    badge(LG("📊 Data पढ़ रहा हूँ", "📊 Reading the data") + (pct != null ? ": " + pct + "%" : "...") + "\n" + LG("पेज ", "Page ") + st.page + (st.pages ? " / " + st.pages : "") + " · " + st.rows + (st.total ? " / " + st.total : "") + LG(" पंक्तियाँ", " rows"), pct);
   }
 
   // When "Next" loads a whole new web page, what was read so far waits in this tab's
@@ -223,9 +226,9 @@
     if (resume && !back) throw new Error("nothing to continue");
     st = { phase: "reading", page: back ? back.page : 1, rows: 0, error: "", partial: "", total: back ? back.total : 0, pages: back ? back.pages : 0, pct: null };
     stopNow = false;
-    if (!back) { forget(); badge("📊 Data पढ़ना शुरू... (रुकिए, page बंद न करें)", null); }
+    if (!back) { forget(); badge(LG("📊 Data पढ़ना शुरू... (रुकिए, page बंद न करें)", "📊 Starting to read... (wait, do not close the page)"), null); }
     var tb = back ? await waitTable() : best();
-    if (!tb || !read(tb).rows.length) { forget(); badge("⚠ इस page पर table नहीं मिली", 100, true); throw new Error("No table found on this page."); }
+    if (!tb || !read(tb).rows.length) { forget(); badge(LG("⚠ इस page पर table नहीं मिली", "⚠ No table found on this page"), 100, true); throw new Error("No table found on this page."); }
     if (!back) { var tot = totals(tb); st.total = tot.rows; st.pages = tot.pages; }
     var sig = JSON.stringify(read(tb).rows);
     if (!back && showAll(tb)) { var t2 = await waitChange(sig); if (t2) tb = t2; }
@@ -260,7 +263,7 @@
     }
     forget();
     if (stopNow) st.partial = "stopped at page " + st.page;
-    badge("📊 " + rows.length + " पंक्तियाँ पढ़ लीं (" + (st.partial ? "अधूरा" : "100%") + ")\nExcel + PDF बन रही है...", st.partial ? st.pct : 100);
+    badge("📊 " + rows.length + LG(" पंक्तियाँ पढ़ लीं (", " rows read (") + (st.partial ? LG("अधूरा", "not complete") : "100%") + ")\n" + LG("Excel + PDF बन रही है...", "Making Excel + PDF..."), st.partial ? st.pct : 100);
     var w = head.length;
     rows.forEach(function (r) { w = Math.max(w, r.length); });
     for (var i = head.length; i < w; i++) head.push("Column " + (i + 1));

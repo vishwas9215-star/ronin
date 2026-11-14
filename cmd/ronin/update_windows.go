@@ -55,7 +55,7 @@ func offerUpdate(version string) {
 	runOnUI(func() {
 		for _, w := range windowsByHwnd {
 			if !w.closing {
-				w.bar(nil, "ok", "🆕 नया Ronin "+version+" आया है।", []map[string]string{{"label": "Update करें", "cmd": "updatenow"}})
+				w.bar(nil, "ok", L("🆕 नया Ronin "+version+" आया है।", "🆕 A new Ronin "+version+" is here."), []map[string]string{{"label": L("Update करें", "Update"), "cmd": "updatenow"}})
 			}
 		}
 	})
@@ -64,18 +64,18 @@ func offerUpdate(version string) {
 // checkUpdateNow is Menu -> "Check for updates": checks at once and says what happened.
 func checkUpdateNow(w *Window) {
 	runOnUI(func() {
-		w.bar(nil, "info", "⟳ नया Ronin देख रहा हूँ... (Checking for updates)", nil)
+		w.bar(nil, "info", L("⟳ नया Ronin देख रहा हूँ...", "⟳ Checking for updates..."), nil)
 	})
 	go func() {
 		m, err := latestRelease()
 		runOnUI(func() {
 			switch {
 			case err != nil:
-				w.bar(nil, "error", "Update नहीं देख सका: "+err.Error(), nil)
+				w.bar(nil, "error", L("Update नहीं देख सका: ", "Could not check for updates: ")+err.Error(), nil)
 			case m == nil:
-				w.bar(nil, "ok", "✔ Ronin "+Version+" सबसे नया है (up to date).", nil)
+				w.bar(nil, "ok", L("✔ Ronin "+Version+" सबसे नया है।", "✔ Ronin "+Version+" is up to date."), nil)
 			default:
-				w.bar(nil, "ok", "🆕 नया Ronin "+m.Version+" आया है।", []map[string]string{{"label": "Update करें", "cmd": "updatenow"}})
+				w.bar(nil, "ok", L("🆕 नया Ronin "+m.Version+" आया है।", "🆕 A new Ronin "+m.Version+" is here."), []map[string]string{{"label": L("Update करें", "Update"), "cmd": "updatenow"}})
 			}
 		})
 	}()
@@ -87,7 +87,7 @@ func installUpdateNow(w *Window) {
 		return
 	}
 	updating = true
-	w.bar(nil, "info", "⬇ नया Ronin download हो रहा है... (कुछ मिनट, आप काम करते रहें)", nil)
+	w.bar(nil, "info", L("⬇ नया Ronin download हो रहा है... (कुछ मिनट, आप काम करते रहें)", "⬇ Downloading the new Ronin... (a few minutes, keep working)"), nil)
 	go func() {
 		defer func() { updating = false }()
 		m, err := latestRelease()
@@ -97,14 +97,14 @@ func installUpdateNow(w *Window) {
 		runOnUI(func() {
 			switch {
 			case err != nil:
-				w.bar(nil, "error", "Update नहीं हो सका: "+err.Error(), []map[string]string{{"label": "फिर कोशिश", "cmd": "updatenow"}})
+				w.bar(nil, "error", L("Update नहीं हो सका: ", "The update failed: ")+err.Error(), []map[string]string{{"label": L("फिर कोशिश", "Try again"), "cmd": "updatenow"}})
 			case m == nil:
-				w.bar(nil, "ok", "✔ Ronin "+Version+" सबसे नया है.", nil)
+				w.bar(nil, "ok", L("✔ Ronin "+Version+" सबसे नया है।", "✔ Ronin "+Version+" is up to date."), nil)
 			default:
 				for _, x := range windowsByHwnd {
 					if !x.closing {
-						x.bar(nil, "ok", "✔ नया Ronin "+m.Version+" तैयार है। Restart करते ही खुलेगा, आपके tabs वैसे ही रहेंगे।",
-							[]map[string]string{{"label": "अभी Restart करें", "cmd": "restart"}})
+						x.bar(nil, "ok", L("✔ नया Ronin "+m.Version+" तैयार है। Restart करते ही खुलेगा, आपके tabs वैसे ही रहेंगे।", "✔ The new Ronin "+m.Version+" is ready. It opens when you restart; your tabs stay as they are."),
+							[]map[string]string{{"label": L("अभी Restart करें", "Restart now"), "cmd": "restart"}})
 					}
 				}
 			}

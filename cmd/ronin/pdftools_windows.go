@@ -173,12 +173,12 @@ func (t *Tab) saveToolFile() {
 				}
 				p := uniquePath(filepath.Join(downloadsDir(), name))
 				if err := os.WriteFile(p, data, 0o644); err != nil {
-					t.w.bar(t, "error", "File save नहीं हुई: "+err.Error(), nil)
+					t.w.bar(t, "error", L("File save नहीं हुई: ", "The file was not saved: ")+err.Error(), nil)
 					done(false)
 					return
 				}
 				savePageFile(t.w, p, true)
-				t.w.bar(t, "ok", fmt.Sprintf("✔ Downloads में save: %s (%d KB)", filepath.Base(p), (len(data)+1023)/1024), nil)
+				t.w.bar(t, "ok", fmt.Sprintf(L("✔ Downloads में save: %s (%d KB)", "✔ Saved in Downloads: %s (%d KB)"), filepath.Base(p), (len(data)+1023)/1024), nil)
 				done(true)
 				return
 			}

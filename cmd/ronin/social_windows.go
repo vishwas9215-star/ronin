@@ -206,7 +206,7 @@ func socialBlock() string {
 	c := socialSettings()
 	var b strings.Builder
 	b.WriteString(`<h2>🛡️ Safe Social</h2><div class="grid">`)
-	b.WriteString(`<a href="https://ronin.newtab/social?k=` + newTabKey + `">🛡️ सभी apps<small>सुरक्षित सोशल मीडिया</small></a>`)
+	b.WriteString(`<a href="https://ronin.newtab/social?k=` + newTabKey + `">` + L("🛡️ सभी apps<small>सुरक्षित सोशल मीडिया</small>", "🛡️ All apps<small>Safe social media</small>") + `</a>`)
 	ids := append([]string{}, c.Apps...)
 	for i := range c.Custom {
 		ids = append(ids, "c"+strconv.Itoa(i))

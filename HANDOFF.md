@@ -203,10 +203,14 @@ top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped p
   pincode); brand name / icon / one row only for exact codes (prefix = own code, no icon); links off in a
   scam-looking SMS; Saved = AtomicFile + key sender|time|length; CNAP only from SIM accounts, worded as network KYC
   name; app mode no longer wipes the browser's private tabs; calls 'play' uses rid; English default strings.xml +
-  values-hi. NOT done (next): Windows Go side still Hindi-first while shared pages follow navigator.language
-  (his laptop = English); offer / transaction / OTP regexes duplicated in Kotlin + JS (move to scamrules.json).
+  values-hi. Windows language: done (see 15 Nov below). NOT done: offer / transaction / OTP regexes duplicated in Kotlin + JS (move to scamrules.json).
 - CI green on bb9d106 (windows, android, phone + tablet emulators). Final APK installed on his phone 01:18 and
   checked: Messages (company badges + site icons, Mark all read, Saved, Latest OTP), Social Back fixed.
+- 15 Nov: Windows side follows the Windows language too (cmd/ronin/lang_windows.go: GetUserDefaultUILanguage,
+  Hindi only when the primary language is Hindi, L(hi,en)); update / Data / PDF / social / safety-mode bars, the
+  toolbar menu + danger page (LG via navigator.language) and table_export.js progress badges. The Excel check
+  reasons (पीला / लाल / नारंगी) and the Hindi words in scam / pager regexes stay (they are data, not UI).
+  extras.js UI test checks Hindi (hi-IN) and English (en-US). All 23 UI tests pass.
 - Still to do before publish: tablet (OnePlus Pad) check when he connects it; he turns on recording Accessibility
   himself if wanted; then he names the version ("हाँ, V3.11.0 publish करो").
 

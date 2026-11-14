@@ -57,7 +57,7 @@ func (t *Tab) exportData() {
 	t.exporting = true
 	w := t.w
 	keepAwake(true) // the owner may walk away: the laptop must not sleep in the middle
-	w.bar(t, "info", "📊 इस page की table पढ़ रहा हूँ... (Reading the table)", nil)
+	w.bar(t, "info", L("📊 इस page की table पढ़ रहा हूँ...", "📊 Reading the table on this page..."), nil)
 	t.runScript(tableExportJS+";window.__roninTable.start()", func(string) {
 		start := time.Now()
 		lastSeen := time.Now() // the script answered (a new web page takes it away for a moment)
@@ -95,7 +95,7 @@ func (t *Tab) exportData() {
 					if s.Pct != nil {
 						pct = fmt.Sprintf("%d%% · ", *s.Pct)
 					}
-					w.bar(t, "info", fmt.Sprintf("📊 %sपेज %d पढ़ लिया, %d पंक्तियाँ... (Reading page %d, %d rows)", pct, s.Page, s.Rows, s.Page, s.Rows), nil)
+					w.bar(t, "info", fmt.Sprintf(L("📊 %sपेज %d पढ़ लिया, %d पंक्तियाँ...", "📊 %sread page %d, %d rows..."), pct, s.Page, s.Rows), nil)
 					time.AfterFunc(600*time.Millisecond, func() { runOnUI(poll) })
 				case s.Phase == "done":
 					t.runScript("window.__roninTable.result()", func(res string) {
@@ -110,7 +110,7 @@ func (t *Tab) exportData() {
 					if msg == "" {
 						msg = "the page did not answer"
 					}
-					w.bar(t, "error", "📊 Table नहीं मिली / could not read the table: "+msg, nil)
+					w.bar(t, "error", L("📊 Table नहीं मिली: ", "📊 Could not read the table: ")+msg, nil)
 				}
 			})
 		}
@@ -182,12 +182,12 @@ func (t *Tab) saveData(body string) {
 	t.exporting = false
 	d, err := tablexport.Parse(body)
 	if err != nil {
-		w.bar(t, "error", "📊 Table खाली है / the table is empty.", nil)
+		w.bar(t, "error", L("📊 Table खाली है।", "📊 The table is empty."), nil)
 		return
 	}
 	x, err := d.XLSX()
 	if err != nil {
-		w.bar(t, "error", "📊 Excel file नहीं बन सकी: "+err.Error(), nil)
+		w.bar(t, "error", L("📊 Excel file नहीं बन सकी: ", "📊 Could not make the Excel file: ")+err.Error(), nil)
 		return
 	}
 	if t.isTools {
@@ -196,21 +196,21 @@ func (t *Tab) saveData(body string) {
 	base := filepath.Join(downloadsDir(), shortFileName(d.Title, d.Site))
 	xlsx := base + ".xlsx"
 	if err := os.WriteFile(xlsx, x, 0o644); err != nil {
-		w.bar(t, "error", "📊 Excel file save नहीं हुई: "+err.Error(), nil)
+		w.bar(t, "error", L("📊 Excel file save नहीं हुई: ", "📊 The Excel file was not saved: ")+err.Error(), nil)
 		return
 	}
 	savePageFile(w, xlsx, true)
-	t.runScript("window.__roninTable&&window.__roninTable.badge('✔ Excel बन गई (Downloads). PDF भी बन रही है...',100,true)", func(string) {})
+	t.runScript("window.__roninTable&&window.__roninTable.badge('"+L("✔ Excel बन गई (Downloads). PDF भी बन रही है...", "✔ Excel ready (Downloads). Making the PDF too...")+"',100,true)", func(string) {})
 	c := d.Check.Counts
 	note := ""
 	if d.Partial != "" {
-		note = " ⚠ अधूरा / NOT complete: " + d.Partial + "."
+		note = L(" ⚠ अधूरा: ", " ⚠ NOT complete: ") + d.Partial + "."
 	}
 	if len(d.Info) > 0 {
-		w.bar(t, "ok", fmt.Sprintf("🔀 मिलान की Excel बन गई: %d लोग · अंतर वाले %d · सिर्फ़ एक file में %d · मिलान जाँचें %d. PDF बन रही है...",
+		w.bar(t, "ok", fmt.Sprintf(L("🔀 मिलान की Excel बन गई: %d लोग · अंतर वाले %d · सिर्फ़ एक file में %d · मिलान जाँचें %d. PDF बन रही है...", "🔀 Match Excel ready: %d people · with differences %d · in one file only %d · check the match %d. Making the PDF..."),
 			len(d.Rows), c["diff"], c["only"], c["weak"]), nil)
 	} else {
-		w.bar(t, "ok", fmt.Sprintf("📊 Excel बन गई: %d पंक्तियाँ · दोहराए %d · मिलते-जुलते नाम %d · संभावित ग़लतियाँ %d.%s PDF बन रही है...",
+		w.bar(t, "ok", fmt.Sprintf(L("📊 Excel बन गई: %d पंक्तियाँ · दोहराए %d · मिलते-जुलते नाम %d · संभावित ग़लतियाँ %d.%s PDF बन रही है...", "📊 Excel ready: %d rows · repeated %d · look-alike names %d · possible mistakes %d.%s Making the PDF..."),
 			len(d.Rows), c["dupRows"]+c["dupNames"], c["similar"], c["spell"], note), nil)
 	}
 

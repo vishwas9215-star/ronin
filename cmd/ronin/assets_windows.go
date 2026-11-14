@@ -34,7 +34,7 @@ var newTabKey = func() string {
 // newTabEditing keeps the quick links in edit mode after an add / remove (one time).
 var newTabEditing bool
 
-var sectionTitles = map[string]string{"Quick links": "Quick links", "School": "स्कूल / School", "Trading": "Trading", "Video calls": "Video calls"}
+var sectionTitles = map[string]string{"Quick links": "Quick links", "School": L("स्कूल / School", "School"), "Trading": "Trading", "Video calls": "Video calls"}
 
 // quickLinksBlock is the small, editable quick links for the given sections.
 func quickLinksBlock(sections ...string) string {

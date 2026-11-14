@@ -152,6 +152,9 @@ html:has(body.light){background:#eef0f4}html:has(body.light.BANKING){background:
 </div>
 <div id="ov"></div>
 <script>
+// the language of Windows (English on an English laptop, Hindi on a Hindi one), like the Go side
+const HI = (navigator.language || "").toLowerCase().indexOf("hi") === 0;
+const LG = (hi, en) => HI ? hi : en;
 "use strict";
 const $ = s => document.querySelector(s);
 const post = o => window.chrome.webview.postMessage(JSON.stringify(o));
@@ -405,8 +408,8 @@ function showMenu(){
   if (CONTAINER !== "BANKING" && CONTAINER !== "KIDS") item("\uD83D\uDEE1\uFE0F Safe Social (Facebook, Instagram, YouTube...)", () => post({cmd:"social"}));
   if (web && CONTAINER !== "BANKING") {
     item("Save page as PDF   (Ctrl+P)", () => post({cmd:"savepdf"}));
-    if (S.dataSite) item("\uD83D\uDCCA Data \u2192 Excel + PDF (\u0907\u0938 page \u0915\u0940 \u092a\u0942\u0930\u0940 table)", () => post({cmd:"dataexport"}));
-    item(S.dataSite ? "\uD83D\uDCCA Data \u092c\u091f\u0928 \u0907\u0938 \u0938\u093e\u0907\u091f \u092a\u0930 \u092c\u0902\u0926 \u0915\u0930\u0947\u0902" : "\uD83D\uDCCA Data \u092c\u091f\u0928 \u0907\u0938 \u0938\u093e\u0907\u091f \u092a\u0930 \u091a\u093e\u0932\u0942 \u0915\u0930\u0947\u0902 (Excel + PDF)", () => post({cmd:"datasite"}));
+    if (S.dataSite) item((LG("\uD83D\uDCCA Data \u2192 Excel + PDF (\u0907\u0938 page \u0915\u0940 \u092a\u0942\u0930\u0940 table)", "\uD83D\uDCCA Data \u2192 Excel + PDF (the whole table on this page)")), () => post({cmd:"dataexport"}));
+    item(S.dataSite ? LG("\uD83D\uDCCA Data \u092c\u091f\u0928 \u0907\u0938 \u0938\u093e\u0907\u091f \u092a\u0930 \u092c\u0902\u0926 \u0915\u0930\u0947\u0902", "\uD83D\uDCCA Data button off for this site") : LG("\uD83D\uDCCA Data \u092c\u091f\u0928 \u0907\u0938 \u0938\u093e\u0907\u091f \u092a\u0930 \u091a\u093e\u0932\u0942 \u0915\u0930\u0947\u0902 (Excel + PDF)", "\uD83D\uDCCA Data button on for this site (Excel + PDF)"), () => post({cmd:"datasite"}));
     item("Picture of this page (screenshot)", () => post({cmd:"screenshot"}));
   }
   if (CONTAINER !== "BANKING") item("Reopen closed tab   (Ctrl+Shift+T)", () => post({cmd:"reopentab"}));
@@ -418,7 +421,7 @@ function showMenu(){
   if (CONTAINER === "PERSONAL" || CONTAINER === "TRADING" || CONTAINER === "CALLS") item("History   (Ctrl+H)", () => post({cmd:"history"}));
   if (CONTAINER !== "BANKING" && CONTAINER !== "KIDS") item("\u{1F511} Passwords (saved, import, export)", () => post({cmd:"passwords"}));
   item("\u{1F6E1} Family Filter (ON / OFF)", () => post({cmd:"adultblock"}));
-  item("\u27F3 Check for updates (\u0928\u092f\u093e Ronin)", () => post({cmd:"checkupdate"}));
+  item(LG("\u27F3 \u0928\u092f\u093e Ronin \u0926\u0947\u0916\u0947\u0902", "\u27F3 Check for updates"), () => post({cmd:"checkupdate"}));
   item("Settings", () => post({cmd:"settings"}));
   item("System health", () => post({cmd:"health"}));
   wrap.appendChild(m); openOv(wrap, true);
@@ -577,11 +580,11 @@ const overlays = {
   blocked(o){
     if (o.mode === "DANGER") {
       const c = card(); c.dataset.danger = "1"; c.appendChild(dangerIcon());
-      c.appendChild(el("h1", "", "\u0916\u0924\u0930\u0928\u093e\u0915 \u0938\u093e\u0907\u091f \u0930\u094b\u0915\u0940 \u0917\u0908 \u2014 Dangerous site blocked"));
+      c.appendChild(el("h1", "", LG("\u0916\u0924\u0930\u0928\u093e\u0915 \u0938\u093e\u0907\u091f \u0930\u094b\u0915\u0940 \u0917\u0908", "Dangerous site blocked")));
       c.appendChild(el("p", "host", o.host || ""));
-      c.appendChild(el("p", "", "\u092f\u0939 \u0938\u093e\u0907\u091f \u0927\u094b\u0916\u093e\u0927\u0921\u093c\u0940 (phishing) \u092f\u093e virus \u092b\u0948\u0932\u093e\u0928\u0947 \u0935\u093e\u0932\u0940 \u0938\u093e\u0907\u091f\u094b\u0902 \u0915\u0940 \u0938\u0942\u091a\u0940 \u092e\u0947\u0902 \u0939\u0948\u0964 Ronin \u0928\u0947 \u0907\u0938\u0947 \u0928\u0939\u0940\u0902 \u0916\u094b\u0932\u093e\u0964"));
+      if (HI) c.appendChild(el("p", "", "\u092f\u0939 \u0938\u093e\u0907\u091f \u0927\u094b\u0916\u093e\u0927\u0921\u093c\u0940 (phishing) \u092f\u093e virus \u092b\u0948\u0932\u093e\u0928\u0947 \u0935\u093e\u0932\u0940 \u0938\u093e\u0907\u091f\u094b\u0902 \u0915\u0940 \u0938\u0942\u091a\u0940 \u092e\u0947\u0902 \u0939\u0948\u0964 Ronin \u0928\u0947 \u0907\u0938\u0947 \u0928\u0939\u0940\u0902 \u0916\u094b\u0932\u093e\u0964"));
       c.appendChild(el("p", "muted", "This site is on the phishing / malware list (updated twice a day). Passwords, OTPs and files from it are not safe. If you are sure it is safe: Settings \u2192 add it as a safe site."));
-      c.appendChild(row(btn("\u0935\u093e\u092a\u0938 \u091c\u093e\u090f\u0901 \u2014 Go back", "primary", closeOv)));
+      c.appendChild(row(btn(LG("\u0935\u093e\u092a\u0938 \u091c\u093e\u090f\u0901", "Go back"), "primary", closeOv)));
       return c;
     }
     const c = card(); c.appendChild(el("h1", "", o.mode === "KIDS" ? "Not for Kids mode" : "Not available here"));
@@ -705,7 +708,7 @@ const overlays = {
     if (!(o.trusted||[]).length) ul2.appendChild(el("li", "muted", "None."));
     (o.trusted||[]).forEach(h => { const li = el("li", "", h); const x = el("button", "link", "Remove"); x.onclick = () => post({cmd:"untrust", host:h}); li.appendChild(x); ul2.appendChild(li); });
     c.appendChild(ul2);
-    c.appendChild(el("p", "muted", "\uD83D\uDCCA Data \u2192 Excel + PDF \u092c\u091f\u0928 \u0907\u0928 \u0938\u093e\u0907\u091f\u094b\u0902 \u092a\u0930 \u091a\u093e\u0932\u0942 (\u091a\u093e\u0932\u0942 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093f\u090f: site \u0916\u094b\u0932\u0947\u0902 \u2192 Menu \u2192 Data \u092c\u091f\u0928)"));
+    c.appendChild(el("p", "muted", LG("\uD83D\uDCCA Data \u2192 Excel + PDF \u092c\u091f\u0928 \u0907\u0928 \u0938\u093e\u0907\u091f\u094b\u0902 \u092a\u0930 \u091a\u093e\u0932\u0942 (\u091a\u093e\u0932\u0942 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093f\u090f: site \u0916\u094b\u0932\u0947\u0902 \u2192 Menu \u2192 Data \u092c\u091f\u0928)", "\uD83D\uDCCA The Data \u2192 Excel + PDF button is on for these sites (to turn it on: open the site \u2192 Menu \u2192 Data button)")));
     const ul3 = el("ul", "list");
     if (!(o.dataSites||[]).length) ul3.appendChild(el("li", "muted", "None."));
     (o.dataSites||[]).forEach(h => { const li = el("li", "", h); const x = el("button", "link", "Remove"); x.onclick = () => post({cmd:"datasiteremove", host:h}); li.appendChild(x); ul3.appendChild(li); });

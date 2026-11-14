@@ -455,10 +455,10 @@ func (w *Window) onUIMessage(raw string) {
 		if t := w.active; t != nil && strings.HasPrefix(t.url, "http") {
 			on := store.ToggleDataSite(hostOf(t.url))
 			if on {
-				w.bar(t, "ok", "📊 Data बटन इस साइट पर चालू: page के नीचे दाईं ओर हरा बटन (Excel + PDF).", nil)
+				w.bar(t, "ok", L("📊 Data बटन इस साइट पर चालू: page के नीचे दाईं ओर हरा बटन (Excel + PDF)।", "📊 Data button on for this site: the green button at the bottom right (Excel + PDF)."), nil)
 				t.showDataButton()
 			} else {
-				w.bar(t, "info", "📊 Data बटन इस साइट पर बंद.", nil)
+				w.bar(t, "info", L("📊 Data बटन इस साइट पर बंद।", "📊 Data button off for this site."), nil)
 				t.runScript("(function(){var b=document.getElementById('ronin-data-btn');if(b)b.remove()})()", func(string) {})
 			}
 			w.sendState()

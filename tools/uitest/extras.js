@@ -4,7 +4,7 @@ const out = process.argv[2] || '/tmp';
 (async () => {
   const html = fs.readFileSync('cmd/ronin/ui/toolbar.html', 'utf8').replace(/{{CONTAINER}}/g, 'PERSONAL').replace(/{{PANEL}}/g, '0')
     .replace('<script>', '<script>window.chrome={webview:{postMessage:m=>window.__post(m)}};</script><script>');
-  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1100, height: 700 } });
+  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1100, height: 700 }, locale: 'hi-IN' }); // Hindi Windows; English is checked at the end
   let fail = 0; const bad = m => { console.log('FAIL', m); fail++; };
   const got = []; const errs = []; p.on('pageerror', e => errs.push(e.message));
   await p.exposeFunction('__post', m => got.push(JSON.parse(m)));
@@ -90,7 +90,7 @@ const out = process.argv[2] || '/tmp';
   // dangerous site: red page, only "Go back" (no way to open it from here)
   await p.evaluate(() => ronin.overlay({ kind: 'blocked', tab: 1, host: 'ronin-phishing-test.com', mode: 'DANGER' }));
   const dt = await p.textContent('#ov.show');
-  if (!dt.includes('ronin-phishing-test.com') || !dt.includes('खतरनाक') || !dt.includes('Go back')) bad('danger page text');
+  if (!dt.includes('ronin-phishing-test.com') || !dt.includes('खतरनाक') || !dt.includes('वापस')) bad('danger page text');
   if ((await p.$$('#ov.show button')).length !== 1) bad('danger page must have only Go back');
   await p.screenshot({ path: out + '/danger.png' });
   await p.click('#ov.show button'); if (await p.isVisible('#ov.show')) bad('go back did not close');
@@ -98,7 +98,18 @@ const out = process.argv[2] || '/tmp';
   await p.evaluate(() => ronin.overlay({ kind: 'settings', banks: [], trusted: [], idle: 5, vpn: {}, ai: { keys: {} }, kids: {}, focus: { on: false, from: '18:00', to: '21:00', sites: '' } }));
   await p.fill('input[placeholder^="A safe site"]', 'my-coop-site.in'); await p.click('#ov.show button:text-is("Add")');
   if (!last('trustadd') || last('trustadd').url !== 'my-coop-site.in') bad('trustadd ' + JSON.stringify(last('trustadd')));
+  // English Windows: the same toolbar speaks English
+  const e = await b.newPage({ viewport: { width: 1100, height: 700 }, locale: 'en-US' });
+  e.on('pageerror', x => errs.push(x.message));
+  await e.exposeFunction('__post', () => {});
+  await e.setContent(html);
+  await e.evaluate(() => ronin.overlay({ kind: 'blocked', tab: 1, host: 'ronin-phishing-test.com', mode: 'DANGER' }));
+  const et = await e.textContent('#ov.show');
+  if (!et.includes('Dangerous site blocked') || !et.includes('Go back') || /[\u0900-\u097f]/.test(et)) bad('English danger page: ' + et.slice(0, 120));
+  await e.evaluate(() => ronin.closeOverlay());
+  await e.click('#menuBtn');
+  if (!(await e.isVisible('text=Check for updates'))) bad('English menu');
   if (errs.length) bad('JS errors ' + errs);
-  console.log(fail ? fail + ' FAILED' : 'history, page size, study time, danger page UI OK');
+  console.log(fail ? fail + ' FAILED' : 'history, page size, study time, danger page UI OK (Hindi + English)');
   await b.close(); process.exit(fail ? 1 : 0);
 })();
