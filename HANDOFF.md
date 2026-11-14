@@ -1,83 +1,73 @@
-# Ronin Browser 3 — HANDOFF 6 (14 Nov 2026, after 3.6.0 = first Windows + Android release)
+# Ronin Browser 3 — HANDOFF 7 (14 Nov 2026, 3.7.0 published)
 
-Owner: Vishwas (Hindi; hands injured: fewest clicks/typing). Not a coder: explain in Hindi, UI text in English.
-Current version: **3.6.0** (Windows + Android, one release). Windows 3.6.0 installed on the laptop and its
-update check says "Up to date" (reads the signed manifest from GitHub).
-Source of truth: **GitHub repo vishwas9215-star/ronin (public)**. Rollback for Windows: RoninSetup-3.5.1.exe /
-3.4.0 in Downloads\Ronin Browser 3 Handoff.
-Feature list + test history: FEATURES.md (bottom = latest).
+Owner: Vishwas (Hindi; both hands injured: fewest taps/typing). Not a coder: explain in Hindi, technical words in English.
+Current version: **3.7.0** (Windows + Android, one release). Rollback: 3.6.1 release on GitHub; Windows
+RoninSetup-3.5.1 / 3.4.0 in Downloads\Ronin Browser 3 Handoff.
+Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + test history: FEATURES.md.
 
 ## Owner's standing rules (must follow)
-1. Test before every hand-over; independent review for money/data/passwords work.
-2. No paid AI / no extra charges (Gemini free key only). No iPad (Apple fee).
+1. Test EVERYTHING myself before the owner sees it (emulator phone + tablet screenshots, laptop UI tests, real sites);
+   an independent QA agent reviews every release before asking to publish. He should never find bugs first.
+2. No paid AI / no extra charges (Gemini free key only). No iPad.
 3. Install only inside C:\Ronin Ecosystem. Never touch: `Ronin`, `EMERGENCY-BACKUP`, `Ronin PRO`, `Ronin PRO-backup-*`.
 4. Never read/stage `algo-key.pem`, `Algo-key.pem old`, `Dhan-Algo-Server.rdp`.
 5. No order placement. Never type passwords (owner logs in himself).
-6. Never show Proton .conf private keys or the Gemini key.
+6. Never show Proton .conf private keys, the Gemini key or RONIN_KEYS_PASS.
 7. No other browser brand names anywhere in the product.
-8. Everything auto-updates; one version per release; live publish only when he names the version.
+8. Everything auto-updates; one version per release; live publish only when he names the version ("हाँ, V3.7.0 publish करो").
+9. No features that help piracy (asked once for auto-following movie-site domains: declined).
 
-## Build (Linux)
-- Go 1.24, llvm-rc, Node + playwright. `./build.sh 3.5.1` runs Go tests, JS rule tests and the UI tests
-  (passwords, voice, listen, extras) and makes build/Ronin.exe + build/RoninSetup.exe.
-- Other UI tests: tools/uitest/run.js <dir>, downloads.js, tv.js, theme.js, panel.js, tabsearch.js,
-  night/t.js, playerads/t.js (timing-flaky, rerun once).
-- Signed updates: `go run ./tools/release` with the key from RoninBrowser3-release-key.zip.
-- Laptop install via computer use: Explorer (click tier) -> double-click setup -> setup window may hide behind:
-  click the green R in the taskbar -> grant "roninsetup-x.exe" -> Yes -> Yes. Close Ronin windows first.
+## Build / release
+- Linux: `./build.sh` = Go tests + JS tests + Playwright UI tests (passwords, voice, listen, extras, newtab, popguard,
+  tableexport, tableexport2, darkcsp) -> Ronin.exe + RoninSetup.exe. Android builds only on GitHub (SDK blocked here).
+- Push to main -> build.yml: windows, android (unit tests + signed APK), android-device matrix phone (API 35) and
+  tablet (pixel_tablet API 36): DeviceTest (blocking) then SiteTourTest (14 real sites, report only - the emulator
+  can die on heavy sites). Screenshots -> prerelease "qa" (download: github.com/.../releases/download/qa/<name>.png).
+  Crash log in the step summary.
+- Publish: `gh workflow run build.yml --ref main -f publish=true` (tag pushes blocked by the git proxy).
+- Keys: keys/ronin-keys.tar.enc, password only in secret RONIN_KEYS_PASS + owner's backup txt. Never read/print.
+- lists.yml twice a day: release "lists" = adblock-domains.txt.gz + threat-domains.txt.gz (phishing/malware).
+- Check YAML locally before pushing (`python3 -c "import yaml;..."`): a ": " in a step name broke CI once.
 
-## New in 3.5.0 (code map)
-- Video call window: containers.Calls ("CALLS"), safemoney.Call + callDomains; no VPN / no WebRTC limit.
-- extras_windows.go: History (internal/history), page size per site (settings.ZoomSites; zoomChanged also from
-  timer because the engine's ZoomFactorChanged event did not arrive on the laptop), Study time (internal/focus).
-- Mic: win32 startVoiceTyping (Win+H) + toolbar voice.* (auto-open 1.8 s after words stop).
-- Read aloud: ui/reader.js player() (speechSynthesis, Hindi voice if Windows has one).
-- Passwords: internal/vault (DPAPI file passwords.dat), passwords_windows.go, ui/inject_pass.js (capture, in memory
-  only; not in Private/Safe Money/Kids), ui/fill_pass.js (location.origin check first). Windows Hello via
-  PowerShell UserConsentVerifier before show/remove/import/export.
-- Bookmarks .html export/import (settings.BookmarksHTML / ParseBookmarksHTML).
+## Tablet (OnePlus Pad OPD2415, Android 16, adb 3b44b9f5)
+- Screen on laptop: owner double-clicks `Downloads\Ronin Browser 3 Handoff\tablet\TABLET-SCREEN.bat`
+  (scrcpy, `--no-audio` so sound stays on the tablet). Claude cannot run .bat files (classifier) - ask him once.
+- Control via computer use, app "Scrcpy" (full tier), window "Ronin Tablet"; maximise it (double-click title).
+  Screenshot coordinates: give frame coordinates (image px / scale). alt+h Home, alt+s recents, alt+n panel.
+- Install new APK: unique file name each time (same-path commits were cached), verify size with device_list_dir.
+  Better: Ronin menu -> "Update देखें" on the tablet, tap Install via scrcpy.
+- Media card shows in OxygenOS "fluid cloud" pill at the top (tap it), not the notification list.
 
-## Open items
-- Owner to try: Windows Hello prompt on "Show passwords"; save + fill on one real login; camera/mic in a real call;
-  add Windows Hindi voice (Settings -> Time & language -> Speech -> Add voices -> Hindi).
-- Video call window opens behind the current window (Windows focus rule) - cosmetic.
-- Google passkey sign-in: engine limit, use "Try another way".
-- Not tried live: Safe Money idle logout / clipboard clear / remote-tool warning, Kids, sleeping tabs.
+## New in 3.6.2 / 3.7.0 (code map)
+- Background YouTube next song: RoninWebView overrides onVisibilityChanged; keepPlaying stays on for the media tab
+  (rests after 30 min idle); rAF fallback in PageScripts.BACKGROUND_PLAY; wake lock kept 90 s between songs.
+- Danger protection: adblock.Lists Threat=true (malware-filter, phishing-filter), Engine.LoadThreat/Dangerous,
+  TestThreat "ronin-phishing-test.com". Windows: red overlay (toolbar blocked mode DANGER), SmartScreen forced
+  (Settings8 idx 36). Android: stopPage/dangerHtml via shouldInterceptRequest + redirects, Safe Browsing on,
+  Lookalike.kt (port of safemoney/lookalike.go), one-tap "I know this site" only for the red page showing it.
+  Settings/Menu "Safe sites" = TrustedSites.
+- Tabs (Android): strip with chips + pinned "+" (newTabButton). New tab dark background (both platforms).
+- Windows frame: title = Ronin name only; icon group #1 (was #2 = generic icon); dark frame in Night mode.
+- Quick links: internal/quicklinks (Defaults incl. School: Manav Sampada ehrms.upsdc.gov.in, Prerna prernaup.in,
+  UDISE+ All Modules udiseplus.gov.in/#/en/page/oldlink/109; Trading: Ronin Terminal, Dhan, TradingView, Fyers),
+  ui/quicklinks.js shared, add/remove via https://ronin.newtab/add|del?k=<key> (key per start, CSP nonce).
+- Pop-up guard in ui/inject_adblock.js (link-click hijack + invisible overlay links; # / javascript: links and
+  buttons never blocked; banks/payments/gov allowed).
+- Data -> Excel + PDF: ui/table_export.js (shared collector: paging, colspan headers, checks), internal/tablexport
+  (Go xlsx + report, A4 landscape PrintToPdf with print settings), data_windows.go; Android TableExport.kt
+  (xlsx + PdfDocument), saved in Downloads/Ronin. Per-site switch (Menu / Settings DataSites); separate dataKey.
+- CSP pages: dark mode and ad hiding use constructed style sheets (UDISE+ sign-in forbids <style>).
+- Android UA: "wv" removed (Google sign-in); desktop UA for docs.google.com and web.whatsapp.com; accounts.google.com
+  keeps the current one. targetSdk/compileSdk 36, AGP 8.11.1.
 
-## Release system (since 3.6.0)
-- Repo: https://github.com/vishwas9215-star/ronin. Claude GitHub App installed for this repo only (owner approved).
-  The session's git proxy allows branch pushes but NOT tag pushes (HTTP 403).
-- VERSION file = one version for Windows + Android. Push to main -> build.yml: Windows build.sh (all Go + JS + UI
-  tests), Android unit tests + signed APK, Android 14 emulator device tests; test lists appear on the run page.
-- Publish = Actions -> build -> Run workflow -> tick "Publish this VERSION" (only when the owner names the version,
-  e.g. "हाँ, V3.6.1 publish करो"). The release job signs manifest.json (Windows) and writes android.json.
-- Keys: keys/ronin-keys.tar.enc (AES-256, password only in secret RONIN_KEYS_PASS + owner's
-  RONIN_KEYS_PASS-BACKUP.txt in the handoff folder). Never read/print the password.
-- ad-lists.yml: daily public lists -> release "lists" (adblock-domains.txt.gz, ~357k domains) for Android.
-- Android app (android/): Kotlin WebView app com.ronin.browser. Rules.kt + AdBlocker.kt use rules.json exported from
-  the Go code (tools/exportlists) = same bank/trading/call/ad rules. YouTube player mode = PageScripts.BACKGROUND_PLAY
-  + RoninWebView.keepPlaying + MediaPlaybackService (MediaSession notification / lock screen / car buttons).
-  Safe Money = FLAG_SECURE + own WebView profile. Update = android.json from latest release (1 tap install).
+## Planned 3.8.0 (owner agreed)
+PDF + photo tools inside Ronin, all offline (no upload): compress to target KB (PDF + photo), merge, extract/split,
+reorder, page numbers, sign, add text/edit, unlock a PDF whose password he knows; photo: add signature, collage
+of 2-3 photos, WhatsApp status (1080x1920) / profile (square) size. Plan: pdf-lib (MIT) + pdf.js (Apache-2.0)
+bundled as a local page for Windows and Android.
 
-## Open after 3.6.0
-- Owner to install Ronin.apk on his Motorola phone + Android tablet and try: YouTube song, swipe app away, lock
-  screen controls, car Bluetooth; voice search; Safe Money; Check for updates.
-- Not yet in Android: VPN, passwords, video download, Kids, study time, page-size memory, sync, TV app.
-- Owner's laptop has C:\Ronin Ecosystem\EMERGENCY-BACKUP\tablet-tools (scrcpy/adb from an earlier session) -
-  rule 3: never touch that folder.
-
-## NEXT PHASE (agreed with owner 14 Nov) — Android
-1. GitHub: owner approved that Claude creates repo "ronin" in his account (vishwas9215-star) in the built-in browser
-   (he is logged in; Claude never types passwords). GitHub Actions builds Ronin.exe + Ronin.apk with ONE version and
-   publishes one release = update channel for both (Windows silent; Android shows 1-tap "Install" - Google rule).
-   Android SDK cannot be downloaded in Claude's workspace (dl.google.com / maven blocked) -> build on GitHub.
-2. Android app (phone Motorola + Android tablet, one APK, tablet layout): Android WebView shell (Kotlin) sharing the
-   JS (adblock, dark, scam, reader, passwords) and Go core via gomobile where useful (adblock lists, vault rules, VPN).
-   Native: voice search (SpeechRecognizer, Hindi), read aloud (TextToSpeech), FLAG_SECURE for Safe Money.
-3. YouTube player mode (owner's top wish): background play after swipe / screen off, notification + lock-screen
-   controls (prev/play-pause/next/close) via MediaSession + foreground service, car Bluetooth / Android Auto buttons,
-   no ads, autoplay next. Honest note given: YouTube's terms disallow this without Premium; site changes may need
-   rule updates.
-4. TV app "Ronin TV" (YouTube only) for his 65" TCL TV - only if it is Google TV / Android TV (check Settings -> About).
-   HDMI cannot install apps: install via pen drive / "Send Files to TV" / Wi-Fi debugging.
-5. Sync laptop <-> phone: bookmarks (+ passwords, encrypted) through his Google Drive.
+## Later
+Android: VPN, own password vault (tablet now uses Google Password Manager via Android autofill - check it saves on
+school sites), video download, Kids, study time, sync laptop <-> tablet. TV app (YouTube only, TCL 65").
+Windows code signing ("Unknown publisher"): Microsoft Artifact Signing $9.99/month, India individual eligibility not
+confirmed - owner's decision. Android developer verification: not in India yet (global 2027) - needs his identity.
