@@ -198,4 +198,36 @@ class DeviceTest {
             }
         }
     }
+
+    /** A real screenshot of the emulator screen, kept for checking by eye (CI uploads them). */
+    private fun shot(name: String) {
+        Thread.sleep(700)
+        fun sh(c: String) = inst.uiAutomation.executeShellCommand(c).use { pfd ->
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(pfd).use { it.readBytes() }
+        }
+        sh("mkdir -p /data/local/tmp/qa")
+        sh("screencap -p /data/local/tmp/qa/$name.png")
+    }
+
+    @Test
+    fun screensForCheckingByEye() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(2500)
+            shot("01-home")
+            var plus: android.view.View? = null
+            sc.onActivity { a -> plus = a.tabStripForTest().findViewWithTag<android.view.View>("newtab") }
+            sc.onActivity { plus!!.performClick() }
+            sc.onActivity { a -> a.loadHtmlForTest("<html><head><title>Wikipedia - test page</title></head><body style='font:20px sans-serif'><h1>Wikipedia</h1><p>Second tab</p></body></html>", "https://hi.wikipedia.org/") }
+            Thread.sleep(1500)
+            shot("02-two-tabs")
+            sc.onActivity { a -> a.go("https://ronin-phishing-test.com/") }
+            waitFor(15) { pageText(sc).contains("खतरनाक") }
+            shot("03-danger-page")
+            sc.onActivity { a -> a.go("https://sbi-kyc-update.xyz/") }
+            waitFor(15) { pageText(sc).contains("नकली") }
+            shot("04-fake-bank")
+            sc.onActivity { a -> a.showMenuForTest() }
+            shot("05-menu")
+        }
+    }
 }

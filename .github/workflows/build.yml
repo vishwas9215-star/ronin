@@ -111,6 +111,10 @@ jobs:
   android-device:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [phone, tablet]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -126,19 +130,33 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Device tests on an Android 15 emulator
+      - name: Device tests on an Android 15 emulator (${{ matrix.device }})
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
+          profile: ${{ matrix.device == 'tablet' && 'pixel_tablet' || 'pixel_6' }}
           target: google_apis
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           working-directory: android
-          script: ./gradlew --no-daemon connectedDebugAndroidTest
+          script: |
+            ./gradlew --no-daemon connectedDebugAndroidTest || echo failed > ../device-tests-failed
+            adb pull /data/local/tmp/qa ../qa || true
+      - name: Screenshots for checking (release "qa")
+        if: always() && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls qa 2>/dev/null || exit 0
+          gh release view qa >/dev/null 2>&1 || gh release create qa --title "QA screenshots" --notes "Emulator screenshots from the last build (not a Ronin release)." --prerelease
+          for f in qa/*.png; do cp "$f" "${{ matrix.device }}-$(basename "$f")"; gh release upload qa "${{ matrix.device }}-$(basename "$f")" --clobber; done
+      - name: Fail if a device test failed
+        run: test ! -f device-tests-failed
       - name: Test summary
         if: always()
         run: |
+          echo "## ${{ matrix.device }}" >> "$GITHUB_STEP_SUMMARY"
           python3 - android/app/build/outputs/androidTest-results >> "$GITHUB_STEP_SUMMARY" <<'PY'
           import glob, sys, xml.etree.ElementTree as ET
           rows = []
@@ -153,7 +171,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: android-device-test-report
+          name: android-device-test-report-${{ matrix.device }}
           path: android/app/build/reports/androidTests/
 
   release:

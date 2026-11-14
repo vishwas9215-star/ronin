@@ -823,6 +823,8 @@ a{display:block;padding:14px;border-radius:12px;background:$card;color:$fg;text-
     fun addressForTest(): View = address
 
     /** For the device tests: the visible tab's page. */
+    fun showMenuForTest() = showMenu(tabsButton)
+
     fun webForTest(): WebView = current!!.web
 
     /** For the device tests: load a page as if it came from baseUrl. */
