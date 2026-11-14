@@ -132,6 +132,13 @@ Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + tes
   (owner does it himself), or install via adb from the laptop. Fallback idea: a "lite" flavor without these parts.
 - Owner must once (Android 15+): App info -> ⋮ -> Allow restricted settings (SMS role, dialer role, notification
   access, accessibility). Advice given: SMS "BLOCK PROMO" to 1909.
+- Also in 3.10: Ronin SOS (Sos.kt, sos.html/js, own icon ic_sos, part "sos"): hold 2 s -> SMS to 1-5 family with
+  Maps link + battery, every 5 min for 1 h until "मैं ठीक हूँ". Family Filter (owner's English name for adult-site
+  setting): Android Parts.chooseAdult (first start, PIN, SafeSearch forced), Windows settings.AdultBlock +
+  first-start Yes/No + menu "Family Filter". Chat log (deleted WhatsApp messages) via NotifyWatch + ChatLogActivity.
+- Kashvi (5, KG1): owner chose Google Family Link + Maps sharing (step card given), not a Ronin tracker.
+- 3.11 first task (owner agreed): whole app English with Hindi option (child is English medium).
+- CI green 14 Nov ~22:00 IST (phone + tablet incl. SMS role test and on-phone scam parity).
 - Remaining review items not done: Windows-side nothing; M6 BT audio route, M12 labels; homograph on Android uses
   rawAuthority (I6) - check.
 
