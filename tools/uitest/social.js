@@ -84,6 +84,8 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
     <article id=igad><header><a><span>kasperskylab</span></a><div id=lbl></div></header><div>photo</div></article>
     <article id=igshop><header><a><span>brand</span></a></header><a href="https://l.instagram.com/?u=x" id=cta></a></article>
     <article id=igreel><span dir=auto id=reelcap>Trading tips...</span></article>
+    <article id=igpic><div><div><img id=pic alt="Photo by aviator_hack on January 30, 2021. May be an image of text that says 'Aviator hack 7days ₹499 30days ₹999 Who wants to buy message me'"></div></div></article>
+    <article id=igpicok><div><div><img alt="Photo by friend_ram on November 14, 2026. May be an image of 2 people, temple and text that says 'Happy Diwali'"></div></div></article>
   </main></body></html>`;
   await p2.route('https://www.instagram.com/**', r => r.fulfill(html(ig)));
   await p2.goto('https://www.instagram.com/'); await p2.waitForTimeout(600);
@@ -96,7 +98,9 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   if (!await igv('igok')) bad('instagram normal post hidden');
   if (!await p2.$('.ronin-scam + #reelcap')) bad('reel caption that opened later not warned');
   if (await p2.$('.ronin-scam + #igcap')) bad('normal caption warned');
-  if ((await p2.evaluate(() => window.__roninSocialCounts.ads)) !== 2) bad('ads count');
+  if (!await p2.$('#igpic > .ronin-scam')) bad('scam words on a photo not warned');
+  if (await p2.$('#igpicok > .ronin-scam')) bad('normal photo warned');
+  if ((await p2.evaluate(() => window.__roninSocialCounts.ads)) !== 2) bad('ads count ' + (await p2.evaluate(() => JSON.stringify(window.__roninSocialCounts))));
   // message requests: a stranger banner
   await p2.route('https://www.instagram.com/**', r => r.fulfill(html('<div>requests</div>')));
   await p2.goto('https://www.instagram.com/direct/requests/'); await p2.waitForTimeout(600);

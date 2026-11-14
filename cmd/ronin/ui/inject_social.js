@@ -221,6 +221,30 @@
     }
   }
 
+  // the words written ON a picture: Instagram / Facebook describe each photo in its alt text
+  // ("May be an image of text that says 'Aviator hack 7 days ₹499, message me'"); a scam poster is caught too
+  function scanPictures(root) {
+    if (!/instagram\.com$|facebook\.com$|threads\.(net|com)$/.test(host)) return;
+    var imgs = (root.querySelectorAll ? root : document).querySelectorAll("img[alt]");
+    for (var i = 0, im; i < imgs.length && i < 200; i++) {
+      im = imgs[i];
+      var alt = im.getAttribute("alt") || "";
+      if (im.__roninAlt === alt || alt.length < 20) continue;
+      im.__roninAlt = alt;
+      var said = alt.match(/(?:text that says|text which reads|लिखा है)\s*['"‘“]?([\s\S]+)/i);
+      var r = S.text(said ? said[1] : alt);
+      if (!r.level) continue;
+      var box = im.closest("article") || im.parentNode && im.parentNode.parentNode;
+      if (!box || box.__roninPicWarned) continue;
+      box.__roninPicWarned = 1;
+      var t = el("div", "ronin-scam" + (r.level === "stop" ? " ronin-stop" : ""));
+      t.appendChild(el("b", "", L("⚠ Ronin: इस फ़ोटो / reel पर लिखी बात ठगी जैसी है", "⚠ Ronin: the words on this photo / reel look like a scam")));
+      t.appendChild(el("div", "", r.reasons.slice(0, 2).join(" • ")));
+      try { if (box.tagName === "ARTICLE") box.insertBefore(t, box.firstChild); else box.parentNode.insertBefore(t, box); } catch (e) {}
+      counts.scam++;
+    }
+  }
+
   // ---- 4. strangers: message requests, unsaved numbers, video calls
   var strangerShown = "";
   function strangers() {
@@ -387,7 +411,7 @@
   }
   function work() {
     queued = false;
-    try { hideAds(document); hideAppPromos(document); if (!isMail()) scanText(document); strangers(); } catch (e) {}
+    try { hideAds(document); hideAppPromos(document); if (!isMail()) { scanText(document); scanPictures(document); } strangers(); } catch (e) {}
     if (isMail()) { clearTimeout(mailTimer); mailTimer = setTimeout(function () { try { mailCheck(); } catch (e) {} }, 300); }
   }
   function later() { if (!queued) { queued = true; setTimeout(work, 400); } }

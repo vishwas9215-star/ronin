@@ -215,6 +215,16 @@ top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped p
   his contacts. Cause: tapping the name row dialled at once. Fixed: the name only fills the keypad; only the green
   📞 calls (phone.js test 'tap on a name placed a call'). Rule: never tap call rows / green buttons on his real
   phone; test calling only on the emulator.
+- 15 Nov ~02:00, owner: "Safe Social looks like a normal app, check it really protects". Found on his real
+  Instagram: ads now say "Ad" (not "Sponsored") so none were hidden; labels / captions arriving later were never
+  re-checked; scam engine missed aviator / betting, "earn daily from home", "DM me / link in bio", "10k lagao 1 lakh
+  pao". Fixed: SPONSOR has Ad, CTA buttons (Shop now / Install...), re-check until found; captions re-checked when
+  they grow; new groups earn / dm / bet / double (+ otp reversed order, sextortion "recorded ... family");
+  scanPictures reads Instagram / Facebook photo alt text ("text that says ...") so scam posters are caught;
+  green 🛡 shield in the bottom bar with counts (tap = what was stopped). Gmail signed out -> Google sign-in
+  (not the advert page). Calls: coloured direction chips. Family Filter checked on his phone: ON = adult site
+  blocked + Google SafeSearch locked; set back OFF (his setting). Install of the new APK blocked: his phone's
+  Android Advanced Protection is ON (I never change it) - he decides.
 - Still to do before publish: tablet (OnePlus Pad) check when he connects it; he turns on recording Accessibility
   himself if wanted; then he names the version ("हाँ, V3.11.0 publish करो").
 
