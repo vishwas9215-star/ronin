@@ -289,6 +289,10 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
   cookie reset + flush, chatlog / saved-sms / sender-icons files, ronin_sms / ronin_phone / ronin_sos prefs and the
   removed parts' notification channels deleted. Windows setup no longer makes "Ronin Mail" shortcuts and removes old
   ones. Safe Social words removed from scam texts.
+- DeviceTests scamCheckPageGivesAVerdict (inside the tools page + a shared message) and aMessageSharedToRoninIsChecked
+  (real ACTION_SEND intent, fresh start). Note: DeviceTest eval() returns JSON - a string answer comes back quoted, so
+  compare numbers ("1"), not 'yes'. CI 43700222813 all green (tablet song-notification test flaked once, rerun green).
+- 3.12.0 NOT published yet: waits for "हाँ, V3.12.0 publish करो".
 
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only
