@@ -71,6 +71,11 @@ class TvTest {
 
             // a video straight away (Blender's open film, 4K upload): does it play, at what quality, any advert?
             sc.onActivity { a -> a.web.loadUrl("https://www.youtube.com/tv#/watch?v=aqz-KE-bpKQ") }
+            // YouTube first asks who is watching: "Watch as guest" (the family adds its account on the real TV)
+            Thread.sleep(8000)
+            shot("tv-05a-who")
+            inst.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN); Thread.sleep(800)
+            inst.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER)
             var state = ""
             for (i in 0 until 45) {
                 Thread.sleep(1000)
