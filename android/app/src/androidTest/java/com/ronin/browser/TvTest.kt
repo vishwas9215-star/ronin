@@ -68,6 +68,17 @@ class TvTest {
             var alive = false
             sc.onActivity { a -> alive = !a.isFinishing }
             android.util.Log.i("RoninTV", "after back alive=$alive at " + js(sc, "location.href"))
+
+            // a video straight away (Blender's open film, 4K upload): does it play, at what quality, any advert?
+            sc.onActivity { a -> a.web.loadUrl("https://www.youtube.com/tv#/watch?v=aqz-KE-bpKQ") }
+            var state = ""
+            for (i in 0 until 45) {
+                Thread.sleep(1000)
+                state = js(sc, "(function(){var v=document.querySelector('video');return v?('t='+v.currentTime.toFixed(1)+' h='+v.videoHeight+' paused='+v.paused+' ad='+!!document.querySelector('[class*=ad-showing],[class*=ytlr-ad],ytlr-ad-progress-bar-renderer')):'no video'})()")
+                if (state.startsWith("t=") && (state.substringAfter("t=").substringBefore(" ").toDoubleOrNull() ?: 0.0) > 8) break
+            }
+            android.util.Log.i("RoninTV", "video: $state")
+            shot("tv-05-video")
         }
     }
 }
