@@ -389,12 +389,19 @@ class DeviceTest {
     @Test
     fun scamCheckPageGivesAVerdict() {
         // 3.12: the page used to borrow its engine from Safe Social; it must work on its own
+        val msg = "Mujhe urgent 10000 rupaye ki zarurat hai, hospital me hoon, is QR par bhej do"
+        val diag = "location.href.slice(0,60)+' | '+document.readyState+' | scam='+!!window.RoninScam+' rules='+!!window.__roninScamRules+' | res='+performance.getEntriesByType('resource').map(function(e){return e.name.split('/').pop().slice(0,20)+':'+Math.round(e.duration)}).join(',')"
         ActivityScenario.launch(MainActivity::class.java).use { sc ->
             Thread.sleep(1500)
-            sc.onActivity { a -> a.openTools("scamcheck:" + android.net.Uri.encode("Mujhe urgent 10000 rupaye ki zarurat hai, hospital me hoon, is QR par bhej do")) }
-            assertTrue("no verdict on the scam check page: " + eval(sc, "location.href.slice(0,80)+' | '+document.readyState+' | scam='+!!window.RoninScam+' rules='+!!window.__roninScamRules+' | '+(document.body?document.body.innerText.slice(0,120):'')+' | res='+performance.getEntriesByType('resource').map(function(e){return e.name.split('/').pop().slice(0,20)+':'+Math.round(e.duration)+':'+(e.responseStatus||'')}).join(',')+' | scripts='+[].map.call(document.scripts,function(x){return (x.src||'inline').split('/').pop()}).join(',')"),
-                waitFor(75) { eval(sc, "document.getElementById('verdict')?'yes':'no'") == "yes" }) // the first page load after start can wait for the danger lists on the test phone
+            sc.onActivity { a -> a.openToolsForTest() }
+            assertTrue("tools page did not open: " + eval(sc, diag), waitFor(30) { eval(sc, "document.querySelectorAll('.tool').length") == "20" })
+            // inside the page (the menu's "Is this a scam?")
+            eval(sc, "location.hash='scamcheck:'+encodeURIComponent(" + org.json.JSONObject.quote(msg) + "),1")
+            assertTrue("no verdict inside the page: " + eval(sc, diag), waitFor(20) { eval(sc, "document.getElementById('verdict')?'yes':'no'") == "yes" })
             shot("16-scam-check")
+            // a message shared to Ronin from WhatsApp / SMS
+            sc.onActivity { a -> a.openTools("scamcheck:" + android.net.Uri.encode("Congratulations! You won an iPhone. Pay 499 delivery charge to claim, send OTP")) }
+            assertTrue("no verdict for a shared message: " + eval(sc, diag), waitFor(30) { eval(sc, "(document.getElementById('verdict')&&document.querySelector('textarea').value.indexOf('iPhone')>=0)?'yes':'no'") == "yes" })
         }
     }
 
