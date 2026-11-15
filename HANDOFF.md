@@ -283,6 +283,12 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - New DeviceTest theBrowserIsOnlyABrowser (no SMS / call / contacts / location permissions, no removed components,
   no Safe Social row) + instagramAndFacebookVideosNeverPlayInTheBackground.
 - BEFORE updating his phone: set Google Phone + Messages as default apps again (Settings -> Apps -> Default apps).
+- QA review of the cleanup found + fixed: "Is this a scam?" page had borrowed RoninScam + rules from the Safe Social
+  injection -> now index.html loads rules.js (made by Android toolsFile / Windows serveTools from the rule JSON) +
+  scamcheck.js; test tools/uitest/scampage.js. upgradeTo312() runs once (prefs flag cleaned312): YouTube Restricted
+  cookie reset + flush, chatlog / saved-sms / sender-icons files, ronin_sms / ronin_phone / ronin_sos prefs and the
+  removed parts' notification channels deleted. Windows setup no longer makes "Ronin Mail" shortcuts and removes old
+  ones. Safe Social words removed from scam texts.
 
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only

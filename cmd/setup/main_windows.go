@@ -153,9 +153,10 @@ func install() {
 		{filepath.Join(startMenu, "Ronin Safe Money.lnk"), "--safemoney", "Ronin Safe Money - protected banking"},
 		{filepath.Join(desktop, "Ronin Browser.lnk"), "", "Ronin Browser"},
 		{filepath.Join(desktop, "Ronin Safe Money.lnk"), "--safemoney", "Ronin Safe Money - protected banking"},
-		{filepath.Join(startMenu, "Ronin Mail.lnk"), "--mail", "Ronin Mail - email with Safe Mail (scam / threat mails marked)"},
-		{filepath.Join(desktop, "Ronin Mail.lnk"), "--mail", "Ronin Mail - email with Safe Mail (scam / threat mails marked)"},
 	}
+	// Ronin Mail is gone (3.12): its old shortcuts go too
+	_ = os.Remove(filepath.Join(startMenu, "Ronin Mail.lnk"))
+	_ = os.Remove(filepath.Join(desktop, "Ronin Mail.lnk"))
 	// Windows remembers a program's icon by file name, so after a logo change the
 	// old picture stays on the desktop. Each version gets its own icon file, and
 	// Windows is told that icons changed.

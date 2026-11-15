@@ -175,7 +175,7 @@ class MainActivity : AppCompatActivity() {
         })
         ui.postDelayed(mediaPoll, 1500)
         Updater.check(this, quiet = true)
-        if (app.store.social.isNotEmpty()) { youtubeRestricted(false); app.store.social = "" } // Safe Social is gone (3.12)
+        upgradeTo312()
         // first start: Family Filter for this device (asked once)
         if (!Family.prefs(this).getBoolean("adultAsked", false)) ui.postDelayed({ if (!isFinishing) Family.chooseAdult(this, first = true) }, 1200)
     }
@@ -864,7 +864,23 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     private var beforeTools: Tab? = null
     private fun browsingTabs() = tabs.filter { !it.isTools }
 
-    /** Safe Social (removed in 3.12) had switched on YouTube's Restricted mode cookie: switch it off once. */
+    /** 3.12 (once): Safe Social had switched on YouTube's Restricted mode cookie (switched off again); the removed
+     *  Messages / Calls / SOS / chat log leave nothing behind (their files, settings and notification channels). */
+    private fun upgradeTo312() {
+        val p = Family.prefs(this)
+        if (p.getBoolean("cleaned312", false)) return
+        youtubeRestricted(false); android.webkit.CookieManager.getInstance().flush()
+        app.store.social = ""
+        for (f in listOf("chatlog.json", "chatlog.tmp", "saved-sms.json")) java.io.File(filesDir, f).delete()
+        java.io.File(filesDir, "sender-icons").deleteRecursively()
+        for (n in listOf("ronin_sms", "ronin_phone", "ronin_sos")) try { deleteSharedPreferences(n) } catch (e: Exception) { }
+        if (Build.VERSION.SDK_INT >= 26) getSystemService(android.app.NotificationManager::class.java)?.let { nm ->
+            // only the channels of the removed parts (SMS, calls, recording, SOS, scam warnings, spam calls)
+            for (id in listOf("ronin_sms", "ronin_sms_quiet", "ronin_scam", "ronin_call", "ronin_ring", "ronin_rec", "ronin_sos", "ronin_spam", "ronin_phone")) nm.deleteNotificationChannel(id)
+        }
+        p.edit().putBoolean("cleaned312", true).remove("asked").apply()
+    }
+
     private fun youtubeRestricted(on: Boolean) {
         val cm = android.webkit.CookieManager.getInstance()
         for (h in listOf("https://www.youtube.com", "https://m.youtube.com")) cm.setCookie(h, "PREF=f2=" + (if (on) "8000000" else "0") + "; domain=.youtube.com; path=/; max-age=31536000")
@@ -911,6 +927,9 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         }
         return try {
             if (!ok) throw java.io.FileNotFoundException(name)
+            // the scam-check rules and link lists for "Is this a scam?" (made here, from Ronin's own rules)
+            if (name == "rules.js") return WebResourceResponse(mime, "utf-8", 200, "OK", mapOf("Cache-Control" to "no-store"),
+                ByteArrayInputStream(("window.__roninScamRules=" + app.rules.scamRulesJson + ";window.__roninLinkLists=" + app.rules.safeLinks.json + ";").toByteArray()))
             WebResourceResponse(mime, "utf-8", 200, "OK", mapOf("Cache-Control" to "no-store"), assets.open("ronin/tools/$name"))
         } catch (e: Exception) {
             WebResourceResponse("text/plain", "utf-8", 404, "Not Found", emptyMap(), ByteArrayInputStream(ByteArray(0)))

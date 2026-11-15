@@ -17,6 +17,7 @@ import (
 
 	"roninbrowser/internal/containers"
 	"roninbrowser/internal/downloadguard"
+	"roninbrowser/internal/safelinks"
 )
 
 // PDF / Photo tools: Ronin's own page at https://ronin.home/tools/ (the files are inside
@@ -112,6 +113,9 @@ func (t *Tab) serveTools(uri string, args *edge.ICoreWebView2WebResourceRequeste
 		name = "index.html"
 	}
 	body, err := fs.ReadFile(toolsFiles, path.Join("ui/tools", path.Clean("/" + name)[1:]))
+	if name == "rules.js" { // the scam-check rules and link lists for "Is this a scam?"
+		body, err = []byte("window.__roninScamRules="+string(safelinks.ScamRulesJSON)+";window.__roninLinkLists="+string(safelinks.ListsJSON)+";"), nil
+	}
 	status, reason := 200, "OK"
 	if err != nil || !t.isTools || t.w.container == containers.Banking {
 		body, status, reason = []byte("not found"), 404, "Not Found"

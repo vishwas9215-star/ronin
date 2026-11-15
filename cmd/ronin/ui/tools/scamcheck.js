@@ -1,4 +1,4 @@
-// Ronin scam check: one engine for Safe Social, Safe Mail, the "क्या यह ठगी है?" tool and the tests.
+// Ronin scam check: the engine of the "क्या यह ठगी है?" tool (and of the tests).
 // - text(t): does a message look like a scam? Decides on a SCORE: one heavy sign (asking for the
 //   OTP / PIN, "pay first", "scan to receive money", "stay on the video call") or two ordinary
 //   signs together; advice ("OTP किसी को मत बताना") lowers it. Never one word alone.
@@ -53,7 +53,7 @@
         if (g.id !== 'link' && g.id !== 'urgent') res.reasons.push(g.why);
       }
     }
-    // a link in the message that Safe Social would never open is a heavy sign itself
+    // a link in the message that Ronin counts as dangerous is a heavy sign itself
     const urls = String(t0 || '').match(/(https?:\/\/[^\s<>"')]+|www\.[^\s<>"')]+|\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(web\.app|netlify\.app|vercel\.app|xyz|top|click|link|online|site|live|shop|icu|sbs|cfd|buzz|me|ly|gd|gl|ee)\b[^\s<>"')]*)/gi) || [];
     for (const u0 of urls.slice(0, 10)) {
       const v = check(/^https?:/i.test(u0) ? u0 : 'https://' + u0);
@@ -150,7 +150,7 @@
     at: ['नकली पता (@ वाली चाल)', 'यह link असली site का नाम दिखाकर किसी दूसरी site पर ले जाता है।'],
     ip: ['नाम की जगह सिर्फ़ नंबर वाला पता', 'असली बैंक / सरकारी साइटें ऐसे पते पर नहीं होतीं।'],
     puny: ['मिलते-जुलते अक्षरों वाला नकली पता', 'यह पता असली जैसा दिखता है पर उसमें दूसरी भाषा के अक्षर हैं।'],
-    telegram: ['Telegram पर ले जाने वाला link', 'अनजान group / channel में निवेश या task के लिए पैसे माँगना जोखिम भरा है। परिवार की सुरक्षा के लिए Safe Social में Telegram बंद है।'],
+    telegram: ['Telegram पर ले जाने वाला link', 'अनजान group / channel में निवेश या task के लिए पैसे माँगना जोखिम भरा है।'],
     remote: ['Screen share / remote control app (AnyDesk जैसा)', 'इससे सामने वाला आपका पूरा फ़ोन चला सकता है। कोई customer care ऐसा app नहीं डलवाता।'],
     short: ['छोटा (छुपा हुआ) link', 'यह link असली पता छुपाता है।'],
     apk: ['App file (.apk) / mod app', 'ऐसी app से फ़ोन hack हो सकता है। app सिर्फ़ Play Store से लें।'],
@@ -166,7 +166,7 @@
     at: ['A fake address (the @ trick)', 'This link shows a real site\'s name but takes you to another site.'],
     ip: ['An address that is only numbers', 'Real banks and government sites are never at such addresses.'],
     puny: ['A fake address with look-alike letters', 'This address looks real but uses letters from another alphabet.'],
-    telegram: ['A link that goes to Telegram', 'Unknown groups / channels asking money for investment or tasks are risky. Telegram is off in Safe Social to keep the family safe.'],
+    telegram: ['A link that goes to Telegram', 'Unknown groups / channels asking money for investment or tasks are risky.'],
     remote: ['A screen share / remote control app (like AnyDesk)', 'With it the other person can run your whole phone. No customer care asks you to install it.'],
     short: ['A short (hidden) link', 'This link hides the real address.'],
     apk: ['An app file (.apk) / mod app', 'Such an app can hack your phone. Install apps only from the Play Store.'],

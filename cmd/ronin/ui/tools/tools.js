@@ -609,7 +609,7 @@ T.words = {
   },
 };
 
-// ---- "क्या यह ठगी है?": the same engine as Safe Social / Safe Mail (RoninScam, scamcheck.js)
+// ---- "क्या यह ठगी है?": the scam engine (RoninScam, scamcheck.js; rules from rules.js, made by Ronin)
 T.scamcheck = {
   title: '🛡️ Scam Check', sub: 'WhatsApp / SMS / email का message या link यहाँ paste करें (या उस app में Share → Ronin)। सब जाँच इसी phone पर होती है।',
   show(body, preset) {

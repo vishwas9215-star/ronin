@@ -1,0 +1,25 @@
+// "Is this a scam?" page works on its own (3.12: it used to borrow the engine from Safe Social and broke when that went).
+const { chromium } = require('playwright'); const fs = require('fs'); const path = require('path');
+(async () => {
+  const root = path.join(__dirname, '..', '..'), dir = path.join(root, 'cmd/ronin/ui/tools');
+  const rules = 'window.__roninScamRules=' + fs.readFileSync(path.join(root, 'internal/safelinks/scamrules.json'), 'utf8') + ';window.__roninLinkLists=' + fs.readFileSync(path.join(root, 'internal/safelinks/lists.json'), 'utf8') + ';';
+  const b = await chromium.launch(); const p = await b.newPage(); let fail = 0, errs = [];
+  p.on('pageerror', e => errs.push(e.message));
+  await p.route('https://ronin.home/tools/**', r => {
+    const name = new URL(r.request().url()).pathname.replace('/tools/', '') || 'index.html';
+    if (name === 'rules.js') return r.fulfill({ contentType: 'text/javascript', body: rules });
+    const f = path.join(dir, name);
+    if (!fs.existsSync(f)) return r.fulfill({ status: 404, body: '' });
+    r.fulfill({ contentType: name.endsWith('.html') ? 'text/html' : 'text/javascript', body: fs.readFileSync(f) });
+  });
+  await p.goto('https://ronin.home/tools/#scamcheck:' + encodeURIComponent('Mujhe urgent 10000 rupaye ki zarurat hai, hospital me hoon, is QR par bhej do'));
+  await p.waitForTimeout(2500);
+  const html = await p.evaluate(() => document.body.innerText);
+  if (/उपलब्ध नहीं|not available/i.test(html)) { fail++; console.log('scam engine missing on the page'); }
+  if (!await p.$('#verdict')) { fail++; console.log('no verdict shown'); }
+  if (!(await p.evaluate(() => !!window.RoninScam))) { fail++; console.log('RoninScam not loaded'); }
+  if (errs.length) { fail++; console.log('errors: ' + errs.join(' | ')); }
+  await b.close();
+  console.log(fail ? fail + ' FAILED' : 'scam check page OK');
+  process.exit(fail ? 1 : 0);
+})();
