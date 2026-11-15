@@ -85,7 +85,7 @@ func writeAssets(dir string) error {
 		return err
 	}
 	// page scripts shared with Windows
-	for _, f := range []string{"inject_adblock.js", "quicklinks.js", "table_export.js", "inject_social.js"} {
+	for _, f := range []string{"inject_adblock.js", "quicklinks.js", "table_export.js"} {
 		src, err := os.ReadFile(filepath.Join("cmd", "ronin", "ui", f))
 		if err != nil {
 			return err
@@ -95,7 +95,7 @@ func writeAssets(dir string) error {
 		}
 	}
 	// the PDF / Photo tools page with its libraries
-	for _, f := range []string{"index.html", "tools.js", "merge.js", "datecalc.js", "social.html", "social.js", "scamcheck.js", "messages.html", "messages.js", "senders.js", "calls.html", "calls.js", "chatlog.html", "chatlog.js", "sos.html", "sos.js", "lib/pdf-lib.min.js", "lib/pdf.min.mjs", "lib/pdf.worker.min.mjs", "lib/LICENSE-pdf-lib.md", "lib/LICENSE-pdfjs.txt"} {
+	for _, f := range []string{"index.html", "tools.js", "merge.js", "datecalc.js", "scamcheck.js", "lib/pdf-lib.min.js", "lib/pdf.min.mjs", "lib/pdf.worker.min.mjs", "lib/LICENSE-pdf-lib.md", "lib/LICENSE-pdfjs.txt"} {
 		src, err := os.ReadFile(filepath.Join("cmd", "ronin", "ui", "tools", f))
 		if err != nil {
 			return err

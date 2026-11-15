@@ -3,7 +3,6 @@
 package main
 
 import (
-	"encoding/json"
 	"golang.org/x/sys/windows"
 	"html"
 	"net/url"
@@ -52,7 +51,6 @@ type Tab struct {
 	protect         string // "", "payment", "bank" (Payment Protect reason)
 	isNewTab        bool
 	isTools         bool              // Ronin's own PDF / Photo tools page
-	isSocial        bool              // a Safe Social tab (full screen, guarded)
 	userURL         string            // address the user just asked for
 	chainStart      map[uint64]string // first address of each navigation chain
 	chainUser       map[uint64]bool   // whether that chain was started by the user
@@ -405,10 +403,6 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 	// the page's "Data -> Excel + PDF" button
 	if strings.HasPrefix(uri, "https://ronin.data/") {
 		call(args, nsSetCancel, 1)
-		if u, err := url.Parse(uri); err == nil && u.Path == "/social" {
-			runOnUI(func() { t.socialRequest(u) })
-			return
-		}
 		if u, err := url.Parse(uri); err == nil && u.Path == "/close" {
 			if u.Query().Get("k") == toolsKey && t.isTools {
 				runOnUI(func() { t.w.leaveTools() })
@@ -434,20 +428,12 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 	}
 	// Ronin's own tools page opens only from Ronin's menu
 	if strings.HasPrefix(uri, "https://ronin.home/") {
-		if !(t.isTools || t.isSocial) || !strings.HasPrefix(uri, toolsPrefix) {
+		if !t.isTools || !strings.HasPrefix(uri, toolsPrefix) {
 			call(args, nsSetCancel, 1)
 		}
 		return
 	}
 	// a change to the quick links, made on Ronin's own new tab page
-	if strings.HasPrefix(uri, "https://ronin.newtab/social") {
-		call(args, nsSetCancel, 1)
-		if u, err := url.Parse(uri); err == nil && u.Query().Get("k") == newTabKey && t.isNewTab {
-			_, open := appURL(u.Query().Get("app"))
-			runOnUI(func() { t.w.showSocial(open) })
-		}
-		return
-	}
 	if strings.HasPrefix(uri, "https://ronin.newtab/") {
 		call(args, nsSetCancel, 1)
 		if t.isNewTab {
@@ -457,20 +443,6 @@ func (t *Tab) onNavigationStarting(args uintptr) {
 			}
 		}
 		return
-	}
-	// Safe Social: Telegram, group invites, UPI apps, short links, .apk, fake bank sites... never
-	// open, however the page tries (link, script, redirect); the page shows why.
-	if t.isSocial {
-		if r := socialStop(uri); r != "" {
-			call(args, nsSetCancel, 1)
-			b, _ := json.Marshal(uri)
-			runOnUI(func() {
-				if t.c != nil {
-					t.c.Eval("window.__roninSocialWarn&&window.__roninSocialWarn(" + string(b) + ")")
-				}
-			})
-			return
-		}
 	}
 	// for the "did the user ask for this download?" check
 	if strings.HasPrefix(uri, "http") { // Ronin's own pages (new tab, error page) do not count

@@ -35,37 +35,9 @@ class LogicTest {
     }
 
     @Test fun safeSearchForced() {
-        assertEquals("https://www.google.com/search?q=x&safe=active", Parts.safeSearch("https://www.google.com/search?q=x"))
-        assertNull(Parts.safeSearch("https://www.google.com/search?q=x&safe=active"))
-        assertNull(Parts.safeSearch("https://www.google.com/maps"))
-    }
-
-    @Test fun smsSorting() {
-        assertEquals("ads", SmsSort.category("VM-SHOPPR-P", "Big sale! 70% off today", false, ""))
-        assertEquals("work", SmsSort.category("JM-SBIINB-S", "Your OTP is 123456", false, ""))
-        assertEquals("work", SmsSort.category("AD-UIDAI-G", "Aadhaar updated", false, ""))
-        assertEquals("unknown", SmsSort.category("+919812345678", "Hello sir, kal milte hain", false, ""))
-        assertEquals("work", SmsSort.category("+919812345678", "Hello sir, kal milte hain", true, ""))
-        // 3.11: loan / selling offers are hidden as ads even from service senders; transactions never are
-        assertEquals("ads", SmsSort.category("JD-PIRFIN-S", "Dear customer, Check the latest details of your loan approval for Rs 5 lakh. Apply now", false, ""))
-        assertEquals("ads", SmsSort.category("AD-HDFCBK-S", "Pre-approved personal loan of Rs 3,00,000 is ready for you", false, ""))
-        assertEquals("work", SmsSort.category("VD-HDFCBK-S", "IMPS INR 6,900.00 sent from HDFC Bank A/c XX6490 on 13-11-26", false, ""))
-        assertEquals("work", SmsSort.category("JX-KOTAKD-S", "Dear customer, your Kotak A/C XXXX747132 is blocked. To unblock, visit https://kotk.in/x", false, ""))
-        assertEquals("work", SmsSort.category("JK-lichfl-S", "Dear Sir/Madam, The NACH for Rs. 19296 will be presented on 15-11-2026", false, ""))
-        assertEquals("work", SmsSort.category("AD-HDFCBK-S", "Congratulations! Your Personal Loan of Rs 2 lakh is sanctioned and disbursed to A/c XX12", false, ""))
-        assertEquals("work", SmsSort.category("AD-EPFOHO-G", "Your PF claim is settled", false, ""))
-        // only registered promotional senders are ever auto-deleted
-        assertTrue(SmsSort.isPromoSender("VM-SHOPPR-P")); assertFalse(SmsSort.isPromoSender("VD-HDFCBK-S")); assertFalse(SmsSort.isPromoSender("+919812345678"))
-        // the OTP alone, for the big blue copy button and the notification's Copy OTP
-        assertEquals("554581", Otp.find("554581 is your OTP for Dhan. Please do not share it with anyone"))
-        assertEquals("6038", Otp.find("Your OTP for Login is 6038This OTP is valid ony for 20 minutes"))
-        assertEquals("630753", Otp.find("Enter the code 630753 to sign in to your FYERS account"))
-        assertEquals(null, Otp.find("IMPS INR 6,900.00 sent from HDFC Bank A/c XX6490 on 13-11-26"))
-        assertEquals(null, Otp.find("Your shopping order to pincode 228001 is shipped"))
-        assertEquals("scam", SmsSort.category("+919812345678", "x", false, "stop"))
-        assertEquals("scam", SmsSort.category("+919812345678", "x", true, "warn"))
-        assertEquals("ads", SmsSort.category("+919812345678", "Limited offer! Get 50% cashback, shop now", false, ""))
-        assertEquals("work", SmsSort.category("57575", "Recharge done", false, ""))
+        assertEquals("https://www.google.com/search?q=x&safe=active", Family.safeSearch("https://www.google.com/search?q=x"))
+        assertNull(Family.safeSearch("https://www.google.com/search?q=x&safe=active"))
+        assertNull(Family.safeSearch("https://www.google.com/maps"))
     }
 
     @Test fun classifiesLikeWindows() {

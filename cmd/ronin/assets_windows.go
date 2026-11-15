@@ -166,7 +166,7 @@ func newTabHTML(c containers.Container) string {
 		heading = "Private window"
 		sub = "Nothing from this window is kept after you close it."
 	default:
-		sections = append(sections, socialBlock(), quickLinksBlock(quicklinks.Sections...))
+		sections = append(sections, quickLinksBlock(quicklinks.Sections...))
 		note = `<div class="note">Bank websites open automatically in <b>Ronin Safe Money</b>, the protected banking window.</div>`
 	}
 	r := strings.NewReplacer(

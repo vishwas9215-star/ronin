@@ -1,4 +1,4 @@
-# Ronin Browser 3 — HANDOFF 8 (15 Nov 2026, 3.11.1 published 09:11 IST)
+# Ronin Browser 3 — HANDOFF 8 (15 Nov 2026, 3.11.1 published; 3.12.0 = pure browser, built)
 
 Owner: Vishwas (Hindi; both hands injured: fewest taps/typing). Not a coder: explain in Hindi, technical words in English.
 Current version: **3.11.1** published 15 Nov 09:11 IST (run 43672589607). Rollback: 3.11.0 / 3.10.0 releases on GitHub; Windows
@@ -265,6 +265,24 @@ top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped p
   never when something under the finger scrolls; tools/uitest/pull.js); Updater unknown-sources screen missing on
   some TVs (try/catch -> security settings); TV Back when YouTube did not load (finish); ads hidden at once, heavy
   checks wait for a still finger; paused song released after 30 min so polling stops.
+
+## 3.12.0 (15 Nov afternoon): back to a PURE BROWSER (owner's decision 13:21)
+Owner: Social / Mail / Calls-Contacts / Messages "not working well, not looking good" -> remove completely; keep a good
+browser + background YouTube / music + Ronin TV. His answers: remove on laptop too; remove SOS + Deleted WhatsApp
+messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?", PDF / Data Tools).
+- Removed (git tag before-3.12-cleanup = last commit with them): Android AppWindows (Mail/SocialActivity), Calls,
+  CallRecord, ChatLog, MessagesActivity, NotifyWatch, Parts, PhonePage, SenderIcons, Sms, Sos + their manifest
+  components, icons, record_access.xml, and permissions SMS / MMS / contacts / call / phone state / location /
+  mic FGS / full-screen intent. Pages social, messages, calls, chatlog, sos, senders.js, inject_social.js. Windows
+  social_windows.go, Safe Social menu, new-tab Safe Social row, YouTube-Restrict header; --mail = plain Gmail.
+  Tests social.js, phone.js, pull.js, Messages / Calls / Social DeviceTests removed.
+- Kept: Family Filter moved to Family.kt (same prefs "ronin_parts", so his choice / PIN stay); scam engine
+  (scamcheck.js, ScamCheck.kt, SafeLinks.kt) for the "Is this a scam?" tools page + share-to-Ronin; noBackgroundPlay
+  (Instagram / Facebook videos never in the background); TV.
+- Migration: if store.social was set, YouTube PREF cookie reset once (Safe Social had set Restricted mode).
+- New DeviceTest theBrowserIsOnlyABrowser (no SMS / call / contacts / location permissions, no removed components,
+  no Safe Social row) + instagramAndFacebookVideosNeverPlayInTheBackground.
+- BEFORE updating his phone: set Google Phone + Messages as default apps again (Settings -> Apps -> Default apps).
 
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only

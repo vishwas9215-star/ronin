@@ -14,7 +14,6 @@ NODE_PATH=$(npm root -g) node tools/uitest/voice.js /tmp/ronin-voice.png
 NODE_PATH=$(npm root -g) node tools/uitest/listen.js /tmp/ronin-listen.png
 mkdir -p /tmp/ronin-ui && NODE_PATH=$(npm root -g) node tools/uitest/extras.js /tmp/ronin-ui
 mkdir -p /tmp/ronin-ui && NODE_PATH=$(npm root -g) node tools/uitest/newtab.js /tmp/ronin-ui
-NODE_PATH=$(npm root -g) node tools/uitest/pull.js
 NODE_PATH=$(npm root -g) node tools/uitest/popguard.js
 NODE_PATH=$(npm root -g) node tools/uitest/tableexport.js
 NODE_PATH=$(npm root -g) node tools/uitest/tableexport2.js
@@ -22,8 +21,6 @@ NODE_PATH=$(npm root -g) node tools/uitest/darkcsp.js
 node tools/uitest/merge_rules.js
 node tools/uitest/datecalc_rules.js
 node tools/uitest/scamcheck.js
-NODE_PATH=$(npm root -g) node tools/uitest/social.js /tmp/ronin-ui
-NODE_PATH=$(npm root -g) node tools/uitest/phone.js /tmp/ronin-ui
 NODE_PATH=$(npm root -g) node tools/uitest/toolsbutton.js /tmp/ronin-ui/toolsbutton.png
 NODE_PATH=$(npm root -g) node tools/uitest/merge.js /tmp/ronin-ui
 python3 tools/uitest/make_tool_fixtures.py /tmp/toolfx && NODE_PATH=$(npm root -g) node tools/uitest/pdftools.js /tmp/ronin-ui

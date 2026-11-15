@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="widget_desc">Ronin में खोजें: लिखकर या बोलकर, बिना ads के</string>
-    <string name="record_access_desc">Ronin Calls की call recording के लिए। Ronin इससे screen पर कुछ नहीं पढ़ता और कुछ नहीं दबाता; recording phone में ही रहती है।</string>
     <string name="widget_hint">Ronin में खोजें…</string>
     <string name="widget_voice">बोलकर खोजें</string>
 </resources>

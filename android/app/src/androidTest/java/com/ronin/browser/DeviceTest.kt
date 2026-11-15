@@ -342,42 +342,6 @@ class DeviceTest {
     private fun shell(c: String): String = inst.uiAutomation.executeShellCommand(c).use { pfd ->
         android.os.ParcelFileDescriptor.AutoCloseInputStream(pfd).use { String(it.readBytes()) }
     }
-    private fun <A : PhonePage> evalPage(sc: ActivityScenario<A>, js: String): String {
-        val latch = CountDownLatch(1); var out = ""
-        sc.onActivity { a -> a.webForTest().evaluateJavascript(js) { out = it ?: ""; latch.countDown() } }
-        latch.await(15, TimeUnit.SECONDS); return out
-    }
-
-    @Test
-    fun roninMessagesSortsScamAndWorkSms() {
-        if (!Parts.hasPhone(app)) return // a tablet without SIM never gets Ronin Messages
-        Parts.set(app, Parts.MESSAGES, true)
-        // (the role stays with Ronin afterwards: taking it away revokes the SMS permissions,
-        // and Android then ends Ronin's process, which would end this test run too)
-        // what the owner does once by hand ("Allow restricted settings"), then the SMS role
-        val ops = shell("cmd appops set ${app.packageName} ACCESS_RESTRICTED_SETTINGS allow")
-        Thread.sleep(1000)
-        val out = shell("cmd role add-role-holder android.app.role.SMS ${app.packageName} 0") + shell("cmd role get-role-holders android.app.role.SMS")
-        run {
-            assertTrue("Ronin did not become the SMS app: $ops | $out", waitFor(15) { SmsStore.isDefault(app) })
-            val now = System.currentTimeMillis()
-            fun inbox(from: String, body: String) = app.contentResolver.insert(android.provider.Telephony.Sms.Inbox.CONTENT_URI, android.content.ContentValues().apply {
-                put("address", from); put("body", body); put("date", now); put("read", 0); put("type", 1) })
-            inbox("+919812300011", "Mujhe urgent 10000 rupaye ki zarurat hai, hospital me hoon, is QR par bhej do")
-            inbox("JM-SBIINB-S", "482913 is your OTP for login. Never share it with anyone.")
-            inbox("VM-SHOPPR-P", "Big sale! Flat 70% off today only, shop now")
-            ActivityScenario.launch(MessagesActivity::class.java).use { sc ->
-                assertTrue("messages page did not load", waitFor(20) { evalPage(sc, "window.__roninMessages?window.__roninMessages.list().length:0").toIntOrNull()?.let { it >= 3 } == true })
-                val cats = evalPage(sc, "JSON.stringify(window.__roninMessages.list().map(t=>t.address+':'+t.cat))")
-                assertTrue("scam SMS not in ⛔: $cats", cats.contains("+919812300011:scam"))
-                assertTrue("bank OTP not in काम के: $cats", cats.contains("JM-SBIINB-S:work"))
-                assertTrue("ad not in विज्ञापन: $cats", cats.contains("VM-SHOPPR-P:ads"))
-                evalPage(sc, "document.querySelector('[data-tab=scam]').click(),1")
-                shot("16-ronin-messages")
-            }
-        }
-    }
-
     @Test
     fun scamCheckOnThePhoneMatchesThePage() {
         // Android's own regex engine (ICU) must judge the texts exactly like the tests on the computer
@@ -393,88 +357,32 @@ class DeviceTest {
     }
 
     @Test
-    fun simNameIsKeptForRecentAndThreatTipShown() {
-        // CNAP: the network's KYC name of an unknown caller is kept for Recent (the fake "Daroga ji" case)
-        CallInfo.keepCnap(app, "+91 98765 43210", "RAMESH KUMAR")
-        assertEquals("RAMESH KUMAR", CallInfo.cnapOf(app, "9876543210"))
-        assertTrue(CallInfo.threatTip().contains("Digital arrest") || CallInfo.threatTip().contains("digital arrest", ignoreCase = true))
-    }
-
-    @Test
-    fun roninCallsKeypadOpens() {
-        if (!Parts.hasPhone(app)) return
-        Parts.set(app, Parts.CALLS, true)
-        ActivityScenario.launch(CallsActivity::class.java).use { sc ->
-            assertTrue("calls keypad did not load", waitFor(20) { evalPage(sc, "document.querySelectorAll('.pad button').length") == "12" })
-            // Block / Delete ask "are you sure?": the page's questions must reach the screen (3.11 fix)
-            var chrome = false
-            sc.onActivity { a -> chrome = a.webForTest().webChromeClient != null }
-            assertTrue("phone pages cannot ask questions (no WebChromeClient)", chrome)
-            evalPage(sc, "document.querySelector('[data-key=\"1\"]').click(),1")
-            shot("17-ronin-calls")
-        }
-    }
-
-    @Test
-    fun safeSocialChipOnTheHomePageOpensThatApp() {
-        // bug in 3.10: an Instagram chip on the new tab page opened "Edit links" instead of Instagram
+    fun instagramAndFacebookVideosNeverPlayInTheBackground() {
+        // Instagram / Facebook videos never keep playing (and the phone awake) in the background; songs do
         ActivityScenario.launch(MainActivity::class.java).use { sc ->
-            Thread.sleep(2000)
-            assertTrue("Safe Social row missing", waitFor(10) { eval(sc, "document.querySelectorAll('#ql .chips[data-s=\"Safe Social\"] .chip').length").toIntOrNull() ?: 0 >= 2 })
-            eval(sc, "[].filter.call(document.querySelectorAll('#ql .chips[data-s=\"Safe Social\"] .chip'), function(c){return c.href.indexOf('app=')>0})[0].click(); 1")
-            var social = false
-            assertTrue("chip did not open Safe Social", waitFor(15) { sc.onActivity { a -> social = a.currentIsSocialForTest() }; social })
-            var at = ""
-            sc.onActivity { a -> at = a.webForTest().url ?: "" }
-            assertTrue("opened the launcher, not the app: $at", !at.startsWith(MainActivity.SOCIAL))
-        }
-    }
-
-    @Test
-    fun safeSocialOpensFullScreenAndCloses() {
-        ActivityScenario.launch(MainActivity::class.java).use { sc ->
-            Thread.sleep(1500)
-            var strip = 0
-            sc.onActivity { a -> strip = a.tabStripForTest().childCount; a.openSocial() }
-            assertTrue("Safe Social launcher did not open", waitFor(20) { eval(sc, "document.querySelectorAll('.app').length") == "5" })
-            // Ronin itself stops Telegram in Safe Social, whatever the page does
-            eval(sc, "location.href='https://t.me/share_market_vip',1")
-            Thread.sleep(2500)
-            var at = ""
-            sc.onActivity { a -> at = a.webForTest().url ?: "" }
-            assertTrue("Safe Social opened Telegram: $at", !at.contains("t.me"))
-            var social = false; var barShown = true
-            sc.onActivity { a -> social = a.currentIsSocialForTest(); barShown = a.addressForTest().isShown }
-            assertTrue("not a Safe Social tab", social)
-            assertTrue("address bar still shown in Safe Social", !barShown)
-            var bottomBar = false
-            sc.onActivity { a -> bottomBar = a.socialBarForTest().isShown }
-            assertTrue("Back / My apps / Close bar not shown at the bottom", bottomBar)
-            // the green shield shows that Ronin is protecting this page
-            var shieldShown = false
-            sc.onActivity { a -> shieldShown = (a.socialBarForTest() as android.view.ViewGroup).findViewWithTag<android.view.View>("socialShield")?.isShown == true }
-            assertTrue("protection shield not shown in Safe Social", shieldShown)
-            // signed-out Gmail's advert page goes to Google's sign-in; the inbox itself is left alone
             sc.onActivity { a ->
-                assertTrue(a.gmailAdvertForTest("https://workspace.google.com/intl/en-US/gmail/"))
-                assertTrue(a.gmailAdvertForTest("https://www.google.com/intl/en/gmail/about/"))
-                assertTrue(!a.gmailAdvertForTest("https://mail.google.com/mail/u/0/"))
-                assertTrue(!a.gmailAdvertForTest("https://workspace.google.com/pricing"))
-                // Instagram / Facebook videos never keep playing (and the phone awake) in the background; songs do
                 assertTrue(a.noBackgroundPlayForTest("https://www.instagram.com/reels/abc/"))
                 assertTrue(a.noBackgroundPlayForTest("https://m.facebook.com/watch"))
                 assertTrue(!a.noBackgroundPlayForTest("https://m.youtube.com/watch?v=x"))
                 assertTrue(!a.noBackgroundPlayForTest("https://music.youtube.com/"))
             }
-            shot("15-safe-social")
-            // ✕ closes it and the browser is back
-            eval(sc, "location.href='https://ronin.data/social?do=close&k='+new URLSearchParams(location.search).get('k'),1")
-            Thread.sleep(1500)
-            sc.onActivity { a -> social = a.currentIsSocialForTest(); barShown = a.addressForTest().isShown }
-            assertTrue("Safe Social did not close", !social && barShown)
-            var after = 0
-            sc.onActivity { a -> after = a.tabStripForTest().childCount }
-            assertEquals("tabs changed", strip, after)
+        }
+    }
+
+    @Test
+    fun theBrowserIsOnlyABrowser() {
+        // 3.12: Social / Mail / Messages / Calls / SOS are gone, and so are their permissions
+        val pm = app.packageManager
+        val info = pm.getPackageInfo(app.packageName, android.content.pm.PackageManager.GET_PERMISSIONS or android.content.pm.PackageManager.GET_ACTIVITIES or android.content.pm.PackageManager.GET_SERVICES)
+        val perms = info.requestedPermissions?.toList() ?: emptyList()
+        for (p in listOf("android.permission.READ_SMS", "android.permission.RECEIVE_SMS", "android.permission.SEND_SMS", "android.permission.READ_CALL_LOG", "android.permission.CALL_PHONE", "android.permission.READ_CONTACTS", "android.permission.ACCESS_FINE_LOCATION"))
+            assertTrue("still asks for $p", p !in perms)
+        val parts = (info.activities?.map { it.name } ?: emptyList()) + (info.services?.map { it.name } ?: emptyList())
+        for (c in listOf("MessagesActivity", "CallsActivity", "SosActivity", "MailActivity", "SocialActivity", "NotifyWatch", "RecordAccess"))
+            assertTrue("$c is still in the app", parts.none { it.endsWith(".$c") })
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(2000)
+            assertEquals("Safe Social row still on the new tab page", "0", eval(sc, "document.querySelectorAll('#ql .chips[data-s=\\\"Safe Social\\\"]').length"))
         }
     }
 
