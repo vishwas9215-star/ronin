@@ -1,7 +1,7 @@
-# Ronin Browser 3 — HANDOFF 8 (15 Nov 2026, 3.11.0 published 03:38 IST)
+# Ronin Browser 3 — HANDOFF 8 (15 Nov 2026, 3.11.1 published 09:11 IST)
 
 Owner: Vishwas (Hindi; both hands injured: fewest taps/typing). Not a coder: explain in Hindi, technical words in English.
-Current version: **3.11.0** published 15 Nov 03:38 IST (run 43645549883). Rollback: 3.10.0 / 3.9.0 releases on GitHub; Windows
+Current version: **3.11.1** published 15 Nov 09:11 IST (run 43672589607). Rollback: 3.11.0 / 3.10.0 releases on GitHub; Windows
 RoninSetup-3.5.1 / 3.4.0 in Downloads\Ronin Browser 3 Handoff.
 Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + test history: FEATURES.md.
 
@@ -233,7 +233,7 @@ top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped p
   (Advanced Protection may block the install: his choice); tablet check when he connects it; recording Accessibility
   is his choice; offer / transaction / OTP regexes still duplicated in Kotlin + JS.
 
-## 3.11.1 (built 15 Nov morning, NOT published)
+## 3.11.1 (published 15 Nov 2026 09:11 IST on "हाँ, V3.11.1 publish करो"; TV APK copied to C:\Ronin Ecosystem\TV)
 - Owner 07:30: phone showed an "Instagram - instagram.com" media card with Pause: Ronin's background-song feature
   (keepPlaying + MediaPlaybackService 6 h wake lock) grabbed Instagram's autoplaying feed videos -> battery drain.
   Fix: MEDIA_STATE reports muted (m); social tabs, short-video sites (noPlaySites: instagram, facebook, threads, x,
