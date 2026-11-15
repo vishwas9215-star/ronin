@@ -256,6 +256,10 @@ top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped p
   block (YouTube / Google hosts never); Back = Escape key to the page; Updater.check (dialog works with the remote).
   CI matrix device "tv" (android-tv API 34 x86, tv_1080p, continue-on-error for now) runs TvTest: home-row entry,
   prune check, real youtube.com/tv screenshot + D-pad keys (qa release tv-*.png, "### TV" log in the summary).
+  Result (CI 43669015883 all green incl. tv): YouTube's real TV screen loads ("Watch the latest videos" -> Get
+  started -> Add account / Watch as guest); remote keys move focus, OK opens, Back closes. Video could not be played
+  in CI: from a data-centre IP YouTube asks "Sign in to confirm you're not a bot" (QR / yt.be/activate) - at home
+  he signs in with his phone. Ads + quality must be checked on his real TV (3-tap list given).
 
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only
