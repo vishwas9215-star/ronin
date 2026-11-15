@@ -80,6 +80,8 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   // Instagram (like the real one, Nov 2026): the "Ad" label and the "Shop now" button come AFTER the post,
   // and a caption opens with "... more"
   const ig = `<html><body><main>
+    <article id=igold><header><a><span>news_page</span></a><time datetime="2023-03-12T10:00:00.000Z">Mar 12, 2023</time></header><div>flood photo</div></article>
+    <article id=ignew><header><a><span>friend</span></a><time datetime="${new Date().toISOString()}">now</time></header></article>
     <article id=igok><header><a><span>friend_ram</span></a></header><span dir=auto id=igcap>Sunday walk with family</span><a role=button>Follow</a></article>
     <article id=igad><header><a><span>kasperskylab</span></a><div id=lbl></div></header><div>photo</div></article>
     <article id=igshop><header><a><span>brand</span></a></header><a href="https://l.instagram.com/?u=x" id=cta></a></article>
@@ -98,6 +100,8 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   if (!await igv('igok')) bad('instagram normal post hidden');
   if (!await p2.$('.ronin-scam + #reelcap')) bad('reel caption that opened later not warned');
   if (await p2.$('.ronin-scam + #igcap')) bad('normal caption warned');
+  if (!await p2.$('#igold > .ronin-age.ronin-old')) bad('old post has no date badge');
+  if (await p2.$('#ignew > .ronin-age')) bad('new post got an old badge');
   if (!await p2.$('#igpic > .ronin-scam')) bad('scam words on a photo not warned');
   if (await p2.$('#igpicok > .ronin-scam')) bad('normal photo warned');
   if ((await p2.evaluate(() => window.__roninSocialCounts.ads)) !== 2) bad('ads count ' + (await p2.evaluate(() => JSON.stringify(window.__roninSocialCounts))));

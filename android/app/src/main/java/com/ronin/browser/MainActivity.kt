@@ -1020,7 +1020,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
 
     // ---- Safe Social: the family's social apps, full screen, guarded
     private var beforeSocial: Tab? = null
-    private val socialAppUrls = mapOf("facebook" to "https://www.facebook.com/", "instagram" to "https://www.instagram.com/", "youtube" to "https://m.youtube.com/",
+    private val socialAppUrls = mapOf("facebook" to "https://www.facebook.com/", "instagram" to "https://www.instagram.com/?variant=following", "youtube" to "https://m.youtube.com/",
         "whatsapp" to "https://web.whatsapp.com/", "x" to "https://x.com/", "threads" to "https://www.threads.net/", "sharechat" to "https://sharechat.com/",
         "moj" to "https://mojapp.in/", "linkedin" to "https://www.linkedin.com/", "pinterest" to "https://www.pinterest.com/", "snapchat" to "https://web.snapchat.com/",
         "telegram" to "https://web.telegram.org/", "gmail" to "https://mail.google.com/", "outlook" to "https://outlook.live.com/mail/",

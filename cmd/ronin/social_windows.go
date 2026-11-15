@@ -55,7 +55,7 @@ type socialCfg struct {
 }
 
 var socialApps = map[string][2]string{ // id -> name, address (the launcher has the same list)
-	"facebook": {"Facebook", "https://www.facebook.com/"}, "instagram": {"Instagram", "https://www.instagram.com/"},
+	"facebook": {"Facebook", "https://www.facebook.com/"}, "instagram": {"Instagram", "https://www.instagram.com/?variant=following"},
 	"youtube": {"YouTube", "https://www.youtube.com/"}, "whatsapp": {"WhatsApp", "https://web.whatsapp.com/"},
 	"x": {"X", "https://x.com/"}, "threads": {"Threads", "https://www.threads.net/"}, "sharechat": {"ShareChat", "https://sharechat.com/"},
 	"moj": {"Moj", "https://mojapp.in/"}, "linkedin": {"LinkedIn", "https://www.linkedin.com/"}, "pinterest": {"Pinterest", "https://www.pinterest.com/"},

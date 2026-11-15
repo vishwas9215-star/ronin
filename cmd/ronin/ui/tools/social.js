@@ -11,7 +11,7 @@
   // every app Ronin knows; the family picks which ones show (Settings)
   const CATALOG = [
     ['facebook', 'Facebook', 'f', '#1877f2', 'https://www.facebook.com/'],
-    ['instagram', 'Instagram', '◎', '#c13584', 'https://www.instagram.com/'],
+    ['instagram', 'Instagram', '◎', '#c13584', 'https://www.instagram.com/?variant=following'],
     ['youtube', 'YouTube', '▶', '#e00000', 'https://www.youtube.com/'],
     ['whatsapp', 'WhatsApp', '✆', '#1fa855', 'https://web.whatsapp.com/'],
     ['x', 'X (Twitter)', '𝕏', '#222222', 'https://x.com/'],

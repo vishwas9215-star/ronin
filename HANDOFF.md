@@ -240,6 +240,12 @@ top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped p
   sharechat, moj, snapchat, tiktok) and muted videos never become the background player; a held one is released
   (MediaPlaybackService.stop = ACTION_QUIET: no notification, no wake lock, page not paused; paused if Ronin closed).
   mediaPoll stops in the background when nothing plays (was every 1 s forever). DeviceTest noBackgroundPlayForTest.
+- Owner 07:38: Instagram scrolls with difficulty; pull-down-to-refresh missing; still many ads; wants latest posts
+  (old posts look like today's news). Done: inject_social checks wait until scrolling stops (900 ms + idle, never
+  during a scroll); pull-to-refresh in Safe Social tabs (passive touch, reload past 120 px at the top); old-post
+  badge (article time[datetime] >= 3 days, amber > 30 days, "📅 Old post: 2 years ago · date"); Instagram opens on
+  ?variant=following (Following feed = newest first, Android + Windows + launcher). Ads: check on the real phone
+  that 3.11.0 is installed (the "Ad" fix is in 3.11.0).
 
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only

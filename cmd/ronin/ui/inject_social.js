@@ -46,6 +46,8 @@
     ".ronin-scam.ronin-stop{background:#fde2e2;color:#7f1010;border-color:#e04848}.ronin-rumour{background:#e0edff!important;color:#123a7a!important;border-color:#9cc0f5!important}" +
     ".ronin-scam a.ronin-fc{display:inline-block;margin:4px 6px 0 0;padding:4px 10px;border-radius:14px;background:#1d4ed8;color:#fff!important;text-decoration:none;font-size:13px}" +
     ".ronin-scam button,.ronin-bar button,#ronin-soc-warn button{" + F + "font-weight:700;cursor:pointer;border:0;border-radius:12px}" +
+    ".ronin-age{display:inline-block;margin:6px 8px;padding:4px 12px;border-radius:12px;" + F + "font-weight:700;font-size:14px;background:#e5e7eb;color:#1f2937}.ronin-age.ronin-old{background:#fef3c7;color:#92400e;border:1px solid #f59e0b}" +
+    ".ronin-pull{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:2147483646;padding:8px 16px;border-radius:20px;background:#111827;color:#fff;" + F + "font-weight:700;font-size:15px;pointer-events:none}" +
     ".ronin-say{margin-left:6px;padding:3px 10px;background:#374151;color:#fff;font-size:13px}" +
     "#ronin-soc-warn{position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:14px}" +
     "#ronin-soc-warn .box{max-width:480px;width:100%;background:#fff;color:#111;border-radius:18px;padding:20px;" + F + "font-size:18px;line-height:1.5;box-shadow:0 8px 30px rgba(0,0,0,.4);border-top:10px solid #dc2626}" +
@@ -420,10 +422,54 @@
   }
   function work() {
     queued = false;
-    try { hideAds(document); hideAppPromos(document); if (!isMail()) { scanText(document); scanPictures(document); } strangers(); } catch (e) {}
+    try { hideAds(document); hideAppPromos(document); if (!isMail()) { scanText(document); scanPictures(document); agePosts(document); } strangers(); } catch (e) {}
     if (isMail()) { clearTimeout(mailTimer); mailTimer = setTimeout(function () { try { mailCheck(); } catch (e) {} }, 300); }
   }
-  function later() { if (!queued) { queued = true; setTimeout(work, 400); } }
+  // never in the way of the finger: the checks wait until scrolling stops, then run when the phone is idle
+  // (Instagram changes the page all the time; checking during a scroll made it stutter)
+  var lastMove = 0;
+  function moved() { lastMove = Date.now(); }
+  function later() { if (!queued) { queued = true; setTimeout(whenStill, 900); } }
+  function whenStill() {
+    if (Date.now() - lastMove < 400) { setTimeout(whenStill, 450); return; }
+    if (window.requestIdleCallback) requestIdleCallback(work, { timeout: 2000 }); else work();
+  }
+  // old posts look like today's news: a clear date badge on anything older than 3 days
+  function agePosts(root) {
+    if (!/instagram\.com$|facebook\.com$|threads\.(net|com)$/.test(host)) return;
+    var ts = root.querySelectorAll("article time[datetime]");
+    for (var i = 0; i < ts.length && i < 60; i++) {
+      var tm = ts[i], post = tm.closest("article");
+      if (!post || post.__roninAge) continue;
+      post.__roninAge = 1;
+      var d = new Date(tm.getAttribute("datetime"));
+      var days = Math.floor((Date.now() - d.getTime()) / 86400000);
+      if (!(days >= 3)) continue;
+      var y = Math.floor(days / 365), mo = Math.floor(days / 30);
+      var ago = y >= 1 ? L(y + " साल पहले", y + (y > 1 ? " years" : " year") + " ago") : mo >= 1 ? L(mo + " महीने पहले", mo + (mo > 1 ? " months" : " month") + " ago") : L(days + " दिन पहले", days + " days ago");
+      var b = el("div", "ronin-age" + (days > 30 ? " ronin-old" : ""), "📅 " + L("पुरानी पोस्ट: ", "Old post: ") + ago + " · " + d.toLocaleDateString(EN ? "en-IN" : "hi-IN", { day: "numeric", month: "short", year: "numeric" }));
+      post.insertBefore(b, post.firstChild);
+    }
+  }
+  // pull down at the top = fresh feed (like the real app)
+  function pullToRefresh() {
+    if (!C().social || window.__roninPull) return;
+    window.__roninPull = 1;
+    var y0 = -1, chip = null, dy = 0;
+    addEventListener("touchstart", function (e) { y0 = (window.scrollY <= 0 && e.touches.length === 1) ? e.touches[0].clientY : -1; dy = 0; }, { passive: true });
+    addEventListener("touchmove", function (e) {
+      if (y0 < 0) return;
+      dy = e.touches[0].clientY - y0;
+      if (dy > 30 && !chip) { chip = el("div", "ronin-pull", "↓"); put(chip); }
+      if (chip) { chip.style.opacity = Math.min(1, dy / 120); chip.textContent = dy > 120 ? L("⟳ छोड़ें: नया लोड होगा", "⟳ Release to refresh") : "↓"; }
+    }, { passive: true });
+    addEventListener("touchend", function () {
+      var go = y0 >= 0 && dy > 120 && window.scrollY <= 0;
+      if (chip) { chip.remove(); chip = null; }
+      y0 = -1;
+      if (go) location.reload();
+    }, { passive: true });
+  }
   function googleFactCheck() {
     if (!/(^|\.)google\.[a-z.]+$/.test(location.hostname) || location.pathname !== "/search") return;
     var q = new URLSearchParams(location.search).get("q") || "";
@@ -441,6 +487,9 @@
     styles();
     work();
     new MutationObserver(later).observe(document.documentElement, { childList: true, subtree: true });
+    addEventListener("scroll", moved, { passive: true, capture: true });
+    addEventListener("touchmove", moved, { passive: true });
+    pullToRefresh();
     window.addEventListener("hashchange", later);
     if (C().social) buttons();
     if (isMail()) mailChip();
