@@ -249,7 +249,13 @@ top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped p
 - Owner 07:44: Safe Social WhatsApp tile showed the WhatsApp Web QR page - useless on the phone itself. Now:
   whatsappApp() opens the real WhatsApp app when installed (manifest <queries> com.whatsapp / w4b); tablet / laptop
   without the app keep WhatsApp Web (QR from the phone). Ronin's WhatsApp guard on the phone = NotifyWatch + calls.
-- Owner chose for the TV app: Google TV, install by pen drive. Plan sent; build after his OK.
+- Owner chose for the TV app: Google TV, install by pen drive; said "ठीक है" 07:47. Built: TvActivity (same APK,
+  LEANBACK_LAUNCHER + android:banner drawable-xhdpi/tv_banner.png, leanback/touchscreen not required) = full-screen
+  WebView on https://www.youtube.com/tv with a living-room (Cobalt) UA; NO_ADS_JS at document start (JSON.parse +
+  Response.json prune adPlacements / playerAds / adSlots...; window.close -> RoninTv.exit); AD_URL + AdBlocker network
+  block (YouTube / Google hosts never); Back = Escape key to the page; Updater.check (dialog works with the remote).
+  CI matrix device "tv" (android-tv API 34 x86, tv_1080p, continue-on-error for now) runs TvTest: home-row entry,
+  prune check, real youtube.com/tv screenshot + D-pad keys (qa release tv-*.png, "### TV" log in the summary).
 
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only

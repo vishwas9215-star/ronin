@@ -27,6 +27,9 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    <!-- Ronin TV (Google TV / Android TV): same app, opens from the TV home row; no touch screen there -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
     <queries>
         <!-- the real WhatsApp app opens from Safe Social on a phone (WhatsApp Web needs a QR from another phone) -->
@@ -49,8 +52,22 @@
         android:icon="@mipmap/ic_launcher"
         android:label="Ronin"
         android:supportsRtl="true"
+        android:banner="@drawable/tv_banner"
         android:usesCleartextTraffic="false"
         android:theme="@style/Theme.Ronin">
+
+        <activity
+            android:name=".TvActivity"
+            android:exported="true"
+            android:label="Ronin TV"
+            android:banner="@drawable/tv_banner"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".MainActivity"

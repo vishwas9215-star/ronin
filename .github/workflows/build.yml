@@ -119,10 +119,12 @@ jobs:
   android-device:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # the TV emulator is new: its result is shown but does not hold back a phone / tablet release yet
+    continue-on-error: ${{ matrix.device == 'tv' }}
     strategy:
       fail-fast: false
       matrix:
-        device: [phone, tablet]
+        device: [phone, tablet, tv]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -138,21 +140,22 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Device tests on an emulator (${{ matrix.device }} - phone Android 15, tablet Android 16)
+      - name: Device tests on an emulator (${{ matrix.device }} - phone Android 15, tablet Android 16, tv Android TV 14)
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: ${{ matrix.device == 'tablet' && 36 || 35 }}
-          profile: ${{ matrix.device == 'tablet' && 'pixel_tablet' || 'pixel_6' }}
-          target: google_apis
-          arch: x86_64
+          api-level: ${{ matrix.device == 'tablet' && 36 || (matrix.device == 'tv' && 34 || 35) }}
+          profile: ${{ matrix.device == 'tablet' && 'pixel_tablet' || (matrix.device == 'tv' && 'tv_1080p' || 'pixel_6') }}
+          target: ${{ matrix.device == 'tv' && 'android-tv' || 'google_apis' }}
+          arch: ${{ matrix.device == 'tv' && 'x86' || 'x86_64' }}
           disable-animations: true
           ram-size: 4096M
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           working-directory: android
           script: |
-            timeout 30m ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notClass=com.ronin.browser.SiteTourTest || echo failed > ../device-tests-failed
+            if [ "${{ matrix.device }}" = tv ]; then timeout 25m ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ronin.browser.TvTest || echo failed > ../device-tests-failed; else timeout 30m ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notClass=com.ronin.browser.SiteTourTest,com.ronin.browser.TvTest || echo failed > ../device-tests-failed; fi
             timeout 120 adb pull /data/local/tmp/qa ../qa || true
-            timeout 15m ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ronin.browser.SiteTourTest || echo "site tour did not finish (the test emulator is weak with heavy real sites; see screenshots)" > ../site-tour-note
+            timeout 60 adb logcat -d -s RoninTV > ../tv-log.txt || true
+            if [ "${{ matrix.device }}" != tv ]; then timeout 15m ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ronin.browser.SiteTourTest || echo "site tour did not finish (the test emulator is weak with heavy real sites; see screenshots)" > ../site-tour-note; fi
             timeout 120 adb pull /data/local/tmp/qa ../qa2 || true
             timeout 60 adb logcat -d -b crash > ../crash.txt || true
       - name: Screenshots for checking (release "qa")
@@ -172,6 +175,7 @@ jobs:
         run: |
           echo "## ${{ matrix.device }}" >> "$GITHUB_STEP_SUMMARY"
           if [ -f site-tour-note ]; then cat site-tour-note >> "$GITHUB_STEP_SUMMARY"; fi
+          if [ -s tv-log.txt ]; then echo "### TV"; echo '```'; tail -20 tv-log.txt; echo '```'; fi >> "$GITHUB_STEP_SUMMARY"
           if [ -s crash.txt ]; then echo "### App crashes"; echo '```'; head -80 crash.txt; echo '```'; fi >> "$GITHUB_STEP_SUMMARY"
           if [ -s crash.txt ]; then echo "---- crash log ----"; head -120 crash.txt; fi
           python3 - android/app/build/outputs/androidTest-results >> "$GITHUB_STEP_SUMMARY" <<'PY'
