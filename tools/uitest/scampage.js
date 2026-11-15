@@ -19,6 +19,11 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   if (!await p.$('#verdict')) { fail++; console.log('no verdict shown'); }
   if (!(await p.evaluate(() => !!window.RoninScam))) { fail++; console.log('RoninScam not loaded'); }
   if (errs.length) { fail++; console.log('errors: ' + errs.join(' | ')); }
+  // the menu's way: tools page first, then the scam check by hash (like on the phone)
+  await p.goto('https://ronin.home/tools/'); await p.waitForSelector('.tool');
+  await p.evaluate(() => { location.hash = 'scamcheck:' + encodeURIComponent('Congratulations! You won an iPhone. Pay 499 delivery charge to claim, send OTP'); });
+  await p.waitForTimeout(1500);
+  if (!await p.$('#verdict')) { fail++; console.log('hash change: no verdict; page says: ' + (await p.evaluate(() => document.body.innerText)).slice(0, 200)); }
   await b.close();
   console.log(fail ? fail + ' FAILED' : 'scam check page OK');
   process.exit(fail ? 1 : 0);

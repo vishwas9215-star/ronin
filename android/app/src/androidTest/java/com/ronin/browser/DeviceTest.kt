@@ -396,8 +396,10 @@ class DeviceTest {
             sc.onActivity { a -> a.openToolsForTest() }
             assertTrue("tools page did not open: " + eval(sc, diag), waitFor(30) { eval(sc, "document.querySelectorAll('.tool').length") == "20" })
             // inside the page (the menu's "Is this a scam?")
+            eval(sc, "window.__errs=[];addEventListener('error',function(e){__errs.push(e.message)});addEventListener('unhandledrejection',function(e){__errs.push(String(e.reason))});1")
+            val engine = eval(sc, "(function(){try{return RoninScam.text(" + org.json.JSONObject.quote(msg) + ").level||'none'}catch(e){return 'throws '+e.message}})()")
             eval(sc, "location.hash='scamcheck:'+encodeURIComponent(" + org.json.JSONObject.quote(msg) + "),1")
-            assertTrue("no verdict inside the page: " + eval(sc, diag), waitFor(20) { eval(sc, "document.getElementById('verdict')?'yes':'no'") == "yes" })
+            assertTrue("no verdict inside the page: engine=$engine | " + eval(sc, diag + "+' | hash='+location.hash.slice(0,30)+' | errs='+__errs.join(';')+' | text='+document.body.innerText.slice(0,150)"), waitFor(20) { eval(sc, "document.getElementById('verdict')?'yes':'no'") == "yes" })
             shot("16-scam-check")
             // a message shared to Ronin from WhatsApp / SMS
             sc.onActivity { a -> a.openTools("scamcheck:" + android.net.Uri.encode("Congratulations! You won an iPhone. Pay 499 delivery charge to claim, send OTP")) }
