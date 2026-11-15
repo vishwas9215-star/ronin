@@ -246,6 +246,10 @@ top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped p
   badge (article time[datetime] >= 3 days, amber > 30 days, "📅 Old post: 2 years ago · date"); Instagram opens on
   ?variant=following (Following feed = newest first, Android + Windows + launcher). Ads: check on the real phone
   that 3.11.0 is installed (the "Ad" fix is in 3.11.0).
+- Owner 07:44: Safe Social WhatsApp tile showed the WhatsApp Web QR page - useless on the phone itself. Now:
+  whatsappApp() opens the real WhatsApp app when installed (manifest <queries> com.whatsapp / w4b); tablet / laptop
+  without the app keep WhatsApp Web (QR from the phone). Ronin's WhatsApp guard on the phone = NotifyWatch + calls.
+- Owner chose for the TV app: Google TV, install by pen drive. Plan sent; build after his OK.
 
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only

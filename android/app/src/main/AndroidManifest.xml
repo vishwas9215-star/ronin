@@ -29,6 +29,9 @@
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <queries>
+        <!-- the real WhatsApp app opens from Safe Social on a phone (WhatsApp Web needs a QR from another phone) -->
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>

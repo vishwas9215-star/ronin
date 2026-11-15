@@ -1046,7 +1046,16 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     }
     fun openMail() = openSocial(socialUrl(socialSettings().optString("mailApp", "gmail")).ifEmpty { "https://mail.google.com/" })
 
+    /** WhatsApp on a phone that has the real app: open that app. WhatsApp Web wants a QR code scanned BY the phone,
+     *  which cannot be done on the same phone. (Ronin still guards it: scam warnings on its notifications + calls.) */
+    private fun whatsappApp(url: String): Boolean {
+        if (android.net.Uri.parse(url).host != "web.whatsapp.com") return false
+        val i = listOf("com.whatsapp", "com.whatsapp.w4b").firstNotNullOfOrNull { packageManager.getLaunchIntentForPackage(it) } ?: return false
+        return try { startActivity(i); true } catch (e: Exception) { false }
+    }
+
     fun openSocial(open: String = "") {
+        if (whatsappApp(open)) return
         val t = tabs.firstOrNull { it.isSocial }
         youtubeRestricted(socialSettings().optBoolean("ytRestrict", true))
         if (t != null) {
@@ -1064,7 +1073,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             try { val j = String(android.util.Base64.decode(c, android.util.Base64.DEFAULT), Charsets.UTF_8); JSONObject(j); app.store.social = j } catch (e: Exception) { }
         }
         when (u.getQueryParameter("do")) {
-            "open" -> u.getQueryParameter("url")?.takeIf { it.startsWith("https://") }?.let { youtubeRestricted(socialSettings().optBoolean("ytRestrict", true)); load(t, it) }
+            "open" -> u.getQueryParameter("url")?.takeIf { it.startsWith("https://") && !whatsappApp(it) }?.let { youtubeRestricted(socialSettings().optBoolean("ytRestrict", true)); load(t, it) }
             "home" -> load(t, SOCIAL)
             "close" -> leaveSocial(t)
         }
