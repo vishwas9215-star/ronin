@@ -233,6 +233,14 @@ top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped p
   (Advanced Protection may block the install: his choice); tablet check when he connects it; recording Accessibility
   is his choice; offer / transaction / OTP regexes still duplicated in Kotlin + JS.
 
+## 3.11.1 (built 15 Nov morning, NOT published)
+- Owner 07:30: phone showed an "Instagram - instagram.com" media card with Pause: Ronin's background-song feature
+  (keepPlaying + MediaPlaybackService 6 h wake lock) grabbed Instagram's autoplaying feed videos -> battery drain.
+  Fix: MEDIA_STATE reports muted (m); social tabs, short-video sites (noPlaySites: instagram, facebook, threads, x,
+  sharechat, moj, snapchat, tiktok) and muted videos never become the background player; a held one is released
+  (MediaPlaybackService.stop = ACTION_QUIET: no notification, no wake lock, page not paused; paused if Ronin closed).
+  mediaPoll stops in the background when nothing plays (was every 1 s forever). DeviceTest noBackgroundPlayForTest.
+
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only
   when he presses it, with a warning that the photo goes to Google.

@@ -460,6 +460,11 @@ class DeviceTest {
                 assertTrue(a.gmailAdvertForTest("https://www.google.com/intl/en/gmail/about/"))
                 assertTrue(!a.gmailAdvertForTest("https://mail.google.com/mail/u/0/"))
                 assertTrue(!a.gmailAdvertForTest("https://workspace.google.com/pricing"))
+                // Instagram / Facebook videos never keep playing (and the phone awake) in the background; songs do
+                assertTrue(a.noBackgroundPlayForTest("https://www.instagram.com/reels/abc/"))
+                assertTrue(a.noBackgroundPlayForTest("https://m.facebook.com/watch"))
+                assertTrue(!a.noBackgroundPlayForTest("https://m.youtube.com/watch?v=x"))
+                assertTrue(!a.noBackgroundPlayForTest("https://music.youtube.com/"))
             }
             shot("15-safe-social")
             // ✕ closes it and the browser is back

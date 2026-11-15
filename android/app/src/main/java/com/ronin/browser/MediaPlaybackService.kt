@@ -72,6 +72,7 @@ class MediaPlaybackService : Service() {
             ACTION_NEXT -> send("nexttrack")
             ACTION_PREV -> send("previoustrack")
             ACTION_CLOSE -> { send("pause"); stopEverything() }
+            ACTION_QUIET -> stopEverything() // Ronin let go of the page: no notification, no wake lock, page not touched
             else -> if (!foreground) show()
         }
         return START_NOT_STICKY
@@ -186,6 +187,13 @@ class MediaPlaybackService : Service() {
         const val ACTION_NEXT = "com.ronin.browser.NEXT"
         const val ACTION_PREV = "com.ronin.browser.PREV"
         const val ACTION_CLOSE = "com.ronin.browser.CLOSE"
+        const val ACTION_QUIET = "com.ronin.browser.QUIET"
+
+        /** Ends the background player (notification + wake lock) without pausing the page. */
+        fun stop(ctx: Context) {
+            if (!running) return
+            try { ctx.startService(Intent(ctx, MediaPlaybackService::class.java).setAction(ACTION_QUIET)) } catch (e: Exception) {}
+        }
 
         fun update(ctx: Context, title: String, artist: String, playing: Boolean) {
             val i = Intent(ctx, MediaPlaybackService::class.java).setAction(ACTION_UPDATE)

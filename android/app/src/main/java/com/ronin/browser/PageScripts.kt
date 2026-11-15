@@ -63,7 +63,7 @@ object PageScripts {
   if (!v) return JSON.stringify({v:false});
   var m = navigator.mediaSession && navigator.mediaSession.metadata;
   var t = (m && m.title) || document.title.replace(/ - YouTube( Music)?$/, '');
-  return JSON.stringify({v:true, p:!v.paused && !v.ended && v.readyState > 1, t:t || 'Ronin', a:(m && m.artist) || location.hostname.replace(/^(www|m)\./, ''), c:v.currentTime || 0});
+  return JSON.stringify({v:true, m:!!(v.muted || v.volume === 0), p:!v.paused && !v.ended && v.readyState > 1, t:t || 'Ronin', a:(m && m.artist) || location.hostname.replace(/^(www|m)\./, ''), c:v.currentTime || 0});
 })()
 """
 

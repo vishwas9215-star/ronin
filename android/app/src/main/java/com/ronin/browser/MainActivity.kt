@@ -1373,12 +1373,18 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             for (t in candidates) {
                 t.web.evaluateJavascript(PageScripts.MEDIA_STATE) { r -> onMediaState(t, r) }
             }
-            ui.postDelayed(this, 1000)
+            if (mediaTab != null || onScreen) ui.postDelayed(this, 1000) // closed and nothing playing: stop checking
         }
     }
 
     private fun onMediaState(t: Tab, raw: String?) {
         val o = try { JSONObject(JSONArray("[$raw]").getString(0)) } catch (e: Exception) { return }
+        // background play is for songs / talks: short-video feeds (Instagram, Facebook...) and silent (muted)
+        // videos never keep the phone awake when Ronin is closed - they ate the battery
+        if (o.optBoolean("v") && (t.isSocial || noBackgroundPlay(t.web.url ?: "") || o.optBoolean("m"))) {
+            if (t == mediaTab) releaseMedia()
+            return
+        }
         if (!o.optBoolean("v")) {
             if (t == mediaTab && !mediaPlaying) return
             if (t == mediaTab && mediaPlaying) {
@@ -1406,6 +1412,19 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         }
     }
 
+    private val onScreen get() = lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
+
+    private fun releaseMedia() {
+        mediaTab?.web?.keepPlaying = false
+        if (!onScreen) mediaTab?.web?.onPause() // Ronin is closed: that page rests like the others
+        mediaTab = null; mediaPlaying = false
+        MediaPlaybackService.stop(this)
+    }
+
+    private val noPlaySites = Regex("(^|\\.)(instagram\\.com|facebook\\.com|threads\\.(net|com)|x\\.com|twitter\\.com|sharechat\\.com|moj(app)?\\.(in|app|com)|snapchat\\.com|tiktok\\.com)$")
+    private fun noBackgroundPlay(url: String): Boolean = noPlaySites.containsMatchIn(android.net.Uri.parse(url).host ?: "")
+    fun noBackgroundPlayForTest(u: String) = noBackgroundPlay(u)
+
     private fun mediaControl(a: String) {
         val t = mediaTab ?: return
         val action = if (a == "stop") "pause" else a
@@ -1416,6 +1435,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     override fun onStop() {
         super.onStop()
         ui.removeCallbacks(shieldTick) // no polling while Ronin is not on screen
+        if (mediaTab == null) ui.removeCallbacks(mediaPoll) // nothing playing: no checks every second in the background
         // tabs that do not play are paused to save battery; the playing one goes on
         for (t in tabs) if (t != mediaTab) t.web.onPause()
     }
@@ -1424,6 +1444,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         super.onStart()
         if (::socialBar.isInitialized && socialBar.visibility == View.VISIBLE) { ui.removeCallbacks(shieldTick); ui.postDelayed(shieldTick, 1500) }
         for (t in tabs) t.web.onResume()
+        if (!isApp) { ui.removeCallbacks(mediaPoll); ui.postDelayed(mediaPoll, 1500) }
         kotlin.concurrent.thread(name = "ronin-danger") { app.loadAndRefreshThreats() }
     }
 
