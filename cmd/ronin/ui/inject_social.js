@@ -429,7 +429,12 @@
   // (Instagram changes the page all the time; checking during a scroll made it stutter)
   var lastMove = 0;
   function moved() { lastMove = Date.now(); }
-  function later() { if (!queued) { queued = true; setTimeout(whenStill, 900); } }
+  var adTimer = 0;
+  function later() {
+    // ads go at once (cheap); the heavier scam / picture checks wait for a still finger
+    if (!adTimer) adTimer = setTimeout(function () { adTimer = 0; try { hideAds(document); } catch (e) {} }, 150);
+    if (!queued) { queued = true; setTimeout(whenStill, 900); }
+  }
   function whenStill() {
     if (Date.now() - lastMove < 400) { setTimeout(whenStill, 450); return; }
     if (window.requestIdleCallback) requestIdleCallback(work, { timeout: 2000 }); else work();
@@ -456,7 +461,18 @@
     if (!C().social || window.__roninPull) return;
     window.__roninPull = 1;
     var y0 = -1, chip = null, dy = 0;
-    addEventListener("touchstart", function (e) { y0 = (window.scrollY <= 0 && e.touches.length === 1) ? e.touches[0].clientY : -1; dy = 0; }, { passive: true });
+    // only on a feed page, only when nothing under the finger can scroll up itself (reels, comments, dialogs, chats)
+    function feed() { return !/\/(reels?|shorts|watch|stories|direct|messages)(\/|$)/.test(location.pathname) && !/mail\.|web\.whatsapp|web\.telegram|outlook\./.test(host); }
+    function innerScroll(n) {
+      for (; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+        if (n.getAttribute && (n.getAttribute("role") === "dialog" || n.getAttribute("aria-modal") === "true")) return true;
+        if (n.scrollTop > 0) return true;
+        var oy = getComputedStyle(n).overflowY;
+        if ((oy === "auto" || oy === "scroll") && n.scrollHeight > n.clientHeight + 4) return true;
+      }
+      return false;
+    }
+    addEventListener("touchstart", function (e) { y0 = (window.scrollY <= 0 && e.touches.length === 1 && feed() && !innerScroll(e.target)) ? e.touches[0].clientY : -1; dy = 0; }, { passive: true });
     addEventListener("touchmove", function (e) {
       if (y0 < 0) return;
       dy = e.touches[0].clientY - y0;

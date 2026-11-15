@@ -260,6 +260,11 @@ top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped p
   started -> Add account / Watch as guest); remote keys move focus, OK opens, Back closes. Video could not be played
   in CI: from a data-centre IP YouTube asks "Sign in to confirm you're not a bot" (QR / yt.be/activate) - at home
   he signs in with his phone. Ads + quality must be checked on his real TV (3-tap list given).
+- QA review before 3.11.1 publish found + fixed: YouTube songs inside Safe Social were released (isSocial check
+  removed; only noPlaySites / muted); pull-to-refresh reloaded reels / dialogs / inner scrollers (feed pages only,
+  never when something under the finger scrolls; tools/uitest/pull.js); Updater unknown-sources screen missing on
+  some TVs (try/catch -> security settings); TV Back when YouTube did not load (finish); ads hidden at once, heavy
+  checks wait for a still finger; paused song released after 30 min so polling stops.
 
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only

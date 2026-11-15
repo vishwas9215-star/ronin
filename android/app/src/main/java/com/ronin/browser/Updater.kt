@@ -84,7 +84,9 @@ object Updater {
     private fun install(a: Activity, f: File) {
         if (Build.VERSION.SDK_INT >= 26 && !a.packageManager.canRequestPackageInstalls()) {
             Toast.makeText(a, "Allow Ronin to install updates, then press Update again.", Toast.LENGTH_LONG).show()
-            a.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + a.packageName)))
+            // some TVs have no such screen: then the general security settings
+            try { a.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + a.packageName))) }
+            catch (e: Exception) { try { a.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) } catch (e2: Exception) {} }
             return
         }
         val uri = FileProvider.getUriForFile(a, "com.ronin.browser.files", f)

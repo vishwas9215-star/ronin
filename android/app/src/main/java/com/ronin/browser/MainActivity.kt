@@ -1377,7 +1377,8 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     private val mediaPoll = object : Runnable {
         override fun run() {
             // nothing played for 30 minutes: that tab may rest in the background again (battery)
-            mediaTab?.let { if (!mediaPlaying && System.currentTimeMillis() - lastPlayingAt > 30 * 60_000) it.web.keepPlaying = false }
+            mediaTab?.let { if (!mediaPlaying && System.currentTimeMillis() - lastPlayingAt > 30 * 60_000) releaseMedia() }
+            if (mediaTab == null && !onScreen) return // closed and nothing to play: stop checking
             val candidates = listOfNotNull(mediaTab, current).distinct()
             for (t in candidates) {
                 t.web.evaluateJavascript(PageScripts.MEDIA_STATE) { r -> onMediaState(t, r) }
@@ -1390,7 +1391,8 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         val o = try { JSONObject(JSONArray("[$raw]").getString(0)) } catch (e: Exception) { return }
         // background play is for songs / talks: short-video feeds (Instagram, Facebook...) and silent (muted)
         // videos never keep the phone awake when Ronin is closed - they ate the battery
-        if (o.optBoolean("v") && (t.isSocial || noBackgroundPlay(t.web.url ?: "") || o.optBoolean("m"))) {
+        // (YouTube inside Safe Social is a song player too: only the feed sites in noPlaySites are left out)
+        if (o.optBoolean("v") && (noBackgroundPlay(t.web.url ?: "") || o.optBoolean("m"))) {
             if (t == mediaTab) releaseMedia()
             return
         }

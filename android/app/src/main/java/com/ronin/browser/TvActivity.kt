@@ -68,7 +68,12 @@ class TvActivity : AppCompatActivity() {
         hideBars()
         // Back on the remote = YouTube's own back (it asks before leaving at the home screen)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            private var last = 0L
             override fun handleOnBackPressed() {
+                // YouTube not open (no internet / error page) or Back twice quickly with nothing happening: leave
+                val now = System.currentTimeMillis()
+                if (!(web.url ?: "").startsWith("https://www.youtube.com/tv") || now - last < 1500 && web.url == lastUrl) { finish(); return }
+                last = now; lastUrl = web.url
                 web.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ESCAPE))
                 web.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ESCAPE))
             }
@@ -89,6 +94,8 @@ class TvActivity : AppCompatActivity() {
     override fun onPause() { super.onPause(); web.onPause() }
     override fun onResume() { super.onResume(); web.onResume() }
     override fun onDestroy() { web.destroy(); super.onDestroy() }
+
+    private var lastUrl: String? = null
 
     inner class Bridge {
         /** YouTube's "Exit" on its home screen. */

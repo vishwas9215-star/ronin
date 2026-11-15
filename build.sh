@@ -14,6 +14,7 @@ NODE_PATH=$(npm root -g) node tools/uitest/voice.js /tmp/ronin-voice.png
 NODE_PATH=$(npm root -g) node tools/uitest/listen.js /tmp/ronin-listen.png
 mkdir -p /tmp/ronin-ui && NODE_PATH=$(npm root -g) node tools/uitest/extras.js /tmp/ronin-ui
 mkdir -p /tmp/ronin-ui && NODE_PATH=$(npm root -g) node tools/uitest/newtab.js /tmp/ronin-ui
+NODE_PATH=$(npm root -g) node tools/uitest/pull.js
 NODE_PATH=$(npm root -g) node tools/uitest/popguard.js
 NODE_PATH=$(npm root -g) node tools/uitest/tableexport.js
 NODE_PATH=$(npm root -g) node tools/uitest/tableexport2.js
