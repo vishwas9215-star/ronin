@@ -408,6 +408,17 @@ class DeviceTest {
     }
 
     @Test
+    fun aMessageSharedToRoninIsChecked() {
+        // WhatsApp / SMS -> Share -> Ronin: the real way in, Ronin starting fresh
+        val i = android.content.Intent(app, MainActivity::class.java).setAction(android.content.Intent.ACTION_SEND).setType("text/plain")
+            .putExtra(android.content.Intent.EXTRA_TEXT, "Your KYC is blocked. Update now at http://sbi-kyc-update.top or account closed today")
+        ActivityScenario.launch<MainActivity>(i).use { sc ->
+            val diag = "location.href.slice(0,40)+' | '+document.readyState+' | res='+performance.getEntriesByType('resource').length"
+            assertTrue("shared message not checked: " + eval(sc, diag), waitFor(75) { eval(sc, "document.getElementById('verdict')?1:0") == "1" })
+        }
+    }
+
+    @Test
     fun adultSitesOpenInAPrivateTabWithoutHistory() {
         ActivityScenario.launch(MainActivity::class.java).use { sc ->
             Thread.sleep(1500)
