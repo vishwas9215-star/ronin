@@ -393,7 +393,7 @@ class DeviceTest {
             Thread.sleep(1500)
             sc.onActivity { a -> a.openTools("scamcheck:" + android.net.Uri.encode("Mujhe urgent 10000 rupaye ki zarurat hai, hospital me hoon, is QR par bhej do")) }
             assertTrue("no verdict on the scam check page: " + eval(sc, "location.href.slice(0,80)+' | '+document.readyState+' | scam='+!!window.RoninScam+' rules='+!!window.__roninScamRules+' | '+(document.body?document.body.innerText.slice(0,120):'')+' | res='+performance.getEntriesByType('resource').map(function(e){return e.name.split('/').pop().slice(0,20)+':'+Math.round(e.duration)+':'+(e.responseStatus||'')}).join(',')+' | scripts='+[].map.call(document.scripts,function(x){return (x.src||'inline').split('/').pop()}).join(',')"),
-                waitFor(20) { eval(sc, "document.getElementById('verdict')?'yes':'no'") == "yes" })
+                waitFor(75) { eval(sc, "document.getElementById('verdict')?'yes':'no'") == "yes" }) // the first page load after start can wait for the danger lists on the test phone
             shot("16-scam-check")
         }
     }
