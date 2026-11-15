@@ -392,7 +392,7 @@ class DeviceTest {
         ActivityScenario.launch(MainActivity::class.java).use { sc ->
             Thread.sleep(1500)
             sc.onActivity { a -> a.openTools("scamcheck:" + android.net.Uri.encode("Mujhe urgent 10000 rupaye ki zarurat hai, hospital me hoon, is QR par bhej do")) }
-            assertTrue("no verdict on the scam check page: " + eval(sc, "document.body?document.body.innerText.slice(0,200):''"),
+            assertTrue("no verdict on the scam check page: " + eval(sc, "location.href.slice(0,80)+' | '+document.readyState+' | scam='+!!window.RoninScam+' rules='+!!window.__roninScamRules+' | '+(document.body?document.body.innerText.slice(0,200):'')"),
                 waitFor(20) { eval(sc, "document.getElementById('verdict')?'yes':'no'") == "yes" })
             shot("16-scam-check")
         }

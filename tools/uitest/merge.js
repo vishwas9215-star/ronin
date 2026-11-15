@@ -11,7 +11,8 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
     await p.route('https://ronin.home/tools/**', r => {
       const f = path.join(dir, new URL(r.request().url()).pathname.replace('/tools/', '') || 'index.html');
       const file = fs.existsSync(f) && fs.statSync(f).isFile() ? f : path.join(dir, 'index.html');
-      r.fulfill({ body: fs.readFileSync(file), contentType: /\.m?js$/.test(file) ? 'text/javascript' : 'text/html' });
+      if (/\/tools\/rules\.js$/.test(r.request().url())) return r.fulfill({ contentType: 'text/javascript', body: 'window.__roninScamRules=' + fs.readFileSync(path.join(__dirname, '../../internal/safelinks/scamrules.json'), 'utf8') + ';window.__roninLinkLists=' + fs.readFileSync(path.join(__dirname, '../../internal/safelinks/lists.json'), 'utf8') + ';' });
+    r.fulfill({ body: fs.readFileSync(file), contentType: /\.m?js$/.test(file) ? 'text/javascript' : 'text/html' });
     });
     await p.goto('https://ronin.home/tools/#datamatch');
     await p.waitForSelector('button.big');
