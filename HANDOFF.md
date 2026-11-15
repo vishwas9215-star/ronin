@@ -1,7 +1,7 @@
-# Ronin Browser 3 — HANDOFF 8 (15 Nov 2026, 3.11.1 published; 3.12.0 = pure browser, built)
+# Ronin Browser 3 — HANDOFF 8 (15 Nov 2026, 3.12.0 published 16:48 IST = pure browser + TV)
 
 Owner: Vishwas (Hindi; both hands injured: fewest taps/typing). Not a coder: explain in Hindi, technical words in English.
-Current version: **3.11.1** published 15 Nov 09:11 IST (run 43672589607). Rollback: 3.11.0 / 3.10.0 releases on GitHub; Windows
+Current version: **3.12.0** published 15 Nov 16:48 IST (run 43707448842). Rollback: 3.11.1 / 3.11.0 releases on GitHub; Windows
 RoninSetup-3.5.1 / 3.4.0 in Downloads\Ronin Browser 3 Handoff.
 Source of truth: GitHub repo vishwas9215-star/ronin (public). Feature list + test history: FEATURES.md.
 
@@ -266,7 +266,7 @@ top buttons hid ⚙ under the status bar - put them at the BOTTOM; SMS grouped p
   some TVs (try/catch -> security settings); TV Back when YouTube did not load (finish); ads hidden at once, heavy
   checks wait for a still finger; paused song released after 30 min so polling stops.
 
-## 3.12.0 (15 Nov afternoon): back to a PURE BROWSER (owner's decision 13:21)
+## 3.12.0 (PUBLISHED 15 Nov 16:48 IST): back to a PURE BROWSER (owner decision 13:21); TV APK in C:\Ronin Ecosystem\TV\Ronin-TV-3.12.0.apk
 Owner: Social / Mail / Calls-Contacts / Messages "not working well, not looking good" -> remove completely; keep a good
 browser + background YouTube / music + Ronin TV. His answers: remove on laptop too; remove SOS + Deleted WhatsApp
 messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?", PDF / Data Tools).
