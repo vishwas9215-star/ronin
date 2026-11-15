@@ -71,7 +71,8 @@ class MediaPlaybackService : Service() {
             ACTION_PLAY_PAUSE -> { send(if (playing) "pause" else "play"); playing = !playing; show() }
             ACTION_NEXT -> send("nexttrack")
             ACTION_PREV -> send("previoustrack")
-            ACTION_CLOSE -> { send("pause"); stopEverything() }
+            // Close: the song pauses AND Ronin lets go of it (with "pause" the next media check put a paused card back)
+            ACTION_CLOSE -> { send("stop"); stopEverything() }
             ACTION_QUIET -> stopEverything() // Ronin let go of the page: no notification, no wake lock, page not touched
             else -> if (!foreground) show()
         }

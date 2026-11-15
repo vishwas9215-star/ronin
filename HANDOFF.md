@@ -292,7 +292,8 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - DeviceTests scamCheckPageGivesAVerdict (inside the tools page + a shared message) and aMessageSharedToRoninIsChecked
   (real ACTION_SEND intent, fresh start). Note: DeviceTest eval() returns JSON - a string answer comes back quoted, so
   compare numbers ("1"), not 'yes'. CI 43700222813 all green (tablet song-notification test flaked once, rerun green).
-- 3.12.0 NOT published yet: waits for "हाँ, V3.12.0 publish करो".
+- Notification ✕ Close sent "pause": the next 1 s media check showed a paused card again (the 'flaky' song test).
+  Now Close sends "stop" (pause + let go). Owner said "हाँ, V3.12.0 publish करो" 16:26.
 
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only
