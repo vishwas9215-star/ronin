@@ -4,4 +4,5 @@
     <string name="widget_desc">Search with Ronin: type or speak, no ads</string>
     <string name="widget_hint">Search with Ronin…</string>
     <string name="widget_voice">Search by voice</string>
+    <string name="record_access_desc">For Ronin Calls call recording. Ronin reads nothing on the screen and taps nothing with it; recordings stay on the phone.</string>
 </resources>

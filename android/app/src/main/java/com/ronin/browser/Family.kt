@@ -40,11 +40,8 @@ object Family {
     }
 
     private fun askAdult(ctx: Context, first: Boolean) {
-        val items = arrayOf("🛡 Family Filter ON: restricted sites blocked (child / elderly device)", "🕶 Family Filter OFF: they open in Private (no history)")
-        var pick = if (adultBlocked(ctx)) 0 else 1
-        AlertDialog.Builder(ctx).setTitle("🛡 Family Filter for this device")
-            .setSingleChoiceItems(items, pick) { _, i -> pick = i }
-            .setPositiveButton(L("✔ ठीक है", "✔ OK")) { _, _ ->
+        val now = adultBlocked(ctx)
+        fun pickIt(pick: Int) {
                 prefs(ctx).edit().putBoolean("adultAsked", true).putBoolean("adultBlock", pick == 0).apply()
                 if (pick == 0) {
                     val box = android.widget.EditText(ctx).apply { inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD; hint = "4-digit PIN (empty = no PIN)" }
@@ -52,8 +49,14 @@ object Family {
                         .setPositiveButton("✔ Set") { _, _ -> prefs(ctx).edit().putString("adultPin", box.text.toString().trim().let { if (it.isEmpty()) "" else pinHash(it) }).apply() }
                         .setNegativeButton("No PIN", null).show()
                 } else prefs(ctx).edit().putString("adultPin", "").apply()
-            }
-            .setNegativeButton(if (first) L("बाद में", "Later") else L("रद्द करें", "Cancel")) { _, _ -> if (first) prefs(ctx).edit().putBoolean("adultAsked", true).apply() }
-            .setCancelable(!first).show()
+        }
+        val d = Sheet(ctx, "🛡 Family Filter")
+            .group("", listOf(
+                Sheet.Row("🛡", L("चालू: गंदी / सट्टे वाली साइटें बंद (बच्चे / बुज़ुर्ग का phone)", "ON: adult / gambling sites blocked (child / elderly phone)"), if (now) "✔" else "", "#15803D", "fam-on") { pickIt(0) },
+                Sheet.Row("🕶", L("बंद: ऐसी साइटें Private में खुलें (history में नहीं)", "OFF: such sites open in Private (no history)"), if (!now) "✔" else "", "#334155", "fam-off") { pickIt(1) },
+            ))
+            .note(L("बाद में Menu → सुरक्षा → Family Filter से बदल सकते हैं।", "Change it any time: Menu → Safety → Family Filter."))
+            .show()
+        if (first) d.setOnDismissListener { prefs(ctx).edit().putBoolean("adultAsked", true).apply() }
     }
 }

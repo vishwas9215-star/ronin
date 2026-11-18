@@ -176,8 +176,12 @@ class MainActivity : AppCompatActivity() {
         ui.postDelayed(mediaPoll, 1500)
         Updater.check(this, quiet = true)
         upgradeTo312()
-        // first start: Family Filter for this device (asked once)
-        if (!Family.prefs(this).getBoolean("adultAsked", false)) ui.postDelayed({ if (!isFinishing) Family.chooseAdult(this, first = true) }, 1200)
+        // first start: Family Filter for this device (asked once), then on a SIM phone Messages / Calls
+        ui.postDelayed({
+            if (isFinishing) return@postDelayed
+            if (!Family.prefs(this).getBoolean("adultAsked", false)) Family.chooseAdult(this, first = true)
+            else if (!Parts.prefs(this).getBoolean("asked", false) && Parts.hasPhone(this)) Parts.choose(this, first = true)
+        }, 1200)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -218,11 +222,13 @@ class MainActivity : AppCompatActivity() {
     private fun buildUi() {
         val bg = Color.parseColor("#14171F")
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg) }
+        // the address row sits at the BOTTOM, where the thumb is (owner's choice, 18 Nov 2026)
         bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(6), dp(4), dp(2), dp(4))
-            setBackgroundColor(bg)
+            setPadding(dp(8), dp(8), dp(4), dp(8))
+            setBackgroundColor(Color.parseColor("#0E1016"))
+            tag = "addressbar"
         }
         address = EditText(this).apply {
             hint = "Search or type a web address"
@@ -231,19 +237,19 @@ class MainActivity : AppCompatActivity() {
             imeOptions = EditorInfo.IME_ACTION_GO
             setTextColor(Color.parseColor("#E8EAF0"))
             setHintTextColor(Color.parseColor("#9AA3B2"))
-            textSize = 15f
-            setPadding(dp(14), dp(8), dp(14), dp(8))
-            background = ContextCompat.getDrawable(context, android.R.drawable.editbox_background_normal)
-            background.setTint(Color.parseColor("#262B36"))
+            textSize = 16f
+            setPadding(dp(18), 0, dp(14), 0)
+            minHeight = dp(48)
+            background = android.graphics.drawable.GradientDrawable().apply { setColor(Color.parseColor("#262B36")); cornerRadius = dp(24).toFloat() }
             setSelectAllOnFocus(true)
             setOnEditorActionListener { v, id, ev ->
                 if (id == EditorInfo.IME_ACTION_GO || (ev != null && ev.keyCode == KeyEvent.KEYCODE_ENTER)) {
                     go(v.text.toString()); true
                 } else false
             }
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            layoutParams = LinearLayout.LayoutParams(0, dp(48), 1f)
         }
-        val mic = iconButton(android.R.drawable.ic_btn_speak_now, "Speak to search") { startVoice() }
+        val mic = iconButton(android.R.drawable.ic_btn_speak_now, "Speak to search") { startVoice() }.apply { layoutParams = LinearLayout.LayoutParams(dp(52), dp(52)) }
         tabsButton = Button(this).apply {
             text = "1"
             contentDescription = "Tabs"
@@ -251,10 +257,11 @@ class MainActivity : AppCompatActivity() {
             setTypeface(typeface, Typeface.BOLD)
             setBackgroundColor(Color.TRANSPARENT)
             minWidth = 0; minimumWidth = 0
-            layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
+            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
+            background = android.graphics.drawable.GradientDrawable().apply { setStroke(dp(2), Color.parseColor("#9AA3B2")); cornerRadius = dp(10).toFloat() }
             setOnClickListener { showTabs() }
         }
-        val menu = iconButton(android.R.drawable.ic_menu_more, "Menu") { showMenu(it) }
+        val menu = iconButton(android.R.drawable.ic_menu_more, "Menu") { showMenu(it) }.apply { layoutParams = LinearLayout.LayoutParams(dp(52), dp(52)); tag = "menu" }
         bar.addView(address); bar.addView(mic); bar.addView(tabsButton); bar.addView(menu)
         // tabs side by side (like a computer browser), with + for a new tab
         tabStrip = LinearLayout(this).apply {
@@ -315,7 +322,9 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(Color.parseColor("#0E1016"))
-            addView(homeButton); addView(newTabButton); addView(stripScroll); addView(toolsButton)
+            addView(homeButton); addView(newTabButton); addView(stripScroll) // Tools: in the menu now
+            // phone: no tab strip at the top (the tab count button at the bottom opens the tabs); a tablet keeps it
+            visibility = if (resources.configuration.smallestScreenWidthDp >= 600) View.VISIBLE else View.GONE
         }
         root.addView(stripRow)
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -340,7 +349,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(dp(8), 0, 0, 0)
         }
         readBar.addView(readPlay); readBar.addView(readStop); readBar.addView(readSpeed); readBar.addView(readNote)
-        root.addView(bar); root.addView(progress); root.addView(holder); root.addView(readBar)
+        root.addView(progress); root.addView(holder); root.addView(readBar); root.addView(bar)
         keepClearOfSystemBars(root)
         setContentView(root)
     }
@@ -484,12 +493,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun showTabs() {
         val list = browsingTabs()
-        val names = list.map { (if (it == current) "▶ " else "") + it.title.ifBlank { display(it.url) } }.toMutableList()
-        names.add("+ New tab")
-        AlertDialog.Builder(this).setTitle("Tabs")
-            .setItems(names.toTypedArray()) { _, i -> if (i == list.size) newTab(HOME) else { select(list[i]); updateTabsButton() } }
-            .setNeutralButton("Close this tab") { _, _ -> current?.let { closeTab(it) } }
-            .show()
+        Sheet(this, "Tabs (${list.size})")
+            .bigs(listOf(Sheet.Big("＋", L("नया tab", "New tab"), "t-new", "#1D4ED8") { newTab(HOME) },
+                Sheet.Big("✕", L("यह tab बंद", "Close this tab"), "t-close", "#B91C1C") { current?.let { closeTab(it) } }))
+            .group("", list.map { tb ->
+                Sheet.Row(if (tb.isPrivate) "🕶" else "🌐", tb.title.ifBlank { if (tb.url == HOME || tb.url.isEmpty()) L("नया tab", "New tab") else display(tb.url) },
+                    if (tb == current) "✔" else "", if (tb == current) "#1D4ED8" else "#334155", "t-tab") { select(tb); updateTabsButton() }
+            }).show()
     }
 
     // ---- going places ---------------------------------------------------------------
@@ -871,14 +881,11 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         if (p.getBoolean("cleaned312", false)) return
         youtubeRestricted(false); android.webkit.CookieManager.getInstance().flush()
         app.store.social = ""
-        for (f in listOf("chatlog.json", "chatlog.tmp", "saved-sms.json")) java.io.File(filesDir, f).delete()
-        java.io.File(filesDir, "sender-icons").deleteRecursively()
-        for (n in listOf("ronin_sms", "ronin_phone", "ronin_sos")) try { deleteSharedPreferences(n) } catch (e: Exception) { }
-        if (Build.VERSION.SDK_INT >= 26) getSystemService(android.app.NotificationManager::class.java)?.let { nm ->
-            // only the channels of the removed parts (SMS, calls, recording, SOS, scam warnings, spam calls)
-            for (id in listOf("ronin_sms", "ronin_sms_quiet", "ronin_scam", "ronin_call", "ronin_ring", "ronin_rec", "ronin_sos", "ronin_spam", "ronin_phone")) nm.deleteNotificationChannel(id)
-        }
-        p.edit().putBoolean("cleaned312", true).remove("asked").apply()
+        // 3.13: Messages + Calls are back - their saved SMS, settings and channels stay; only the chat log and SOS go
+        for (f in listOf("chatlog.json", "chatlog.tmp")) java.io.File(filesDir, f).delete()
+        try { deleteSharedPreferences("ronin_sos") } catch (e: Exception) { }
+        if (Build.VERSION.SDK_INT >= 26) getSystemService(android.app.NotificationManager::class.java)?.deleteNotificationChannel("ronin_sos")
+        p.edit().putBoolean("cleaned312", true).apply()
     }
 
     private fun youtubeRestricted(on: Boolean) {
@@ -1238,72 +1245,99 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     private fun chooseLanguage() {
         val values = arrayOf("auto", "en", "hi")
         val names = arrayOf(L("फ़ोन जैसी (अपने-आप)", "Same as the phone (automatic)"), "English", "हिंदी")
-        AlertDialog.Builder(this).setTitle("🌐 Language / भाषा")
-            .setSingleChoiceItems(names, values.indexOf(Lang.choice(this)).coerceAtLeast(0)) { d, i -> Lang.set(this, values[i]); d.dismiss(); recreate() }
-            .setNegativeButton(L("रद्द करें", "Cancel"), null).show()
+        val icons = arrayOf("📱", "A", "अ")
+        Sheet(this, "🌐 Language / भाषा").group("", values.indices.map { i ->
+            Sheet.Row(icons[i], names[i], if (Lang.choice(this) == values[i]) "✔" else "", "#334155", "lang-" + values[i]) { Lang.set(this, values[i]); recreate() }
+        }).show()
     }
 
-    private fun showMenu(anchor: View) {
+    /** The menu: slides up from the bottom (thumb), big buttons for every day, short groups for the rest. */
+    private fun showMenu(@Suppress("UNUSED_PARAMETER") anchor: View) {
         val t = current
         val web = t != null && t.url.startsWith("http")
-        val m = PopupMenu(this, anchor)
-        val items = linkedMapOf<String, () -> Unit>()
-        items[L("➕ नया tab", "➕ New tab")] = { newTab(HOME) }
-        if (web) items[if (app.store.isBookmarked(t!!.url)) "★ Remove bookmark" else "☆ Bookmark this page"] = {
-            val added = app.store.toggleBookmark(t.title, t.url)
-            Toast.makeText(this, if (added) "Bookmark saved" else "Bookmark removed", Toast.LENGTH_SHORT).show()
-        }
-        items["Bookmarks"] = { showPages("Bookmarks", app.store.bookmarks, bookmarks = true) }
-        items["History"] = { showPages("History", app.store.history, bookmarks = false) }
-        if (web) items["🔊 Read this page aloud"] = { startReading() }
-        if (web) items["Reload"] = { t!!.web.reload() }
-        items[if (app.store.night) "☀ Day mode" else "☾ Night mode"] = {
-            app.store.night = !app.store.night
-            AppCompatDelegate.setDefaultNightMode(if (app.store.night) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO)
-            recreate()
-        }
-        if (web) items[L("🏦 यह मेरा bank है (Safe Money में खोलें)", "🏦 This is my bank (open in Safe Money)")] = {
-            val h = t!!.topHost.removePrefix("www.")
-            if (h.isNotEmpty()) { app.store.userBanks = app.store.userBanks + h; load(t, t.url) }
-        }
+        val on = L("चालू", "ON"); val off = L("बंद", "OFF")
+        val bigs = ArrayList<Sheet.Big>()
+        bigs.add(Sheet.Big("＋", L("नया tab", "New tab"), "m-newtab", "#1D4ED8") { newTab(HOME) })
+        bigs.add(Sheet.Big("G", "Google", "m-home", "#334155") { if (t == null || t.isTools) newTab(GOOGLE) else load(t, GOOGLE) })
         if (web) {
-            val on = app.store.isDataSite(t!!.topHost)
-            if (on) items[L("📊 Data → Excel + PDF (इस page की पूरी table)", "📊 Data → Excel + PDF (the whole table on this page)")] = { exportData(t) }
-            items[if (on) L("📊 Data बटन इस साइट पर बंद करें", "📊 Data button off for this site") else L("📊 Data बटन इस साइट पर चालू करें (Excel + PDF)", "📊 Data button on for this site (Excel + PDF)")] = {
-                if (app.store.toggleDataSite(t.topHost)) {
+            val marked = app.store.isBookmarked(t!!.url)
+            bigs.add(Sheet.Big(if (marked) "★" else "☆", if (marked) L("Bookmark हटाएँ", "Unbookmark") else L("Bookmark", "Bookmark"), "m-bookmark", "#B45309") {
+                val added = app.store.toggleBookmark(t.title, t.url)
+                Toast.makeText(this, if (added) L("Bookmark बन गया", "Bookmark saved") else L("Bookmark हटा", "Bookmark removed"), Toast.LENGTH_SHORT).show()
+            })
+            bigs.add(Sheet.Big("🔊", L("पढ़कर सुनाएँ", "Read aloud"), "m-read", "#7C3AED") { startReading() })
+            bigs.add(Sheet.Big("⟳", L("Reload", "Reload"), "m-reload", "#334155") { t.web.reload() })
+        }
+        bigs.add(Sheet.Big("🧰", "Tools", "m-tools", "#0F766E") { openTools() })
+        bigs.add(Sheet.Big("🔎", L("ठगी जाँचें", "Scam check"), "m-scam", "#B91C1C") { openTools("scamcheck") })
+        bigs.add(Sheet.Big("🕘", "History", "m-history", "#334155") { showPages(L("History", "History"), app.store.history, bookmarks = false) })
+        bigs.add(Sheet.Big("📑", "Bookmarks", "m-bookmarks", "#334155") { showPages("Bookmarks", app.store.bookmarks, bookmarks = true) })
+
+        val page = ArrayList<Sheet.Row>()
+        if (web) {
+            val h = t!!.topHost
+            page.add(Sheet.Row("🏦", L("यह मेरा bank है (Safe Money में खोलें)", "This is my bank (open in Safe Money)"), "", "#1D4ED8", "m-bank") {
+                val hh = h.removePrefix("www.")
+                if (hh.isNotEmpty()) { app.store.userBanks = app.store.userBanks + hh; load(t, t.url) }
+            })
+            val dataOn = app.store.isDataSite(h)
+            if (dataOn) page.add(Sheet.Row("📊", L("इस page की table → Excel + PDF", "This page's table → Excel + PDF"), "", "#15803D", "m-export") { exportData(t) })
+            page.add(Sheet.Row("📊", L("Data बटन इस साइट पर", "Data button on this site"), if (dataOn) on else off, "#15803D", "m-data") {
+                if (app.store.toggleDataSite(h)) {
                     Toast.makeText(this, L("📊 Data बटन चालू: page के नीचे दाईं ओर हरा बटन", "📊 Data button on: the green button at the bottom right"), Toast.LENGTH_LONG).show()
                     showDataButton(t)
                 } else t.web.evaluateJavascript("(function(){var b=document.getElementById('ronin-data-btn');if(b)b.remove()})()", null)
-            }
+            })
         }
-        items["🧰 Ronin Tools (Data Match, PDF, Photo)"] = { openTools() }
-        items[if (Family.adultBlocked(this)) "🛡 Family Filter: ON" else "🛡 Family Filter: OFF"] = { Family.chooseAdult(this, first = false) }
-        items[L("🔎 क्या यह ठगी है? (Scam Check)", "🔎 Is this a scam? (Scam Check)")] = { openTools("scamcheck") }
-        items[L("🔎 Search widget home screen पर लगाएँ", "🔎 Put the search widget on the home screen")] = {
-            if (!SearchWidget.pin(this)) Toast.makeText(this, L("Home screen पर खाली जगह दबाकर रखें → Widgets → Ronin Search", "Press and hold an empty spot on the home screen → Widgets → Ronin Search"), Toast.LENGTH_LONG).show()
+        val safety = arrayListOf(
+            Sheet.Row("🛡", "Family Filter", if (Family.adultBlocked(this)) on else off, "#15803D", "m-family") { Family.chooseAdult(this, first = false) },
+            Sheet.Row("🏦", "Ronin Safe Money", "", "#1D4ED8", "m-safemoney") { startActivity(Intent(this, SafeMoneyActivity::class.java)) },
+            Sheet.Row("✅", L("ग़लती से रुकी साइटें", "Sites stopped by mistake"), "", "#334155", "m-safesites") { showSafeSites() },
+        )
+        val phone = ArrayList<Sheet.Row>()
+        if (Parts.hasPhone(this)) {
+            if (Parts.isOn(this, Parts.MESSAGES)) phone.add(Sheet.Row("📩", "Ronin Messages", "", "#1D4ED8", "m-messages") { startActivity(Intent(this, MessagesActivity::class.java)) })
+            if (Parts.isOn(this, Parts.CALLS)) phone.add(Sheet.Row("📞", "Ronin Calls", "", "#15803D", "m-calls") { startActivity(Intent(this, CallsActivity::class.java)) })
+            phone.add(Sheet.Row("📱", L("Messages / Calls चालू-बंद", "Turn Messages / Calls on or off"), "", "#334155", "m-parts") { Parts.choose(this, first = false) })
         }
-        items[L("🛡 Safe sites / ग़लती से रुकी साइटें", "🛡 Safe sites (stopped by mistake)")] = { showSafeSites() }
-        items["🏦 Ronin Safe Money (banking)"] = { startActivity(Intent(this, SafeMoneyActivity::class.java)) }
-        items[L("⟳ Update देखें", "⟳ Check for updates")] = { Updater.check(this, quiet = false) }
-        items["🌐 Language / भाषा"] = { chooseLanguage() }
-        items["About Ronin"] = {
-            AlertDialog.Builder(this).setTitle("Ronin Browser ${BuildConfigCompat.versionName(this)}")
-                .setMessage("Ad-block lists: ${app.blocker.listSize} sites.\nDanger list (phishing / malware): ${app.blocker.threatSize} sites, plus Google Safe Browsing.\nSongs and videos keep playing in the background; control them from the notification, the lock screen or your car.")
-                .setPositiveButton("OK", null).show()
-        }
-        items.keys.forEachIndexed { i, k -> m.menu.add(0, i, i, k) }
-        m.setOnMenuItemClickListener { mi -> items.values.elementAt(mi.itemId).invoke(); true }
-        m.show()
+        val settings = arrayListOf(
+            Sheet.Row(if (app.store.night) "☀" else "☾", if (app.store.night) L("दिन वाला रंग", "Day mode") else L("रात वाला रंग", "Night mode"), "", "#334155", "m-night") {
+                app.store.night = !app.store.night
+                AppCompatDelegate.setDefaultNightMode(if (app.store.night) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO)
+                recreate()
+            },
+            Sheet.Row("🌐", L("भाषा", "Language"), if (Lang.hindi(this)) "हिन्दी" else "English", "#334155", "m-lang") { chooseLanguage() },
+            Sheet.Row("🔎", L("Search widget home screen पर", "Search widget on the home screen"), "", "#334155", "m-widget") {
+                if (!SearchWidget.pin(this)) Toast.makeText(this, L("Home screen पर खाली जगह दबाकर रखें → Widgets → Ronin Search", "Press and hold an empty spot on the home screen → Widgets → Ronin Search"), Toast.LENGTH_LONG).show()
+            },
+            Sheet.Row("⟳", L("Update देखें", "Check for updates"), BuildConfigCompat.versionName(this), "#334155", "m-update") { Updater.check(this, quiet = false) },
+            Sheet.Row("ⓘ", L("Ronin के बारे में", "About Ronin"), "", "#334155", "m-about") {
+                AlertDialog.Builder(this).setTitle("Ronin Browser ${BuildConfigCompat.versionName(this)}")
+                    .setMessage(L("विज्ञापन रोकने की सूची: ${app.blocker.listSize} साइटें।\nख़तरनाक साइटों की सूची: ${app.blocker.threatSize}, साथ में Google Safe Browsing।\nगाने / videos background में चलते रहते हैं; notification, lock screen या car से चलाएँ।",
+                        "Ad-block lists: ${app.blocker.listSize} sites.\nDanger list (phishing / malware): ${app.blocker.threatSize} sites, plus Google Safe Browsing.\nSongs and videos keep playing in the background; control them from the notification, the lock screen or your car."))
+                    .setPositiveButton("OK", null).show()
+            },
+        )
+        menuSheet = Sheet(this, if (web) t!!.topHost.removePrefix("www.") else "Ronin")
+            .bigs(bigs)
+            .group(L("यह page", "This page"), page)
+            .group(L("सुरक्षा", "Safety"), safety)
+            .group(L("Phone", "Phone"), phone)
+            .group("Settings", settings)
+            .show()
     }
+    private var menuSheet: android.app.Dialog? = null
+    fun menuSheetForTest() = menuSheet
 
     private fun showPages(title: String, list: List<Store.Page>, bookmarks: Boolean) {
         if (list.isEmpty()) {
             Toast.makeText(this, if (bookmarks) "No bookmarks yet." else "No pages yet.", Toast.LENGTH_SHORT).show(); return
         }
-        val b = AlertDialog.Builder(this).setTitle(title)
-            .setItems(list.map { it.title.ifBlank { it.url } }.toTypedArray()) { _, i -> current?.let { load(it, list[i].url) } }
-        if (!bookmarks) b.setNeutralButton("Delete history") { _, _ -> app.store.clearHistory() }
-        b.show()
+        val sh = Sheet(this, title)
+        if (!bookmarks) sh.bigs(listOf(Sheet.Big("🗑", L("History मिटाएँ", "Delete history"), "h-clear", "#B91C1C") { app.store.clearHistory() }))
+        sh.group("", list.take(80).map { pg ->
+            Sheet.Row(if (bookmarks) "★" else "🕘", pg.title.ifBlank { pg.url }, "", "#334155", "page") { current?.let { load(it, pg.url) } }
+        }).show()
     }
 
     // ---- read aloud ----------------------------------------------------------------------

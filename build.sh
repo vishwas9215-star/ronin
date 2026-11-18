@@ -22,6 +22,8 @@ NODE_PATH=$(npm root -g) node tools/uitest/darkcsp.js
 node tools/uitest/merge_rules.js
 node tools/uitest/datecalc_rules.js
 node tools/uitest/scamcheck.js
+NODE_PATH=$(npm root -g) node tools/uitest/phone.js /tmp/ronin-ui
+NODE_PATH=$(npm root -g) node tools/uitest/safemail.js
 NODE_PATH=$(npm root -g) node tools/uitest/toolsbutton.js /tmp/ronin-ui/toolsbutton.png
 NODE_PATH=$(npm root -g) node tools/uitest/merge.js /tmp/ronin-ui
 python3 tools/uitest/make_tool_fixtures.py /tmp/toolfx && NODE_PATH=$(npm root -g) node tools/uitest/pdftools.js /tmp/ronin-ui

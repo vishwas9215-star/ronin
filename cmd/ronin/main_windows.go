@@ -395,7 +395,7 @@ func parseStart(args []string) (c containers.Container, start string, explicit b
 			c, explicit = containers.Calls, true
 		case "--private":
 			c, explicit = containers.Private, true
-		case "--mail": // an old "Ronin Mail" shortcut: just the email site
+		case "--mail": // the "Ronin Mail" shortcut (laptop): Gmail, with Safe Mail watching it
 			start = "https://mail.google.com/"
 			explicit = true
 		}

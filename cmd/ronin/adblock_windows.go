@@ -190,6 +190,7 @@ func (t *Tab) hookAdblock() {
 	}
 	if cont == containers.Personal || cont == containers.Private || cont == containers.Kids {
 		c.Init(scamJS)
+		c.Init(mailJS) // Safe Mail: only email sites run it
 		c.Init(darkJS) // Night mode for plain white sites (charts in Trading keep their own look)
 	}
 }

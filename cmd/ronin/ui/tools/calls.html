@@ -1,0 +1,51 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Ronin Calls</title>
+<style>
+:root{--bg:#121212;--card:#1e1e1e;--fg:#f1f3f7;--mut:#a3acbd;--line:#2c3342;--acc:#2563eb;--ok:#16a34a;--bad:#dc2626;--warn:#f59e0b}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--fg);font-family:"Noto Sans Devanagari","Nirmala UI","Segoe UI",sans-serif;font-size:17px}
+main{max-width:900px;margin:0 auto;padding:10px 12px 160px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:8px;position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:5}
+.top h1{font-size:21px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}.top>div{display:flex;gap:6px;flex:none}
+.pill{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-height:48px;min-width:48px;padding:0 14px;border-radius:24px;border:1px solid var(--line);background:var(--card);color:var(--fg);font:inherit;font-weight:700;cursor:pointer;text-decoration:none;white-space:nowrap}
+.pill.red{background:var(--bad);border-color:var(--bad);color:#fff}.pill.blue{background:var(--acc);border-color:var(--acc);color:#fff}.pill.green{background:var(--ok);border-color:var(--ok);color:#fff}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding:4px 0 10px}.tabs button{flex:none}.tabs .on{background:var(--acc);border-color:var(--acc);color:#fff}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:12px 0;line-height:1.5}
+.card h2{font-size:17px;margin:0 0 6px}.card ol{margin:6px 0 6px 20px;padding:0}
+.th{display:flex;gap:12px;align-items:center;min-height:78px;padding:10px 8px;border-bottom:1px solid var(--line);cursor:pointer}
+.th.flag{background:#2a1215;border-left:4px solid var(--bad);border-radius:10px;margin:4px 0;border-bottom:0}
+.avw{position:relative;flex:none}.avw .dir{position:absolute;right:-4px;bottom:-4px;width:24px;height:24px;border-radius:12px;padding:0;margin:0;display:flex;align-items:center;justify-content:center;font-size:15px;border:2px solid var(--bg)}
+.av{flex:none;width:52px;height:52px;border-radius:26px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;background:#334155}
+.th .mid{flex:1;min-width:0}.th b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:18px}.th b.miss{color:#f87171}
+.wd{font-weight:700}.wd.out{color:#60a5fa}.wd.in{color:#4ade80}.wd.miss{color:#f87171}.wd.rej{color:#fbbf24}.wd.blk{color:#9ca3af}.th small{display:block;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px}
+.dir{display:inline-block;font-weight:700;padding:0 7px;border-radius:9px;margin-right:2px}.dir.out{color:#fff;background:#2563eb}.dir.in{color:#fff;background:#16a34a}.dir.miss{color:#fff;background:#dc2626}.dir.rej{color:#fff;background:#b45309}.dir.blk{color:#fff;background:#6b7280}
+.th .tm{flex:none;color:var(--mut);font-size:13px;text-align:right}.dot{display:inline-block;min-width:22px;padding:1px 6px;border-radius:11px;background:var(--acc);color:#fff;font-size:13px;margin-top:4px}
+.tag{display:inline-block;padding:1px 8px;border-radius:9px;font-size:12px;font-weight:700;margin-left:6px}.tag.scam{background:var(--bad);color:#fff}.tag.ads{background:#475569;color:#fff}.tag.unknown{background:#7c5d12;color:#fff}
+.msgs{display:flex;flex-direction:column;gap:8px;padding:8px 0}
+.b{max-width:85%;padding:9px 12px;border-radius:16px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.b.in{align-self:flex-start;background:var(--card);border:1px solid var(--line)}.b.out{align-self:flex-end;background:#1e3a8a}
+.b small{display:block;color:var(--mut);font-size:12px;margin-top:4px}
+.warn{background:#3b1414;border:2px solid var(--bad);border-radius:12px;padding:8px 10px;margin:6px 0 2px;font-size:15px}.warn.amber{background:#3a2a0a;border-color:var(--warn)}
+.compose{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:8px 10px;display:flex;gap:8px;align-items:flex-end}
+.compose textarea{flex:1;min-height:48px;max-height:140px;font:inherit;padding:10px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--fg);resize:none}
+input.txt{display:block;width:100%;font:inherit;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--fg);margin:6px 0}
+.note{color:var(--mut);font-size:14px;line-height:1.45}.empty{color:var(--mut);text-align:center;padding:40px 10px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:420px;margin:10px auto}
+.pad button{min-height:70px;border-radius:35px;border:1px solid var(--line);background:var(--card);color:var(--fg);font:inherit;font-size:28px;font-weight:700}
+.pad button small{display:block;font-size:11px;color:var(--mut);font-weight:400}
+#num{display:block;width:100%;text-align:center;font-size:32px;letter-spacing:2px;background:none;border:0;color:var(--fg);padding:14px 0;font-family:inherit}
+.callbtn{display:flex;justify-content:center;gap:14px;margin:12px 0}.callbtn .pill{min-height:64px;font-size:20px;padding:0 28px}
+.lbl{display:block;color:#fde68a;font-size:13px}
+.row>span{min-width:0;word-break:break-all}
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;gap:4px;padding:6px 6px calc(6px + env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--line)}
+.nav button{flex:1;min-width:0;min-height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:0;border-radius:16px;background:none;color:var(--mut);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.nav button .ic{font-size:22px;line-height:1}.nav button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nav button.on{background:var(--acc);color:#fff}
+.padwrap{display:flex;flex-direction:column;justify-content:flex-end;min-height:calc(100vh - 170px)}.padwrap .pad{width:100%}
+.fab{position:fixed;right:14px;bottom:86px;z-index:6;min-height:56px;padding:0 22px;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+</style></head><body>
+<main id="app"></main>
+<script src="scamcheck.js"></script>
+<script src="calls.js"></script>
+</body></html>
