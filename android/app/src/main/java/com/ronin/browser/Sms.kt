@@ -67,14 +67,45 @@ object Otp {
     private val before = Regex("(otp|one.?time|\\bcode|\\bpin\\b(?! ?code)|password|passcode|verification|ओटीपी|कोड|पासवर्ड)[^0-9]{0,40}?(?<!\\d)(\\d{4,8})(?!\\d)", RegexOption.IGNORE_CASE)
     private val after = Regex("(?<!\\d)(\\d{4,8})(?!\\d)[^0-9]{0,30}?(is your|is the|is ur|as your|otp|one.?time|code|ओटीपी|कोड)", RegexOption.IGNORE_CASE)
     fun find(body: String): String? = before.find(body)?.groupValues?.get(2) ?: after.find(body)?.groupValues?.get(1)
-    // only a real one-time password SMS: a booking / PNR / order "code" or a card PIN letter is never one
-    // the code must sit right next to the word (a bank SMS that only ends "never share OTP" is not an OTP SMS)
-    private val plain = Regex("(\\botp\\b|one.?time.?password|verification code|ओटीपी)[^0-9]{0,30}?(?<!\\d)\\d{4,8}(?!\\d)|(?<!\\d)\\d{4,8}(?!\\d)[^0-9]{0,15}?(\\botp\\b|one.?time.?password|verification code|ओटीपी)", RegexOption.IGNORE_CASE)
-    private val money = Regex("debit|credit|a/c|acct|avl|\\bbal\\b|balance|\\brs\\.?\\s?\\d|\\binr\\b|₹|\\bfees?\\b|\\bdue\\b|paid|payment|amount|\\bemi\\b|\\bbill\\b|refund|रुपये|जमा|निकासी", RegexOption.IGNORE_CASE)
-    private val keep = Regex("pnr|booking|ticket|order|policy|account no|a/c no|admit|roll|registration|application|टिकट|बुकिंग", RegexOption.IGNORE_CASE)
-    /** Only from a company sender (never a person's number), only a one-time code, never money / booking / ticket. */
-    fun isPlainOtp(address: String, body: String): Boolean = address.any { it.isLetter() } && find(body) != null &&
-        plain.containsMatchIn(body) && !keep.containsMatchIn(body) && !money.containsMatchIn(body)
+    // ---- old OTPs (owner, 18 Nov 2026): a short OTP (login, payment) goes 24 hours later; a delivery / gas
+    // OTP (DAC) stays until the same company says it was DELIVERED (then 24 hours later); records never go.
+    enum class Kind { NONE, SHORT, DELIVERY }
+    class Sms(val id: Long, val address: String, val body: String, val date: Long)
+    // the code right next to the word (a bank SMS that only ends "never share OTP" is not an OTP SMS)
+    private val plain = Regex("(\\botp\\b|one.?time.?password|verification code|ओटीपी)[^0-9]{0,40}?(?<!\\d)\\d{4,8}(?!\\d)|(?<!\\d)\\d{4,8}(?!\\d)[^0-9]{0,15}?(\\botp\\b|one.?time.?password|verification code|ओटीपी)", RegexOption.IGNORE_CASE)
+    private val dac = Regex("(\\bdac\\b|delivery (code|pin|otp)|authentication code)[^0-9]{0,30}?(?<!\\d)\\d{4,8}(?!\\d)", RegexOption.IGNORE_CASE)
+    // a record of money (statement, balance, fee due...): never deleted, whatever else it says
+    private val record = Regex("debited|credited|deducted|\\bavl\\b|\\bbal\\b|balance|a/c\\s*(no|x)|acct|\\bemi\\b|\\bdue\\b|\\bfees?\\b|\\bbill\\b|refund|statement|transferred|sent from|received|जमा|निकासी", RegexOption.IGNORE_CASE)
+    // kept for good: tickets, PNR, policies, exams, forms, or a code that stays valid for days
+    private val forever = Regex("pnr|ticket|policy|admit|roll no|registration|application|account no|टिकट|valid[^.]{0,25}?\\b\\d+\\s*(days?|दिन)", RegexOption.IGNORE_CASE)
+    private val delivery = Regex("deliver|\\bdac\\b|cylinder|\\blpg\\b|refill|\\bgas\\b|indane|parcel|package|shipment|courier|\\border\\b|डिलीवर|सिलेंडर|गैस", RegexOption.IGNORE_CASE)
+    // "has been delivered" yes; "will be delivered", "out for delivery", "not delivered" no
+    private val delivered = Regex("(?<!\\bbe )(?<!\\bnot )(?<!n't )(?<!\\bto )\\bdelivered\\b|delivery (is )?(done|completed|successful)|डिलीवर (हो गया|किया गया|कर दिया)", RegexOption.IGNORE_CASE)
+
+    fun kind(address: String, body: String): Kind {
+        if (!address.any { it.isLetter() }) return Kind.NONE // a person's number: never
+        if (record.containsMatchIn(body) || forever.containsMatchIn(body)) return Kind.NONE
+        if (delivery.containsMatchIn(body) && (dac.containsMatchIn(body) || (find(body) != null && plain.containsMatchIn(body)))) return Kind.DELIVERY
+        if (find(body) != null && plain.containsMatchIn(body)) return Kind.SHORT
+        return Kind.NONE
+    }
+    fun isDelivered(body: String) = delivered.containsMatchIn(body)
+    /** "JD-AMAZON-S", "VM-AMAZON-T": one company. */
+    fun company(address: String) = address.trim().uppercase().replace(Regex("^[A-Z]{2}-"), "").replace(Regex("-[A-Z]$"), "")
+
+    /** Which SMS go now: short OTPs older than 24 h; delivery OTPs 24 h after a later "delivered" SMS of the same company. */
+    fun toDelete(inbox: List<Sms>, now: Long): List<Long> {
+        val day = 24 * 3600_000L
+        val deliveredAt = HashMap<String, MutableList<Long>>()
+        for (m in inbox) if (m.address.any { it.isLetter() } && isDelivered(m.body)) deliveredAt.getOrPut(company(m.address)) { ArrayList() }.add(m.date)
+        val out = ArrayList<Long>()
+        for (m in inbox) when (kind(m.address, m.body)) {
+            Kind.SHORT -> if (m.date < now - day) out.add(m.id)
+            Kind.DELIVERY -> if (deliveredAt[company(m.address)].orEmpty().any { it > m.date && it < now - day }) out.add(m.id)
+            Kind.NONE -> {}
+        }
+        return out
+    }
 
     fun copy(ctx: Context, code: String) {
         val cm = ctx.getSystemService(android.content.ClipboardManager::class.java) ?: return
@@ -179,15 +210,17 @@ object SmsStore {
         if (!isDefault(ctx)) return
         val p = ctx.getSharedPreferences("ronin_sms", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
-        if (now - p.getLong("adsCleaned", 0) < 20 * 3600_000L) return
+        if (now - p.getLong("adsCleaned", 0) < 3 * 3600_000L) return // a few times a day (a 24-hour OTP should not wait a day more)
         p.edit().putLong("adsCleaned", now).apply()
         val cut = (now - 30L * 24 * 3600_000L).toString()
         val gone = ArrayList<Long>()
-        // the family's choice (Settings, off at first): plain OTP SMS older than 3 days go too (a ⭐ saved copy stays)
-        if (p.getBoolean("otpClean", false)) try {
-            ctx.contentResolver.query(Telephony.Sms.Inbox.CONTENT_URI, arrayOf("_id", "address", "body"), "date<? AND locked=0", arrayOf((now - 3L * 24 * 3600_000L).toString()), null)?.use { c ->
-                while (c.moveToNext()) if (Otp.isPlainOtp(c.str("address"), c.str("body"))) gone.add(c.lng("_id"))
+        // old OTPs (on unless the family switched it off in Settings; a ⭐ saved copy always stays, locked SMS too)
+        if (p.getBoolean("otpClean", true)) try {
+            val inbox = ArrayList<Otp.Sms>()
+            ctx.contentResolver.query(Telephony.Sms.Inbox.CONTENT_URI, arrayOf("_id", "address", "body", "date"), "locked=0", null, null)?.use { c ->
+                while (c.moveToNext()) inbox.add(Otp.Sms(c.lng("_id"), c.str("address"), c.str("body"), c.lng("date")))
             }
+            gone.addAll(Otp.toDelete(inbox, now))
         } catch (e: Exception) { }
         try {
             // only registered promotional senders ("-P"): a bank / office / person's SMS is never deleted by

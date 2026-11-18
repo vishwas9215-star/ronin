@@ -68,19 +68,41 @@ class LogicTest {
         assertEquals("work", SmsSort.category("57575", "Recharge done", false, ""))
     }
     // 3.13: "delete old OTPs" (the family's choice) takes only a plain OTP SMS, never a booking / PNR / order code
-    @Test fun onlyPlainOtpsAreCleanedUp() {
-        assertTrue(Otp.isPlainOtp("JM-DHANHQ-S", "554581 is your OTP for Dhan. Please do not share it with anyone"))
-        assertTrue(Otp.isPlainOtp("VM-AMAZON-T", "Your One Time Password is 908172 for login"))
-        assertFalse(Otp.isPlainOtp("+919812345678", "554581 is your OTP for Dhan")) // a person's number: never
-        assertFalse(Otp.isPlainOtp("VM-IRCTCI-S", "Your PNR 4512345678 booking code 482913, train 12230"))
-        assertFalse(Otp.isPlainOtp("VM-IRCTCI-S", "Enter the code 630753 to confirm your ticket"))
-        assertFalse(Otp.isPlainOtp("VD-HDFCBK-S", "IMPS INR 6,900.00 sent from HDFC Bank A/c XX6490 on 13-11-26"))
-        assertFalse(Otp.isPlainOtp("VM-FLPKRT-S", "OTP 123456 for your order 98765 delivery"))
-        // QA 3.13: bank / school SMS that only END with "never share OTP" are records, not OTPs
-        assertFalse(Otp.isPlainOtp("VD-SBIINB-S", "Rs 2500 debited from A/c XX1234 on 12-11. Call 18001234. Never share your OTP"))
-        assertFalse(Otp.isPlainOtp("JD-SBIINB-S", "Rs.5000 credited to your A/c XX1234 Avl Bal Rs 12000. Do not share OTP with anyone - SBI"))
-        assertFalse(Otp.isPlainOtp("AD-SCHOOL-S", "Dear Parent, school fees Rs 1200 due on 2026. Never share OTP."))
-        assertFalse(Otp.isPlainOtp("VM-HDFCBK-S", "OTP 482913 to pay Rs 500 at Amazon. Never share it"))
+    // owner, 18 Nov 2026: a short OTP goes after 24 hours; a delivery / gas OTP only 24 hours after "delivered"
+    @Test fun oldOtpsAreCleanedUpSafely() {
+        val S = Otp.Kind.SHORT; val D = Otp.Kind.DELIVERY; val N = Otp.Kind.NONE
+        assertEquals(S, Otp.kind("JM-DHANHQ-S", "554581 is your OTP for Dhan. Please do not share it with anyone"))
+        assertEquals(S, Otp.kind("VM-AMAZON-T", "Your One Time Password is 908172 for login"))
+        assertEquals(S, Otp.kind("VM-HDFCBK-S", "OTP 482913 to pay Rs 500 at Amazon. Never share it"))
+        assertEquals(N, Otp.kind("+919812345678", "554581 is your OTP for Dhan")) // a person's number: never
+        assertEquals(N, Otp.kind("VM-IRCTCI-S", "Your PNR 4512345678 booking code 482913, train 12230"))
+        assertEquals(N, Otp.kind("VM-IRCTCI-S", "Enter the code 630753 to confirm your ticket"))
+        assertEquals(N, Otp.kind("VD-HDFCBK-S", "IMPS INR 6,900.00 sent from HDFC Bank A/c XX6490 on 13-11-26"))
+        assertEquals(N, Otp.kind("VD-SBIINB-S", "Rs 2500 debited from A/c XX1234 on 12-11. Call 1800123. Never share OTP"))
+        assertEquals(N, Otp.kind("JD-SBIINB-S", "Rs.5000 credited to your A/c XX1234 Avl Bal Rs 12000. Do not share OTP with anyone - SBI"))
+        assertEquals(N, Otp.kind("AD-SCHOOL-S", "Dear Parent, school fees Rs 1200 due on 2026. Never share OTP."))
+        assertEquals(N, Otp.kind("VM-SERVCE-S", "Your OTP 4512 is valid for 7 days"))
+        assertEquals(D, Otp.kind("VM-FLPKRT-S", "OTP 123456 for your order 98765 delivery. Share only with the delivery agent"))
+        assertEquals(D, Otp.kind("VM-HPGASL-S", "Your HP Gas refill booking no 123 is confirmed. DAC for delivery is 4821. Share with delivery person only"))
+        assertEquals(D, Otp.kind("JD-INDANE-S", "Indane cylinder: delivery code 7731. Cash memo will be generated on delivery"))
+        assertTrue(Otp.isDelivered("Your order 98765 has been delivered. Thank you"))
+        assertTrue(Otp.isDelivered("HP Gas refill delivered on 18-11-2026"))
+        assertFalse(Otp.isDelivered("Your order will be delivered today"))
+        assertFalse(Otp.isDelivered("Out for delivery: your package"))
+        assertFalse(Otp.isDelivered("Your parcel could not be delivered"))
+        assertFalse(Otp.isDelivered("Your parcel was not delivered"))
+        val h = 3600_000L; val now = 100 * 24 * h
+        val inbox = listOf(
+            Otp.Sms(1, "JM-DHANHQ-S", "554581 is your OTP for Dhan", now - 25 * h),       // short, 25 h: goes
+            Otp.Sms(2, "JM-DHANHQ-S", "112233 is your OTP for Dhan", now - 5 * h),        // short, 5 h: stays
+            Otp.Sms(3, "VM-FLPKRT-S", "OTP 123456 for your order delivery", now - 72 * h),  // delivered 48 h ago: goes
+            Otp.Sms(4, "JD-FLPKRT-S", "Your order has been delivered", now - 48 * h),
+            Otp.Sms(5, "VM-HPGASL-S", "HP Gas refill: DAC for delivery is 4821", now - 240 * h), // never delivered: stays
+            Otp.Sms(6, "VM-AMAZON-S", "OTP 778899 for your order delivery", now - 72 * h),   // delivered 5 h ago: stays
+            Otp.Sms(7, "VM-AMAZON-S", "Your order has been delivered", now - 5 * h),
+            Otp.Sms(8, "VD-SBIINB-S", "Rs 2500 debited from A/c XX1234. Never share OTP", now - 900 * h), // record: stays
+        )
+        assertEquals(listOf(1L, 3L), Otp.toDelete(inbox, now))
     }
 
     @Test fun classifiesLikeWindows() {

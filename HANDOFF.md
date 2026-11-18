@@ -307,8 +307,10 @@ Messages' 4 boxes as a strip at the TOP.
   Bookmarks, Language and Family Filter use it too. Test: addressBarIsAtTheBottomAndTheMenuSlidesUp.
 - Messages / Calls restored from d85f64d (no SOS, no WhatsApp watcher, no location). Parts.kt (MESSAGES, CALLS)
   asks once on a SIM phone; menu → Phone → turn on / off. Messages: 4 tabs on top, newest OTP (15 min) pinned
-  with Copy, 78 px rows, scam rows red. Opt-in "delete old OTPs after 3 days" (Otp.isPlainOtp: never PNR /
-  booking / ticket / order; ⭐ saved copies stay). Calls: Recent first, coloured arrow on the photo, flagged
+  with Copy, 78 px rows, scam rows red. Old OTPs (owner 18 Nov 23:19, ON by default, switch in Messages Settings):
+  Otp.kind → SHORT (login / payment) deleted after 24 h; DELIVERY (order / gas DAC) only 24 h after a later
+  "delivered" SMS of the same company; NONE (person's number, bank records, fees, PNR / ticket, "valid N days")
+  never. ⭐ saved copies and locked SMS always stay. LogicTest oldOtpsAreCleanedUpSafely. Calls: Recent first, coloured arrow on the photo, flagged
   numbers tinted red. Tests: tools/uitest/phone.js, LogicTest smsSorting + onlyPlainOtpsAreCleanedUp,
   DeviceTest roninMessagesSortsScamAndWorkSms / roninCallsOpensOnRecentAndHasAKeypad.
 - Laptop: "Ronin Mail" shortcuts back (--mail opens Gmail); Safe Mail = cmd/ronin/mail_windows.go +

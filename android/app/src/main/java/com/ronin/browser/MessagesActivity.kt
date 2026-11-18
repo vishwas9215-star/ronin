@@ -40,7 +40,7 @@ class MessagesActivity : PhonePage() {
         when (op) {
             "state" -> done(JSONObject().put("isDefault", SmsStore.isDefault(this)).put("read", has(Manifest.permission.READ_SMS))
                 .put("contacts", has(Manifest.permission.READ_CONTACTS))
-                .put("otpClean", getSharedPreferences("ronin_sms", MODE_PRIVATE).getBoolean("otpClean", false)))
+                .put("otpClean", getSharedPreferences("ronin_sms", MODE_PRIVATE).getBoolean("otpClean", true)))
             "setOtpClean" -> { getSharedPreferences("ronin_sms", MODE_PRIVATE).edit().putBoolean("otpClean", a.optBoolean("on")).putLong("adsCleaned", 0).apply(); done(true) }
             "makeDefault" -> requestRole(RoleManager.ROLE_SMS) { ok ->
                 askPermissions(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.POST_NOTIFICATIONS)) { done(JSONObject().put("ok", ok || SmsStore.isDefault(this))) }
