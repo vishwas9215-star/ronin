@@ -1,0 +1,10 @@
+node_modules/
+android/app/build/
+android/build/
+android/.gradle/
+android/capacitor-cordova-android-plugins/build/
+*.jks
+keys/
+master_data.json.gz
+master_info.json
+native_bundle.js

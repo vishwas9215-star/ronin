@@ -1,0 +1,7 @@
+{
+  "appId": "in.ronin.teachers",
+  "appName": "Ronin Teachers",
+  "webDir": "www",
+  "android": { "allowMixedContent": false, "captureInput": true, "webContentsDebuggingEnabled": false },
+  "server": { "androidScheme": "https" }
+}
