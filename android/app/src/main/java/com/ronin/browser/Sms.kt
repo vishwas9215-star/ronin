@@ -85,8 +85,9 @@ object Otp {
     private val notYet = Regex("\\bnot\\b|n't|\\byet\\b|\\bwill\\b|\\bwhen\\b|\\bif\\b|\\?|\\bof \\d+ items?|partial|remaining|जाएगा|जाएगी|नहीं|क्या", RegexOption.IGNORE_CASE)
     // a shipment-level number (AWB / tracking / gas booking), only right after such a word. Never an ORDER number:
     // one order can be several parcels, and only some of them ask for an OTP (QA 3.13, round 3)
-    private val idRe = Regex("(booking|awb|tracking|shipment|consignment|docket|बुकिंग)()\\s*(no\\.?|number|id|#)?\\s*[:#.-]?\\s*([A-Za-z0-9_/-]*\\d[A-Za-z0-9_/-]*)", RegexOption.IGNORE_CASE)
-    private val phoneLike = Regex("^([6-9]\\d{9}|1800\\d+|91[6-9]\\d{9})$")
+    private val idRe = Regex("(booking|awb|tracking|shipment|consignment|docket|बुकिंग)()\\s*(no\\.?|number|id|#|नंबर|संख्या)?\\s*[:#.-]?\\s*([A-Za-z0-9_/-]*\\d[A-Za-z0-9_/-]*)", RegexOption.IGNORE_CASE)
+    // never a phone / toll-free number or a date ("18/11/2026", "2026/11") as the id (QA 3.13, round 4)
+    private val phoneLike = Regex("^([6-9]\\d{9}|1800\\d+|91[6-9]\\d{9}|\\d{1,4}[/-]\\d{1,2}([/-]\\d{2,4})?)$")
     // delivered somewhere else (hub, locker...) or only part of the order: not handed to the family
     private val notHome = Regex("delivered to (the |a |an |our )?(\\w+ ){0,2}(hub|facility|locker|post office|pickup point|courier|warehouse|store|branch|cent(re|er)|partner|agent|\\bdc\\b|station|depot|office)|item from|items? of|one of|some items|part of|partial", RegexOption.IGNORE_CASE)
 

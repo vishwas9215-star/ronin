@@ -132,6 +132,9 @@ class LogicTest {
             // QA round 3: an ORDER number never links (the other parcel of that order came without an OTP)
             Otp.Sms(19, "VM-AMAZON-S", "Amazon: Your delivery OTP is 482913 for order 405-1234567-1234567. Share with delivery associate", now - 72 * h),
             Otp.Sms(20, "VM-AMAZON-S", "Delivered: Your Amazon package for order 405-1234567-1234567 was delivered. Rate your experience", now - 48 * h),
+            // QA round 4: a date is never the id (two bookings on one day)
+            Otp.Sms(21, "VM-BHARAT-S", "Bharatgas Booking:18/11/2026 DAC 4821 for delivery", now - 72 * h),
+            Otp.Sms(22, "VM-BHARAT-S", "Cylinder of Booking:18/11/2026 has been delivered", now - 48 * h),
         )
         assertEquals(listOf(1L, 3L), Otp.toDelete(inbox, now))
     }
