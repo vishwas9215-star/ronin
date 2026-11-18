@@ -83,11 +83,12 @@ object Otp {
     // delivered", "was delivered?" must never count)
     private val delivered = Regex("\\b(has been|have been|was|were|successfully|is now)\\s+delivered\\b|delivery (is )?(completed|successful)|डिलीवर (हो गया है|हो गया|कर दिया गया है|किया गया है)", RegexOption.IGNORE_CASE)
     private val notYet = Regex("\\bnot\\b|n't|\\byet\\b|\\bwill\\b|\\bwhen\\b|\\bif\\b|\\?|\\bof \\d+ items?|partial|remaining|जाएगा|जाएगी|नहीं|क्या", RegexOption.IGNORE_CASE)
-    // an order / booking / AWB number, only right after such a word (never a date or the helpline number)
-    private val idRe = Regex("(order|booking|awb|tracking|shipment|consignment|ref(erence)?|बुकिंग|ऑर्डर)\\s*(no\\.?|number|id|#)?\\s*[:#.-]?\\s*([A-Za-z0-9_/-]*\\d[A-Za-z0-9_/-]*)", RegexOption.IGNORE_CASE)
+    // a shipment-level number (AWB / tracking / gas booking), only right after such a word. Never an ORDER number:
+    // one order can be several parcels, and only some of them ask for an OTP (QA 3.13, round 3)
+    private val idRe = Regex("(booking|awb|tracking|shipment|consignment|docket|बुकिंग)()\\s*(no\\.?|number|id|#)?\\s*[:#.-]?\\s*([A-Za-z0-9_/-]*\\d[A-Za-z0-9_/-]*)", RegexOption.IGNORE_CASE)
     private val phoneLike = Regex("^([6-9]\\d{9}|1800\\d+|91[6-9]\\d{9})$")
     // delivered somewhere else (hub, locker...) or only part of the order: not handed to the family
-    private val notHome = Regex("delivered to (the |a |an )?(\\w+ )?(hub|facility|locker|post office|pickup point|courier|warehouse|store)|item from|items? of|one of|some items|part of|partial", RegexOption.IGNORE_CASE)
+    private val notHome = Regex("delivered to (the |a |an |our )?(\\w+ ){0,2}(hub|facility|locker|post office|pickup point|courier|warehouse|store|branch|cent(re|er)|partner|agent|\\bdc\\b|station|depot|office)|item from|items? of|one of|some items|part of|partial", RegexOption.IGNORE_CASE)
 
     enum class Kind { NONE, SHORT, DELIVERY }
     class Sms(val id: Long, val address: String, val body: String, val date: Long)

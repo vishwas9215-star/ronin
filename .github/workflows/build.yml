@@ -103,7 +103,7 @@ jobs:
           name: android
           path: out/Ronin.apk
       - name: Test APK for the real phone / tablet (release "qa", never offered as an update)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && !inputs.publish)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
