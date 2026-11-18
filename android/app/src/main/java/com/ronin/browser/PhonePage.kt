@@ -151,7 +151,6 @@ abstract class PhonePage : AppCompatActivity() {
             "open" -> { openOutside(a.optString("url")); done(true) }
             "appInfo" -> { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))); done(true) }
             "defaultApps" -> { try { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) } catch (e: Exception) { startActivity(Intent(Settings.ACTION_SETTINGS)) }; done(true) }
-            "notifyAccess" -> { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)); done(true) }
             "copy" -> { val c = a.optString("text").filter { it.isDigit() }.take(8); if (c.length >= 4) Otp.copy(this, c); done(c.length >= 4) }
             "close" -> { done(true); runOnUiThread { finish() } }
             "icon" -> bg { done(SenderIcons.get(this, a.optString("domain"))) }

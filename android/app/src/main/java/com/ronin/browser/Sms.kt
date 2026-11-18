@@ -68,9 +68,13 @@ object Otp {
     private val after = Regex("(?<!\\d)(\\d{4,8})(?!\\d)[^0-9]{0,30}?(is your|is the|is ur|as your|otp|one.?time|code|ओटीपी|कोड)", RegexOption.IGNORE_CASE)
     fun find(body: String): String? = before.find(body)?.groupValues?.get(2) ?: after.find(body)?.groupValues?.get(1)
     // only a real one-time password SMS: a booking / PNR / order "code" or a card PIN letter is never one
-    private val plain = Regex("\\b(otp|one.?time.?(password|pin|code))\\b|ओटीपी|verification code", RegexOption.IGNORE_CASE)
+    // the code must sit right next to the word (a bank SMS that only ends "never share OTP" is not an OTP SMS)
+    private val plain = Regex("(\\botp\\b|one.?time.?password|verification code|ओटीपी)[^0-9]{0,30}?(?<!\\d)\\d{4,8}(?!\\d)|(?<!\\d)\\d{4,8}(?!\\d)[^0-9]{0,15}?(\\botp\\b|one.?time.?password|verification code|ओटीपी)", RegexOption.IGNORE_CASE)
+    private val money = Regex("debit|credit|a/c|acct|avl|\\bbal\\b|balance|\\brs\\.?\\s?\\d|\\binr\\b|₹|\\bfees?\\b|\\bdue\\b|paid|payment|amount|\\bemi\\b|\\bbill\\b|refund|रुपये|जमा|निकासी", RegexOption.IGNORE_CASE)
     private val keep = Regex("pnr|booking|ticket|order|policy|account no|a/c no|admit|roll|registration|application|टिकट|बुकिंग", RegexOption.IGNORE_CASE)
-    fun isPlainOtp(body: String): Boolean = find(body) != null && plain.containsMatchIn(body) && !keep.containsMatchIn(body)
+    /** Only from a company sender (never a person's number), only a one-time code, never money / booking / ticket. */
+    fun isPlainOtp(address: String, body: String): Boolean = address.any { it.isLetter() } && find(body) != null &&
+        plain.containsMatchIn(body) && !keep.containsMatchIn(body) && !money.containsMatchIn(body)
 
     fun copy(ctx: Context, code: String) {
         val cm = ctx.getSystemService(android.content.ClipboardManager::class.java) ?: return
@@ -181,8 +185,8 @@ object SmsStore {
         val gone = ArrayList<Long>()
         // the family's choice (Settings, off at first): plain OTP SMS older than 3 days go too (a ⭐ saved copy stays)
         if (p.getBoolean("otpClean", false)) try {
-            ctx.contentResolver.query(Telephony.Sms.Inbox.CONTENT_URI, arrayOf("_id", "body"), "date<? AND locked=0", arrayOf((now - 3L * 24 * 3600_000L).toString()), null)?.use { c ->
-                while (c.moveToNext()) if (Otp.isPlainOtp(c.str("body"))) gone.add(c.lng("_id"))
+            ctx.contentResolver.query(Telephony.Sms.Inbox.CONTENT_URI, arrayOf("_id", "address", "body"), "date<? AND locked=0", arrayOf((now - 3L * 24 * 3600_000L).toString()), null)?.use { c ->
+                while (c.moveToNext()) if (Otp.isPlainOtp(c.str("address"), c.str("body"))) gone.add(c.lng("_id"))
             }
         } catch (e: Exception) { }
         try {

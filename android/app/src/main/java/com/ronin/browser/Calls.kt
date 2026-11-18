@@ -152,7 +152,11 @@ class CallsActivity : PhonePage() {
             "contacts" -> bg { done(CallInfo.contacts(this)) }
             "call" -> done(CallInfo.call(this, a.optString("number")))
             "inCall" -> { if (CallHub.calls.isNotEmpty()) startActivity(Intent(this, InCallActivity::class.java)); done(CallHub.calls.isNotEmpty()) }
-            "sms" -> { startActivity(Intent(this, MessagesActivity::class.java).putExtra("address", a.optString("number"))); done(true) }
+            // Ronin Messages when it is on; otherwise the phone's own SMS app (a switched-off screen cannot open)
+            "sms" -> { val n = a.optString("number"); try {
+                if (Parts.isOn(this, Parts.MESSAGES)) startActivity(Intent(this, MessagesActivity::class.java).putExtra("address", n))
+                else startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(n))))
+            } catch (e: Exception) { }; done(true) }
             "block" -> bg { done(SmsStore.block(this, a.optString("number"))) }
             "label" -> done(CallInfo.label(this, a.optString("number")))
             "set" -> {

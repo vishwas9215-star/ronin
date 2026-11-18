@@ -5,7 +5,7 @@ const { chromium } = require('playwright'); const fs = require('fs');
 (async () => {
   const go = fs.readFileSync('cmd/ronin/mail_windows.go', 'utf8');
   const hosts = go.match(/const mailHosts = `([^`]+)`/)[1];
-  const js = '(function(){if(!' + hosts + '.test(location.hostname))return;window.__roninLinkLists=' + fs.readFileSync('internal/safelinks/lists.json', 'utf8') +
+  const js = '(function(){if(window.top!==window||!' + hosts + '.test(location.hostname))return;window.__roninLinkLists=' + fs.readFileSync('internal/safelinks/lists.json', 'utf8') +
     ';window.__roninScamRules=' + fs.readFileSync('internal/safelinks/scamrules.json', 'utf8') + ';\n' + fs.readFileSync('cmd/ronin/ui/tools/scamcheck.js', 'utf8') + '\n' +
     fs.readFileSync('cmd/ronin/ui/inject_mail.js', 'utf8') + '\n})();';
   const b = await chromium.launch(); let fail = 0; const bad = m => { console.log('FAIL', m); fail++; };

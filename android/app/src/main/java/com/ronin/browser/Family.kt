@@ -54,9 +54,10 @@ object Family {
             .group("", listOf(
                 Sheet.Row("🛡", L("चालू: गंदी / सट्टे वाली साइटें बंद (बच्चे / बुज़ुर्ग का phone)", "ON: adult / gambling sites blocked (child / elderly phone)"), if (now) "✔" else "", "#15803D", "fam-on") { pickIt(0) },
                 Sheet.Row("🕶", L("बंद: ऐसी साइटें Private में खुलें (history में नहीं)", "OFF: such sites open in Private (no history)"), if (!now) "✔" else "", "#334155", "fam-off") { pickIt(1) },
-            ))
+            ) + (if (first) listOf(Sheet.Row("⏭", L("बाद में", "Later"), "", "#334155", "fam-later") { prefs(ctx).edit().putBoolean("adultAsked", true).apply() }) else emptyList()))
             .note(L("बाद में Menu → सुरक्षा → Family Filter से बदल सकते हैं।", "Change it any time: Menu → Safety → Family Filter."))
             .show()
-        if (first) d.setOnDismissListener { prefs(ctx).edit().putBoolean("adultAsked", true).apply() }
+        // the first time a choice is needed (as before): Back or a tap outside does not skip it
+        if (first) { d.setCancelable(false); d.setCanceledOnTouchOutside(false) }
     }
 }

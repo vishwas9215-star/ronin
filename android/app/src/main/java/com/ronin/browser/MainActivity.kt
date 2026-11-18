@@ -1335,7 +1335,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         }
         val sh = Sheet(this, title)
         if (!bookmarks) sh.bigs(listOf(Sheet.Big("🗑", L("History मिटाएँ", "Delete history"), "h-clear", "#B91C1C") { app.store.clearHistory() }))
-        sh.group("", list.take(80).map { pg ->
+        sh.group("", (if (bookmarks) list else list.take(150)).map { pg ->
             Sheet.Row(if (bookmarks) "★" else "🕘", pg.title.ifBlank { pg.url }, "", "#334155", "page") { current?.let { load(it, pg.url) } }
         }).show()
     }

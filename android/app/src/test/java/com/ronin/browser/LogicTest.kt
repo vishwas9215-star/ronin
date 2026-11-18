@@ -69,12 +69,18 @@ class LogicTest {
     }
     // 3.13: "delete old OTPs" (the family's choice) takes only a plain OTP SMS, never a booking / PNR / order code
     @Test fun onlyPlainOtpsAreCleanedUp() {
-        assertTrue(Otp.isPlainOtp("554581 is your OTP for Dhan. Please do not share it with anyone"))
-        assertTrue(Otp.isPlainOtp("Your One Time Password is 908172 for login"))
-        assertFalse(Otp.isPlainOtp("Your PNR 4512345678 booking code 482913, train 12230"))
-        assertFalse(Otp.isPlainOtp("Enter the code 630753 to confirm your ticket"))
-        assertFalse(Otp.isPlainOtp("IMPS INR 6,900.00 sent from HDFC Bank A/c XX6490 on 13-11-26"))
-        assertFalse(Otp.isPlainOtp("OTP 123456 for your order 98765 delivery"))
+        assertTrue(Otp.isPlainOtp("JM-DHANHQ-S", "554581 is your OTP for Dhan. Please do not share it with anyone"))
+        assertTrue(Otp.isPlainOtp("VM-AMAZON-T", "Your One Time Password is 908172 for login"))
+        assertFalse(Otp.isPlainOtp("+919812345678", "554581 is your OTP for Dhan")) // a person's number: never
+        assertFalse(Otp.isPlainOtp("VM-IRCTCI-S", "Your PNR 4512345678 booking code 482913, train 12230"))
+        assertFalse(Otp.isPlainOtp("VM-IRCTCI-S", "Enter the code 630753 to confirm your ticket"))
+        assertFalse(Otp.isPlainOtp("VD-HDFCBK-S", "IMPS INR 6,900.00 sent from HDFC Bank A/c XX6490 on 13-11-26"))
+        assertFalse(Otp.isPlainOtp("VM-FLPKRT-S", "OTP 123456 for your order 98765 delivery"))
+        // QA 3.13: bank / school SMS that only END with "never share OTP" are records, not OTPs
+        assertFalse(Otp.isPlainOtp("VD-SBIINB-S", "Rs 2500 debited from A/c XX1234 on 12-11. Call 18001234. Never share your OTP"))
+        assertFalse(Otp.isPlainOtp("JD-SBIINB-S", "Rs.5000 credited to your A/c XX1234 Avl Bal Rs 12000. Do not share OTP with anyone - SBI"))
+        assertFalse(Otp.isPlainOtp("AD-SCHOOL-S", "Dear Parent, school fees Rs 1200 due on 2026. Never share OTP."))
+        assertFalse(Otp.isPlainOtp("VM-HDFCBK-S", "OTP 482913 to pay Rs 500 at Amazon. Never share it"))
     }
 
     @Test fun classifiesLikeWindows() {

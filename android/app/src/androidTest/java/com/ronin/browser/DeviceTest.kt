@@ -410,7 +410,7 @@ class DeviceTest {
         // 3.12: Social / Mail / SOS are gone for good. 3.13: Messages / Calls are back (off until the family
         // turns them on), but never location, never the WhatsApp watcher, never Mail on a phone / tablet
         val pm = app.packageManager
-        val info = pm.getPackageInfo(app.packageName, android.content.pm.PackageManager.GET_PERMISSIONS or android.content.pm.PackageManager.GET_ACTIVITIES or android.content.pm.PackageManager.GET_SERVICES)
+        val info = pm.getPackageInfo(app.packageName, android.content.pm.PackageManager.GET_PERMISSIONS or android.content.pm.PackageManager.GET_ACTIVITIES or android.content.pm.PackageManager.GET_SERVICES or android.content.pm.PackageManager.MATCH_DISABLED_COMPONENTS)
         val perms = info.requestedPermissions?.toList() ?: emptyList()
         for (p in listOf("android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION", "android.permission.FOREGROUND_SERVICE_LOCATION"))
             assertTrue("still asks for $p", p !in perms)
