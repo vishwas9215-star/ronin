@@ -295,6 +295,26 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Notification ✕ Close sent "pause": the next 1 s media check showed a paused card again (the 'flaky' song test).
   Now Close sends "stop" (pause + let go). Owner said "हाँ, V3.12.0 publish करो" 16:26.
 
+## 3.13.0 (IN PROGRESS, branch v3.13-work, not published) — owner 18 Nov 2026 22:30
+Asked: Messages + Calls back (he liked Messages; ad SMS hidden), Mail only on the laptop, the browser more
+user friendly; design ideas from AI Fiesta (Qwen, Gemini 3.1 Pro, DeepSeek agreed). His answers: Messages + Calls
+both; laptop Ronin Mail shortcut + Safe Mail; Messages and browser together; address bar at the BOTTOM;
+Messages' 4 boxes as a strip at the TOP.
+- Android browser: address bar at the bottom (pill, 52 dp mic / tabs / menu); phone has no top tab strip (the
+  tab count opens a Tabs sheet; tablet keeps the strip); red Tools button gone (Tools is in the menu).
+- Sheet.kt: every menu / choice slides up from the bottom (big-button grid, then labelled groups of 60 dp rows,
+  85 % max height, tablet 560 dp centred). Menu groups: This page / Safety / Phone / Settings. Tabs, History,
+  Bookmarks, Language and Family Filter use it too. Test: addressBarIsAtTheBottomAndTheMenuSlidesUp.
+- Messages / Calls restored from d85f64d (no SOS, no WhatsApp watcher, no location). Parts.kt (MESSAGES, CALLS)
+  asks once on a SIM phone; menu → Phone → turn on / off. Messages: 4 tabs on top, newest OTP (15 min) pinned
+  with Copy, 78 px rows, scam rows red. Opt-in "delete old OTPs after 3 days" (Otp.isPlainOtp: never PNR /
+  booking / ticket / order; ⭐ saved copies stay). Calls: Recent first, coloured arrow on the photo, flagged
+  numbers tinted red. Tests: tools/uitest/phone.js, LogicTest smsSorting + onlyPlainOtpsAreCleanedUp,
+  DeviceTest roninMessagesSortsScamAndWorkSms / roninCallsOpensOnRecentAndHasAKeypad.
+- Laptop: "Ronin Mail" shortcuts back (--mail opens Gmail); Safe Mail = cmd/ronin/mail_windows.go +
+  ui/inject_mail.js, runs only on email sites (tools/uitest/safemail.js).
+- Warn owner: SMS permissions may again make Play Protect / Advanced Protection block the install (he decides).
+
 ## Agreed for 3.9 (not started)
 - Photo -> Excel in the department's format: offline OCR first (Android ML Kit / Windows OCR), Gemini free only
   when he presses it, with a warning that the photo goes to Google.
