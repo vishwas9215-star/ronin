@@ -69,39 +69,52 @@ object Otp {
     fun find(body: String): String? = before.find(body)?.groupValues?.get(2) ?: after.find(body)?.groupValues?.get(1)
     // ---- old OTPs (owner, 18 Nov 2026): a short OTP (login, payment) goes 24 hours later; a delivery / gas
     // OTP (DAC) stays until the same company says it was DELIVERED (then 24 hours later); records never go.
-    enum class Kind { NONE, SHORT, DELIVERY }
-    class Sms(val id: Long, val address: String, val body: String, val date: Long)
-    // the code right next to the word (a bank SMS that only ends "never share OTP" is not an OTP SMS)
-    private val plain = Regex("(\\botp\\b|one.?time.?password|verification code|ओटीपी)[^0-9]{0,40}?(?<!\\d)\\d{4,8}(?!\\d)|(?<!\\d)\\d{4,8}(?!\\d)[^0-9]{0,15}?(\\botp\\b|one.?time.?password|verification code|ओटीपी)", RegexOption.IGNORE_CASE)
+    // the code joined to the word: "OTP is 123456", "OTP: 123456", "123456 is your OTP" (a helpline after
+    // "never share OTP. Call 1947" is not an OTP; QA 3.13)
+    private val plain = Regex("(\\botp\\b|one.?time.?password|verification code|ओटीपी)\\s*(is|:|-|=|for [^0-9.]{0,30}? is)?\\s*(?<!\\d)\\d{4,8}(?!\\d)|(?<!\\d)\\d{4,8}(?!\\d)\\s+(is|as)\\s+(your|the|ur)\\s+([a-z]+\\s+){0,3}?(otp|one.?time.?password|verification code)\\b|(?<!\\d)\\d{4,8}(?!\\d)\\s+(ओटीपी|आपका ओटीपी)", RegexOption.IGNORE_CASE)
     private val dac = Regex("(\\bdac\\b|delivery (code|pin|otp)|authentication code)[^0-9]{0,30}?(?<!\\d)\\d{4,8}(?!\\d)", RegexOption.IGNORE_CASE)
-    // a record of money (statement, balance, fee due...): never deleted, whatever else it says
-    private val record = Regex("debited|credited|deducted|\\bavl\\b|\\bbal\\b|balance|a/c\\s*(no|x)|acct|\\bemi\\b|\\bdue\\b|\\bfees?\\b|\\bbill\\b|refund|statement|transferred|sent from|received|जमा|निकासी", RegexOption.IGNORE_CASE)
+    // a record of money or an account change: never deleted, whatever else it says
+    private val record = Regex("debited|credited|deducted|\\bavl\\b|\\bbal\\b|balance|a/c|acct|\\bemi\\b|\\bdue\\b|\\bfees?\\b|\\bbill\\b|refund|statement|transferred|sent from|received|\\brs\\.?\\s?\\d|\\binr\\b|₹|spent|\\bpaid\\b|payment|successful|\\btxn\\b|\\bref\\b|invalid|updated|जमा|निकासी|रुपये", RegexOption.IGNORE_CASE)
     // kept for good: tickets, PNR, policies, exams, forms, or a code that stays valid for days
     private val forever = Regex("pnr|ticket|policy|admit|roll no|registration|application|account no|टिकट|valid[^.]{0,25}?\\b\\d+\\s*(days?|दिन)", RegexOption.IGNORE_CASE)
-    private val delivery = Regex("deliver|\\bdac\\b|cylinder|\\blpg\\b|refill|\\bgas\\b|indane|parcel|package|shipment|courier|\\border\\b|डिलीवर|सिलेंडर|गैस", RegexOption.IGNORE_CASE)
-    // "has been delivered" yes; "will be delivered", "out for delivery", "not delivered" no
-    private val delivered = Regex("(?<!\\bbe )(?<!\\bnot )(?<!n't )(?<!\\bto )\\bdelivered\\b|delivery (is )?(done|completed|successful)|डिलीवर (हो गया|किया गया|कर दिया)", RegexOption.IGNORE_CASE)
+    // anything handed over later (parcel, gas, pickup, check-in): kept until it is delivered
+    private val delivery = Regex("deliver|\\bdac\\b|cylinder|\\blpg\\b|refill|\\bgas\\b|bharat ?gas|hp ?gas|indane|parcel|package|shipment|courier|\\border\\b|\\bitem|agent|associate|pickup|check.?in|booking|arriv|receive|डिलीवर|सिलेंडर|गैस|रिफिल|इंडेन|बुक", RegexOption.IGNORE_CASE)
+    // only a plain "has been delivered" (QA 3.13: "will get delivered", "hasn't been delivered", "when it is
+    // delivered", "was delivered?" must never count)
+    private val delivered = Regex("\\b(has been|have been|was|were|successfully|is now)\\s+delivered\\b|delivery (is )?(completed|successful)|डिलीवर (हो गया है|हो गया|कर दिया गया है|किया गया है)", RegexOption.IGNORE_CASE)
+    private val notYet = Regex("\\bnot\\b|n't|\\byet\\b|\\bwill\\b|\\bwhen\\b|\\bif\\b|\\?|\\bof \\d+ items?|partial|remaining|जाएगा|जाएगी|नहीं", RegexOption.IGNORE_CASE)
+    // an order / booking / AWB number, only right after such a word (never a date or the helpline number)
+    private val idRe = Regex("(order|booking|awb|tracking|shipment|consignment|ref(erence)?|बुकिंग|ऑर्डर)\\s*(no\\.?|number|id|#)?\\s*[:#.-]?\\s*([A-Za-z0-9-]*\\d[A-Za-z0-9-]*)", RegexOption.IGNORE_CASE)
+
+    enum class Kind { NONE, SHORT, DELIVERY }
+    class Sms(val id: Long, val address: String, val body: String, val date: Long)
 
     fun kind(address: String, body: String): Kind {
         if (!address.any { it.isLetter() }) return Kind.NONE // a person's number: never
         if (record.containsMatchIn(body) || forever.containsMatchIn(body)) return Kind.NONE
-        if (delivery.containsMatchIn(body) && (dac.containsMatchIn(body) || (find(body) != null && plain.containsMatchIn(body)))) return Kind.DELIVERY
-        if (find(body) != null && plain.containsMatchIn(body)) return Kind.SHORT
-        return Kind.NONE
+        val otp = plain.containsMatchIn(body)
+        if (delivery.containsMatchIn(body)) return if (otp || dac.containsMatchIn(body)) Kind.DELIVERY else Kind.NONE
+        return if (otp) Kind.SHORT else Kind.NONE
     }
-    fun isDelivered(body: String) = delivered.containsMatchIn(body)
+    fun isDelivered(body: String) = delivered.containsMatchIn(body) && !notYet.containsMatchIn(body)
     /** "JD-AMAZON-S", "VM-AMAZON-T": one company. */
     fun company(address: String) = address.trim().uppercase().replace(Regex("^[A-Z]{2}-"), "").replace(Regex("-[A-Z]$"), "")
+    /** The order / booking numbers in an SMS (not its OTP itself, not dates / amounts that are short). */
+    fun ids(body: String): Set<String> = idRe.findAll(body).map { it.groupValues[4].trim('-').uppercase() }
+        .filter { it.length >= 5 && it.any(Char::isDigit) }.toSet()
 
-    /** Which SMS go now: short OTPs older than 24 h; delivery OTPs 24 h after a later "delivered" SMS of the same company. */
+    /** Which SMS go now: a short OTP 24 h after it came; a delivery OTP 24 h after a later "has been delivered"
+     *  SMS of the same company that names the same order / booking number. Anything else: never. */
     fun toDelete(inbox: List<Sms>, now: Long): List<Long> {
         val day = 24 * 3600_000L
-        val deliveredAt = HashMap<String, MutableList<Long>>()
-        for (m in inbox) if (m.address.any { it.isLetter() } && isDelivered(m.body)) deliveredAt.getOrPut(company(m.address)) { ArrayList() }.add(m.date)
+        val done = inbox.filter { it.address.any(Char::isLetter) && isDelivered(it.body) }
         val out = ArrayList<Long>()
         for (m in inbox) when (kind(m.address, m.body)) {
             Kind.SHORT -> if (m.date < now - day) out.add(m.id)
-            Kind.DELIVERY -> if (deliveredAt[company(m.address)].orEmpty().any { it > m.date && it < now - day }) out.add(m.id)
+            Kind.DELIVERY -> {
+                val mine = ids(m.body)
+                if (mine.isNotEmpty() && done.any { d -> d.date > m.date && d.date < now - day && company(d.address) == company(m.address) && ids(d.body).any { it in mine } }) out.add(m.id)
+            }
             Kind.NONE -> {}
         }
         return out

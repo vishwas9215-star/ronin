@@ -68,39 +68,56 @@ class LogicTest {
         assertEquals("work", SmsSort.category("57575", "Recharge done", false, ""))
     }
     // 3.13: "delete old OTPs" (the family's choice) takes only a plain OTP SMS, never a booking / PNR / order code
-    // owner, 18 Nov 2026: a short OTP goes after 24 hours; a delivery / gas OTP only 24 hours after "delivered"
+    // owner, 18 Nov 2026: a short OTP goes after 24 hours; a delivery / gas OTP only 24 hours after "delivered".
+    // Every non-OTP below came from the independent QA (3.13): none may ever be deleted.
     @Test fun oldOtpsAreCleanedUpSafely() {
         val S = Otp.Kind.SHORT; val D = Otp.Kind.DELIVERY; val N = Otp.Kind.NONE
         assertEquals(S, Otp.kind("JM-DHANHQ-S", "554581 is your OTP for Dhan. Please do not share it with anyone"))
         assertEquals(S, Otp.kind("VM-AMAZON-T", "Your One Time Password is 908172 for login"))
-        assertEquals(S, Otp.kind("VM-HDFCBK-S", "OTP 482913 to pay Rs 500 at Amazon. Never share it"))
-        assertEquals(N, Otp.kind("+919812345678", "554581 is your OTP for Dhan")) // a person's number: never
-        assertEquals(N, Otp.kind("VM-IRCTCI-S", "Your PNR 4512345678 booking code 482913, train 12230"))
-        assertEquals(N, Otp.kind("VM-IRCTCI-S", "Enter the code 630753 to confirm your ticket"))
-        assertEquals(N, Otp.kind("VD-HDFCBK-S", "IMPS INR 6,900.00 sent from HDFC Bank A/c XX6490 on 13-11-26"))
-        assertEquals(N, Otp.kind("VD-SBIINB-S", "Rs 2500 debited from A/c XX1234 on 12-11. Call 1800123. Never share OTP"))
-        assertEquals(N, Otp.kind("JD-SBIINB-S", "Rs.5000 credited to your A/c XX1234 Avl Bal Rs 12000. Do not share OTP with anyone - SBI"))
-        assertEquals(N, Otp.kind("AD-SCHOOL-S", "Dear Parent, school fees Rs 1200 due on 2026. Never share OTP."))
-        assertEquals(N, Otp.kind("VM-SERVCE-S", "Your OTP 4512 is valid for 7 days"))
-        assertEquals(D, Otp.kind("VM-FLPKRT-S", "OTP 123456 for your order 98765 delivery. Share only with the delivery agent"))
-        assertEquals(D, Otp.kind("VM-HPGASL-S", "Your HP Gas refill booking no 123 is confirmed. DAC for delivery is 4821. Share with delivery person only"))
-        assertEquals(D, Otp.kind("JD-INDANE-S", "Indane cylinder: delivery code 7731. Cash memo will be generated on delivery"))
+        assertEquals(S, Otp.kind("JD-FYERSS-S", "Your OTP for Login is 6038. This OTP is valid only for 20 minutes"))
+        for ((a, b) in listOf(
+            "+919812345678" to "554581 is your OTP for Dhan",
+            "VM-HDFCBK-S" to "OTP 482913 to pay Rs 500 at Amazon. Never share it",
+            "VM-IRCTCI-S" to "Your PNR 4512345678 booking code 482913, train 12230",
+            "VD-SBIINB-S" to "Rs 2500 debited from A/c XX1234 on 12-11. Call 1800123. Never share OTP",
+            "JD-SBIINB-S" to "Rs.5000 credited to your A/c XX1234 Avl Bal Rs 12000. Do not share OTP with anyone - SBI",
+            "AD-SCHOOL-S" to "Dear Parent, school fees Rs 1200 due on 2026. Never share OTP.",
+            "VM-SERVCE-S" to "Your OTP 4512 is valid for 7 days",
+            "AD-UIDAIG-G" to "Aadhaar XX1234 mobile number updated successfully on 12-11-2026. Do not share OTP with anyone. Call 1947",
+            "VM-ICICIB-S" to "INR 2,499.00 spent on ICICI Bank Card XX4321 on 18-Nov-26 at FLIPKART. Never share OTP. Not you? Call 18001080",
+            "VM-LICIND-S" to "Payment of Rs 2500 to LIC successful, authorised via OTP. Txn ID 81234567",
+            "VM-DIGILK-S" to "Your DigiLocker account is created. Never share your OTP. Helpline 1800-3001-3434",
+            "VM-NPCIUP-S" to "Dear Customer, your UPI ID is active. Never share UPI PIN/OTP. Report fraud: 1930",
+            "VM-PAYTMB-S" to "Thank you for your payment of Rs 1200. Ref 4512. OTP generated earlier is now invalid",
+        )) assertEquals(b, N, Otp.kind(a, b))
+        for ((a, b) in listOf(
+            "VM-FLPKRT-S" to "OTP 123456 for your order 98765 delivery. Share only with the delivery agent",
+            "VM-HPGASL-S" to "Your HP Gas refill booking no 1234567 is confirmed. DAC for delivery is 4821",
+            "JD-INDANE-S" to "Indane cylinder: delivery code 7731. Cash memo will be generated on delivery",
+            "VM-MEESHO-S" to "Meesho: Share OTP 4821 with Valmo agent to receive your item",
+            "VM-AMAZON-S" to "Your Amazon return pickup is scheduled for 22 Nov. Share OTP 482913 with the associate",
+            "VM-OYOROO-S" to "Your OYO stay is confirmed, check-in 25 Nov. Check-in OTP: 5678",
+        )) assertEquals(b, D, Otp.kind(a, b))
         assertTrue(Otp.isDelivered("Your order 98765 has been delivered. Thank you"))
-        assertTrue(Otp.isDelivered("HP Gas refill delivered on 18-11-2026"))
-        assertFalse(Otp.isDelivered("Your order will be delivered today"))
-        assertFalse(Otp.isDelivered("Out for delivery: your package"))
-        assertFalse(Otp.isDelivered("Your parcel could not be delivered"))
-        assertFalse(Otp.isDelivered("Your parcel was not delivered"))
+        assertTrue(Otp.isDelivered("HP Gas refill booking 1234567 was delivered on 18-11-2026"))
+        for (b in listOf("Your order will be delivered today", "Out for delivery: your package", "Your parcel could not be delivered",
+            "Your order will get delivered today", "Your shipment is expected to get delivered by 20 Nov", "Your order is being delivered by Ekart agent",
+            "Your order hasn't been delivered yet", "Your parcel has not yet been delivered", "Share DAC only when the cylinder is delivered",
+            "1 of 2 items delivered. Remaining item arriving tomorrow", "Your package was delivered? If not, call us", "आपका ऑर्डर कल डिलीवर कर दिया जाएगा"))
+            assertFalse(b, Otp.isDelivered(b))
         val h = 3600_000L; val now = 100 * 24 * h
         val inbox = listOf(
-            Otp.Sms(1, "JM-DHANHQ-S", "554581 is your OTP for Dhan", now - 25 * h),       // short, 25 h: goes
-            Otp.Sms(2, "JM-DHANHQ-S", "112233 is your OTP for Dhan", now - 5 * h),        // short, 5 h: stays
-            Otp.Sms(3, "VM-FLPKRT-S", "OTP 123456 for your order delivery", now - 72 * h),  // delivered 48 h ago: goes
-            Otp.Sms(4, "JD-FLPKRT-S", "Your order has been delivered", now - 48 * h),
-            Otp.Sms(5, "VM-HPGASL-S", "HP Gas refill: DAC for delivery is 4821", now - 240 * h), // never delivered: stays
-            Otp.Sms(6, "VM-AMAZON-S", "OTP 778899 for your order delivery", now - 72 * h),   // delivered 5 h ago: stays
-            Otp.Sms(7, "VM-AMAZON-S", "Your order has been delivered", now - 5 * h),
-            Otp.Sms(8, "VD-SBIINB-S", "Rs 2500 debited from A/c XX1234. Never share OTP", now - 900 * h), // record: stays
+            Otp.Sms(1, "JM-DHANHQ-S", "554581 is your OTP for Dhan", now - 25 * h),                       // short, 25 h: goes
+            Otp.Sms(2, "JM-DHANHQ-S", "112233 is your OTP for Dhan", now - 5 * h),                         // short, 5 h: stays
+            Otp.Sms(3, "VM-FLPKRT-S", "OTP 123456 for your order OD98765 delivery", now - 72 * h),           // its order delivered 48 h ago: goes
+            Otp.Sms(4, "JD-FLPKRT-S", "Your order OD98765 has been delivered", now - 48 * h),
+            Otp.Sms(5, "VM-HPGASL-S", "HP Gas refill booking no 1234567: DAC for delivery is 4821", now - 240 * h), // never delivered: stays
+            Otp.Sms(6, "VM-AMAZON-S", "OTP 778899 for your order 403-1111111 delivery", now - 72 * h),      // delivered 5 h ago: stays
+            Otp.Sms(7, "VM-AMAZON-S", "Your order 403-1111111 has been delivered", now - 5 * h),
+            Otp.Sms(8, "VD-SBIINB-S", "Rs 2500 debited from A/c XX1234. Never share OTP", now - 900 * h),  // record: stays
+            Otp.Sms(9, "VM-FLPKRT-S", "OTP 445566 for your order OD55555 delivery", now - 72 * h),          // ANOTHER order delivered: stays
+            Otp.Sms(10, "VM-MEESHO-S", "Share OTP 4821 with Valmo agent to receive your item", now - 72 * h), // no order number: stays
+            Otp.Sms(11, "VM-MEESHO-S", "Your order has been delivered", now - 48 * h),
         )
         assertEquals(listOf(1L, 3L), Otp.toDelete(inbox, now))
     }
