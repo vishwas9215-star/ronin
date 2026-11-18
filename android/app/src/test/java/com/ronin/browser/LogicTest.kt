@@ -103,7 +103,9 @@ class LogicTest {
         for (b in listOf("Your order will be delivered today", "Out for delivery: your package", "Your parcel could not be delivered",
             "Your order will get delivered today", "Your shipment is expected to get delivered by 20 Nov", "Your order is being delivered by Ekart agent",
             "Your order hasn't been delivered yet", "Your parcel has not yet been delivered", "Share DAC only when the cylinder is delivered",
-            "1 of 2 items delivered. Remaining item arriving tomorrow", "Your package was delivered? If not, call us", "आपका ऑर्डर कल डिलीवर कर दिया जाएगा"))
+            "1 of 2 items delivered. Remaining item arriving tomorrow", "Your package was delivered? If not, call us", "आपका ऑर्डर कल डिलीवर कर दिया जाएगा",
+            "Your package with tracking no 1234567 was delivered to the delivery hub, Sultanpur", "Your parcel has been delivered to Amazon Locker",
+            "Your item from order OD330123456789 has been delivered", "क्या आपका ऑर्डर 12345678 डिलीवर हो गया, रेटिंग दें"))
             assertFalse(b, Otp.isDelivered(b))
         val h = 3600_000L; val now = 100 * 24 * h
         val inbox = listOf(
@@ -118,6 +120,14 @@ class LogicTest {
             Otp.Sms(9, "VM-FLPKRT-S", "OTP 445566 for your order OD55555 delivery", now - 72 * h),          // ANOTHER order delivered: stays
             Otp.Sms(10, "VM-MEESHO-S", "Share OTP 4821 with Valmo agent to receive your item", now - 72 * h), // no order number: stays
             Otp.Sms(11, "VM-MEESHO-S", "Your order has been delivered", now - 48 * h),
+            // QA round 2: parts of one order, and the gas IVRS number printed on every SMS
+            Otp.Sms(12, "VM-MEESHO-S", "Meesho: Order ID 143852093476_2 is out for delivery. OTP is 4821", now - 72 * h),
+            Otp.Sms(13, "VM-MEESHO-S", "Meesho: Order ID 143852093476_1 has been delivered. Thank you", now - 48 * h),
+            Otp.Sms(14, "JD-INDANE-S", "Indane: Booking No. 1234567 confirmed. DAC is 4821. For refill booking: 7718955555", now - 72 * h),
+            Otp.Sms(15, "JD-INDANE-S", "Indane: Cylinder for Booking No. 1234999 has been delivered. For refill booking: 7718955555", now - 48 * h),
+            Otp.Sms(16, "VM-AMZNIN-S", "OTP 111222 for your order 404-2222222 delivery", now - 72 * h),   // two OTPs, one order number:
+            Otp.Sms(17, "VM-AMZNIN-S", "OTP 333444 for your order 404-2222222 delivery", now - 70 * h),   // both stay
+            Otp.Sms(18, "VM-AMZNIN-S", "Your order 404-2222222 has been delivered", now - 48 * h),
         )
         assertEquals(listOf(1L, 3L), Otp.toDelete(inbox, now))
     }

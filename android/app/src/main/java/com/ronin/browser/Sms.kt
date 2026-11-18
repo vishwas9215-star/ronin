@@ -82,9 +82,12 @@ object Otp {
     // only a plain "has been delivered" (QA 3.13: "will get delivered", "hasn't been delivered", "when it is
     // delivered", "was delivered?" must never count)
     private val delivered = Regex("\\b(has been|have been|was|were|successfully|is now)\\s+delivered\\b|delivery (is )?(completed|successful)|डिलीवर (हो गया है|हो गया|कर दिया गया है|किया गया है)", RegexOption.IGNORE_CASE)
-    private val notYet = Regex("\\bnot\\b|n't|\\byet\\b|\\bwill\\b|\\bwhen\\b|\\bif\\b|\\?|\\bof \\d+ items?|partial|remaining|जाएगा|जाएगी|नहीं", RegexOption.IGNORE_CASE)
+    private val notYet = Regex("\\bnot\\b|n't|\\byet\\b|\\bwill\\b|\\bwhen\\b|\\bif\\b|\\?|\\bof \\d+ items?|partial|remaining|जाएगा|जाएगी|नहीं|क्या", RegexOption.IGNORE_CASE)
     // an order / booking / AWB number, only right after such a word (never a date or the helpline number)
-    private val idRe = Regex("(order|booking|awb|tracking|shipment|consignment|ref(erence)?|बुकिंग|ऑर्डर)\\s*(no\\.?|number|id|#)?\\s*[:#.-]?\\s*([A-Za-z0-9-]*\\d[A-Za-z0-9-]*)", RegexOption.IGNORE_CASE)
+    private val idRe = Regex("(order|booking|awb|tracking|shipment|consignment|ref(erence)?|बुकिंग|ऑर्डर)\\s*(no\\.?|number|id|#)?\\s*[:#.-]?\\s*([A-Za-z0-9_/-]*\\d[A-Za-z0-9_/-]*)", RegexOption.IGNORE_CASE)
+    private val phoneLike = Regex("^([6-9]\\d{9}|1800\\d+|91[6-9]\\d{9})$")
+    // delivered somewhere else (hub, locker...) or only part of the order: not handed to the family
+    private val notHome = Regex("delivered to (the |a |an )?(\\w+ )?(hub|facility|locker|post office|pickup point|courier|warehouse|store)|item from|items? of|one of|some items|part of|partial", RegexOption.IGNORE_CASE)
 
     enum class Kind { NONE, SHORT, DELIVERY }
     class Sms(val id: Long, val address: String, val body: String, val date: Long)
@@ -96,12 +99,12 @@ object Otp {
         if (delivery.containsMatchIn(body)) return if (otp || dac.containsMatchIn(body)) Kind.DELIVERY else Kind.NONE
         return if (otp) Kind.SHORT else Kind.NONE
     }
-    fun isDelivered(body: String) = delivered.containsMatchIn(body) && !notYet.containsMatchIn(body)
+    fun isDelivered(body: String) = delivered.containsMatchIn(body) && !notYet.containsMatchIn(body) && !notHome.containsMatchIn(body)
     /** "JD-AMAZON-S", "VM-AMAZON-T": one company. */
     fun company(address: String) = address.trim().uppercase().replace(Regex("^[A-Z]{2}-"), "").replace(Regex("-[A-Z]$"), "")
     /** The order / booking numbers in an SMS (not its OTP itself, not dates / amounts that are short). */
-    fun ids(body: String): Set<String> = idRe.findAll(body).map { it.groupValues[4].trim('-').uppercase() }
-        .filter { it.length >= 5 && it.any(Char::isDigit) }.toSet()
+    fun ids(body: String): Set<String> = idRe.findAll(body).map { it.groupValues[4].trim('-', '/', '_').uppercase() }
+        .filter { it.length >= 5 && it.any(Char::isDigit) && !phoneLike.matches(it) }.take(1).toSet() // only the first one
 
     /** Which SMS go now: a short OTP 24 h after it came; a delivery OTP 24 h after a later "has been delivered"
      *  SMS of the same company that names the same order / booking number. Anything else: never. */
@@ -113,7 +116,9 @@ object Otp {
             Kind.SHORT -> if (m.date < now - day) out.add(m.id)
             Kind.DELIVERY -> {
                 val mine = ids(m.body)
-                if (mine.isNotEmpty() && done.any { d -> d.date > m.date && d.date < now - day && company(d.address) == company(m.address) && ids(d.body).any { it in mine } }) out.add(m.id)
+                // two delivery OTPs of one company naming the same number (parts of one order): never
+                val shared = inbox.any { o -> o !== m && company(o.address) == company(m.address) && kind(o.address, o.body) == Kind.DELIVERY && ids(o.body).any { it in mine } }
+                if (mine.isNotEmpty() && !shared && done.any { d -> d.date > m.date && d.date < now - day && company(d.address) == company(m.address) && ids(d.body).any { it in mine } }) out.add(m.id)
             }
             Kind.NONE -> {}
         }
