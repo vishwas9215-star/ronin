@@ -1,0 +1,19 @@
+{
+ "app": "Ronin Teachers Master Data — Sultanpur",
+ "code": {
+  "ver": 110,
+  "file": "code/index_110.html",
+  "sha256": "72bcc664cd4e9a50ded52766da9460cd16c728c4176e46df3429d8ad78e63cb4",
+  "sig": "Anb/c3Vswt9GPiGzEjDv4hBPMSL7o4OdMWPUrrTEw6DuH/cUGZ6nIImDxdgPo+z/bELJHlK3sjgySScU1qHLLA==",
+  "note": "पहला version: अपने-आप अपडेट",
+  "size": 1964046
+ },
+ "data": {
+  "created": "2026-11-18",
+  "label": "V1.2",
+  "file": "data/master_2026-11-18.txt",
+  "sha256": "2d9903d2bf9f3c30268cf6d777e4f154fbbb45e40ae7816a98079b5b18cf6aa6",
+  "teachers": 7452,
+  "note": "आयकर file 2025-26 से सही वेतनवृद्धि माह और वेतन"
+ }
+}
