@@ -299,6 +299,9 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Messages / Calls follow the PHONE's day / night (PhonePage: localNightMode FOLLOW_SYSTEM, window.__roninDark from
   Resources.getSystem(), html.light CSS, live switch in onConfigurationChanged). The browser keeps its own switch:
   Menu → Settings → "Browser का रंग" (दिन / रात). Test: phone.js day-mode check.
+- Messages: the MAIN point of each SMS (ui/tools/smsfacts.js): amounts coloured by meaning (💰 balance green,
+  ➖ money out red, ➕ money in green, 🧾 bill / fee to pay amber with last date), PNR, delivered / out for delivery,
+  plan expiry; chips on top of the SMS and under the list row. Tests: tools/uitest/smsfacts.js, phone.js.
 - Tablet install that works: C:\Ronin Ecosystem\scrcpy\1-install-tablet.bat (owner double-clicks; log in qa\log.txt;
   19 Nov 07:06 "Success", 3.13.0). 2-tablet-run.bat runs qa\cmds.sh on the tablet (model guard OPD2415) and pulls
   screenshots to qa\shots. My Explorer double-clicks do NOT start programs (click tier), and the pylnk3 .lnk

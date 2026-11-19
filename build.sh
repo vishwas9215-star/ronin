@@ -22,6 +22,7 @@ NODE_PATH=$(npm root -g) node tools/uitest/darkcsp.js
 node tools/uitest/merge_rules.js
 node tools/uitest/datecalc_rules.js
 node tools/uitest/scamcheck.js
+node tools/uitest/smsfacts.js
 NODE_PATH=$(npm root -g) node tools/uitest/phone.js /tmp/ronin-ui
 NODE_PATH=$(npm root -g) node tools/uitest/safemail.js
 NODE_PATH=$(npm root -g) node tools/uitest/toolsbutton.js /tmp/ronin-ui/toolsbutton.png

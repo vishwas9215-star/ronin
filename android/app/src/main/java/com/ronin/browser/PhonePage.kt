@@ -95,7 +95,7 @@ abstract class PhonePage : AppCompatActivity() {
                 val u = req.url
                 if (u.host != "ronin.home") return WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), "".byteInputStream())
                 val name = (u.path ?: "").removePrefix("/tools/")
-                if (name !in setOf(page, page.replace(".html", ".js"), "scamcheck.js", "senders.js")) return WebResourceResponse("text/plain", "utf-8", 404, "No", emptyMap(), "".byteInputStream())
+                if (name !in setOf(page, page.replace(".html", ".js"), "scamcheck.js", "senders.js", "smsfacts.js")) return WebResourceResponse("text/plain", "utf-8", 404, "No", emptyMap(), "".byteInputStream())
                 val mime = if (name.endsWith(".js")) "text/javascript" else "text/html"
                 return try { WebResourceResponse(mime, "utf-8", assets.open("ronin/tools/$name")) } catch (e: Exception) { null }
             }

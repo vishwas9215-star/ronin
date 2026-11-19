@@ -1,0 +1,21 @@
+// node tools/uitest/smsfacts.js — the main point of an SMS (cmd/ronin/ui/tools/smsfacts.js), on real-looking Indian SMS.
+const F = require('../../cmd/ronin/ui/tools/smsfacts.js');
+let fail = 0;
+const t = (sms, want) => { const got = F.facts(sms).map(f => f.kind + ':' + f.text).join(' | ');
+  for (const w of want) if (!got.includes(w)) { console.log('FAIL', JSON.stringify(sms), '\n  want', w, '\n  got ', got); fail++; } };
+const none = sms => { const got = F.facts(sms); if (got.length) { console.log('FAIL should be empty', sms, JSON.stringify(got)); fail++; } };
+t('Rs 2500 debited from A/c XX1234 on 12-11-26. Avl Bal Rs 12,450.50 -SBI', ['debit:➖ Out ₹2500', 'bal:💰 Balance ₹12,450.50']);
+t('Rs.5000 credited to your A/c XX1234 on 18-11-26 by UPI. Avl Bal INR 17,450.00', ['credit:➕ In ₹5000', 'bal:💰 Balance ₹17,450.00']);
+t('IMPS INR 6,900.00 sent from HDFC Bank A/c XX6490 on 13-11-26 to Ravi', ['debit:➖ Out ₹6,900.00']);
+t('Your HDFC Credit Card bill of Rs 12,340 is due on 05-12-2026. Min amt due Rs 620', ['due:🧾 To pay ₹12,340 • by 05-12-2026']);
+t('Dear Parent, school fees Rs 1200 due on 15 Dec 2026.', ['due:🧾 To pay ₹1200 • by 15 Dec 2026']);
+t('Your PNR 4512345678 for train 12230 is confirmed. Coach B2 seat 34', ['info:🎫 PNR 4512345678']);
+t('Your order OD123456 has been delivered. Thank you', ['credit:📦 Delivered']);
+t('Your Flipkart order is out for delivery today', ['info:🚚 Coming today']);
+t('Your Jio plan expires on 25-11-2026. Recharge now', ['due:⏳ Ends: 25-11-2026']);
+t('Refund of Rs 499 credited to your account', ['credit:➕ In ₹499']);
+t('आपके खाते से रु 500 कटे। शेष राशि रु 2,000', ['debit:➖ Out ₹500', 'bal:💰 Balance ₹2,000']);
+none('Hi, kal milte hain. Bring the kids');
+none('554581 is your OTP for Dhan. Do not share it');
+none('Your parcel could not be delivered');
+console.log(fail ? fail + ' FAILED' : 'sms facts OK'); process.exit(fail ? 1 : 0);

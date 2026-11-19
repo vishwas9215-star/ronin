@@ -132,7 +132,7 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   const p6 = await b.newPage({ viewport: { width: 412, height: 860 } });
   await serve(p6); await p6.addInitScript(phone({ lang: 'en', isDefault: true, read: true,
     threads: [hd(11, 'VM-HDFCBK-S', 1000), hd(12, 'AD-HDFCBK-S', 2000), hd(13, 'VD-HDFCBK-S', 3000), hd(14, 'JX-KOTAKB-S', 4000)],
-    msgs: { 11: [{ id: 1, body: 'Bal Rs 100', date: Date.now() - 1000, type: 1 }], 12: [{ id: 2, body: 'Biometric login on', date: Date.now() - 2000, type: 1 }], 13: [{ id: 3, body: 'IMPS sent', date: Date.now() - 3000, type: 1 }] } }));
+    msgs: { 11: [{ id: 1, body: 'Rs 2500 debited from A/c XX1234. Avl Bal Rs 12,450.50', date: Date.now() - 1000, type: 1 }], 12: [{ id: 2, body: 'Biometric login on', date: Date.now() - 2000, type: 1 }], 13: [{ id: 3, body: 'IMPS sent', date: Date.now() - 3000, type: 1 }] } }));
   await p6.goto('https://ronin.home/tools/messages.html'); await p6.waitForSelector('.th');
   const rows = await p6.$$eval('.th b', a => a.map(x => x.textContent));
   if (rows.join() !== 'HDFC Bank,Kotak Bank') bad('not one row per company: ' + rows);
@@ -145,6 +145,9 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   await p6.screenshot({ path: path.join(out, 'messages-english.png') });
   await p6.click('.th >> nth=0'); await p6.waitForSelector('.b');
   if ((await p6.$$('.b')).length !== 3) bad('company conversation does not show all its SMS');
+  // 3.13.1: the main point stands out (balance, money out) without reading the whole SMS
+  if (!await p6.$('.fact.bal') || !await p6.$('.b .hl.bal')) bad('balance not highlighted');
+  await p6.screenshot({ path: path.join(out, 'messages-facts.png') });
   p6.on('dialog', d => d.accept());
   await p6.click('#del'); await p6.waitForTimeout(200);
   const dels = await p6.evaluate(() => window.__log.filter(m => m.op === 'delete').map(m => m.thread).sort().join());

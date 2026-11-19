@@ -60,9 +60,18 @@ html.light .b.oldotp .otp{background:#f1f5f9;color:#64748b;border-color:#cbd5e1}
 html.light .lbl{color:#92400e}
 html.light .wd.out{color:#1d4ed8}html.light .wd.in{color:#15803d}html.light .wd.miss,html.light .th b.miss{color:#b91c1c}html.light .wd.rej{color:#b45309}html.light .wd.blk{color:#4b5563}
 html.light .fab{box-shadow:0 4px 14px rgba(0,0,0,.18)}
+
+/* the main point of an SMS (owner 19 Nov 2026): money coloured by what happened to it */
+.hl{border-radius:6px;padding:0 4px;font-weight:800}.hl.bal{background:#14532d;color:#bbf7d0}.hl.debit{background:#7f1d1d;color:#fecaca}.hl.credit{background:#065f46;color:#a7f3d0}.hl.due{background:#78350f;color:#fde68a}
+.facts{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}.facts.small{margin:5px 0 0;gap:4px}
+.fact{display:inline-block;padding:3px 10px;border-radius:12px;font-weight:800;font-size:15.5px;white-space:nowrap}.facts.small .fact{font-size:13px;padding:1px 8px}
+.fact.bal{background:#14532d;color:#bbf7d0}.fact.debit{background:#7f1d1d;color:#fecaca}.fact.credit{background:#065f46;color:#a7f3d0}.fact.due{background:#78350f;color:#fde68a}.fact.info{background:#1e3a8a;color:#bfdbfe}
+html.light .hl.bal,html.light .fact.bal{background:#dcfce7;color:#14532d}html.light .hl.debit,html.light .fact.debit{background:#fee2e2;color:#991b1b}
+html.light .hl.credit,html.light .fact.credit{background:#d1fae5;color:#065f46}html.light .hl.due,html.light .fact.due{background:#fef3c7;color:#92400e}html.light .fact.info{background:#dbeafe;color:#1e3a8a}
 </style></head><body>
 <main id="app"></main>
 <script src="scamcheck.js"></script>
 <script src="senders.js"></script>
+<script src="smsfacts.js"></script>
 <script src="messages.js"></script>
 </body></html>

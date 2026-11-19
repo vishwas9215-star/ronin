@@ -78,6 +78,20 @@
   const otpOf = t => { const a = OTP_BEFORE.exec(t); if (a) return a[2]; const b = OTP_AFTER.exec(t); return b ? b[1] : ''; };
   const URL_RE = /(https?:\/\/[^\s<>"']+|\b(?:[a-z0-9-]+\.)+[a-z]{2,}\/[^\s<>"']*)/gi;
   // the text of one SMS: links open in Ronin (it checks every site) except in the Scam box; the OTP is a copy button
+  // the main point of an SMS (smsfacts.js): money coloured by what happened to it, PNR, delivery, expiry
+  const FX = window.RoninFacts;
+  function marked(str) {
+    if (!FX || !str) return [str];
+    const out = []; let at = 0;
+    for (const a of FX.amounts(str)) { out.push(str.slice(at, a.start), h('b', { cls: 'hl ' + a.kind }, str.slice(a.start, a.end))); at = a.end; }
+    out.push(str.slice(at));
+    return out;
+  }
+  function factsLine(text, small) {
+    const f = FX ? FX.facts(text, L) : [];
+    if (!f.length) return '';
+    return h('div', { cls: small ? 'facts small' : 'facts' }, (small ? f.slice(0, 2) : f).map(x => h('span', { cls: 'fact ' + x.kind }, x.text)));
+  }
   function smsBody(text, links) {
     const out = [], code = otpOf(text);
     let rest = String(text || '');
@@ -91,10 +105,10 @@
       }
       if (code && p.indexOf(code) >= 0) {
         const at = p.indexOf(code);
-        out.push(p.slice(0, at), h('button', { cls: 'otp', 'data-otp': code, on: { click: async e => { e.stopPropagation(); await ask('copy', { text: code }); e.currentTarget.classList.add('done'); } } }, code, h('span', {}, ' 📋')), p.slice(at + code.length));
+        out.push(...marked(p.slice(0, at)), h('button', { cls: 'otp', 'data-otp': code, on: { click: async e => { e.stopPropagation(); await ask('copy', { text: code }); e.currentTarget.classList.add('done'); } } }, code, h('span', {}, ' 📋')), ...marked(p.slice(at + code.length)));
         return;
       }
-      out.push(p);
+      out.push(...marked(p));
     });
     return out;
   }
@@ -153,7 +167,7 @@
         if (!mine.length) return h('div', { cls: 'empty' }, st.isDefault || st.read ? L('यहाँ कोई संदेश नहीं', 'No messages here') : L('संदेश देखने के लिए ऊपर "चालू करें" दबाएँ', 'Tap "Turn on" above to see your messages'));
         return mine.map(t => h('div', { cls: 'th' + (t.cat === 'scam' ? ' scam' : '') + (t.unread ? ' unread' : ''), 'data-thread': t.thread, on: { click: () => thread(t) } },
           badge(t),
-          h('div', { cls: 'mid' }, h('b', {}, who(t), t.cat !== 'work' ? h('span', { cls: 'tag ' + t.cat }, TABS.find(x => x[0] === t.cat)[2]) : ''), h('small', {}, t.snippet)),
+          h('div', { cls: 'mid' }, h('b', {}, who(t), t.cat !== 'work' ? h('span', { cls: 'tag ' + t.cat }, TABS.find(x => x[0] === t.cat)[2]) : ''), h('small', {}, t.snippet), t.cat !== 'scam' ? factsLine(t.snippet, true) : ''),
           h('div', { cls: 'tm' }, when(t.date), t.unread ? h('div', {}, h('span', { cls: 'dot' }, t.unread)) : '')));
       })()),
       // ✏ new message and the four boxes sit at the bottom, where the thumb is
@@ -206,7 +220,7 @@
     const body = h('div', { cls: 'msgs', id: 'msgs' }, msgs.map((m, i) => h('div', {},
       m.type === 1 && m.level ? warnBox(m.level, m.reasons) : '',
       i === latest ? h('div', { cls: 'latest' }, L('🆕 सबसे नया OTP', '🆕 Latest OTP')) : '',
-      h('div', { cls: 'b ' + (m.type === 1 ? 'in' : 'out') + (m.type === 1 && otpOf(m.body) && i !== latest ? ' oldotp' : ''), 'data-level': m.level || '' }, smsBody(m.body, t.cat !== 'scam' && !m.level),
+      h('div', { cls: 'b ' + (m.type === 1 ? 'in' : 'out') + (m.type === 1 && otpOf(m.body) && i !== latest ? ' oldotp' : ''), 'data-level': m.level || '' }, m.type === 1 && t.cat !== 'scam' && !m.level ? factsLine(m.body) : '', smsBody(m.body, t.cat !== 'scam' && !m.level),
         h('button', { cls: 'star' + (savedIds.has(keyOf(m)) ? ' on' : ''), 'data-star': m.id, title: L('सहेजें', 'Save'), on: { click: async e => {
           e.stopPropagation();
           const b = e.currentTarget, k = keyOf(m), on = savedIds.has(k);
