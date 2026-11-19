@@ -295,6 +295,11 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Notification ✕ Close sent "pause": the next 1 s media check showed a paused card again (the 'flaky' song test).
   Now Close sends "stop" (pause + let go). Owner said "हाँ, V3.12.0 publish करो" 16:26.
 
+## 3.13.3 (NOT published) — owner 19 Nov 22:58 (screenshot of a call to 1909)
+- Call screen (InCallActivity): Mute / Speaker / Keypad and Hang up / Answer sit at the BOTTOM (a weight-1 gap);
+  the yellow "Unknown number ... Digital arrest" text is gone (owner: "ये सब मत लिखो"). Recent still marks numbers.
+- No automatic test: CI cannot place a real call; check on the phone.
+
 ## 3.13.2 (PUBLISHED 19 Nov 2026 ~08:50 IST on "हाँ, V3.13.2 publish करो"; run 44447853534; tag before-3.13.2 local) — owner 19 Nov 07:56
 - A sign-in code is an OTP too: "Enter the code 630753 to sign in to your FYERS account", "Your login code is ...",
   "... is your sign-in code" (smsfacts.js otp() + Otp.find); counts as a short OTP for the 24 h clean-up.

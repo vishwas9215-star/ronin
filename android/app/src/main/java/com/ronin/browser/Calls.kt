@@ -355,7 +355,10 @@ class InCallActivity : AppCompatActivity() {
             for (k in listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#")) addView(Button(this@InCallActivity).apply { text = k; textSize = 24f
                 setOnClickListener { top()?.let { c -> c.playDtmfTone(k[0]); c.stopDtmfTone() } } }) }
         simRow = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(who); root.addView(state); root.addView(simName); root.addView(warn); root.addView(second); root.addView(simRow); root.addView(keypad); root.addView(ringRow); root.addView(talkRow)
+        // the buttons sit at the BOTTOM, where the thumb is (owner, 19 Nov 2026); the space in between stays empty
+        val gap = android.view.View(this).apply { layoutParams = LinearLayout.LayoutParams(1, 0, 1f) }
+        root.addView(who); root.addView(state); root.addView(simName); root.addView(second); root.addView(gap)
+        root.addView(simRow); root.addView(keypad); root.addView(ringRow); root.addView(talkRow)
         setContentView(root)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { v, ins ->
             val b = ins.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
@@ -409,10 +412,8 @@ class InCallActivity : AppCompatActivity() {
         val sim = if (saved) "" else CallInfo.cnap(c).ifEmpty { CallInfo.cnapOf(this, num) }
         simName.text = L("📛 नेटवर्क से नाम (SIM का KYC): ", "📛 Name from the network (SIM KYC): ") + sim
         simName.visibility = if (sim.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
-        val base = CallInfo.label(this, num)
-        // unknown / foreign / private callers also get the "police threat" line
-        val label = if (base.isNotEmpty() && !base.startsWith("📢")) base + "\n\n" + CallInfo.threatTip() else base
-        warn.text = label; warn.visibility = if (label.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+        // no long warning text on the call screen any more (owner, 19 Nov 2026: "ये सब मत लिखो")
+        warn.visibility = android.view.View.GONE
         val ringing = CallHub.ringing(c)
         val choosing = c.state == Call.STATE_SELECT_PHONE_ACCOUNT
         sims(c)
