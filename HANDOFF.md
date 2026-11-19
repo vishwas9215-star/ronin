@@ -301,6 +301,8 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
   Menu → Settings → "Browser का रंग" (दिन / रात). Test: phone.js day-mode check.
 - Fixed (real tablet test 19 Nov): Menu → Scam check on an already open Tools page showed the list; tools.js
   hashchange now opens any #tool (scampage.js test).
+- OTP = only an SMS that SAYS OTP / one time password / verification code / ओटीपी, code a number on its own
+  (owner 19 Nov: BSE "Client Code WMZS70784L" showed as OTP). One rule: smsfacts.js otp() + Otp.find (Sms.kt).
 - Messages: the MAIN point of each SMS (ui/tools/smsfacts.js): amounts coloured by meaning (💰 balance green,
   ➖ money out red, ➕ money in green, 🧾 bill / fee to pay amber with last date), PNR, delivered / out for delivery,
   plan expiry; chips on top of the SMS and under the list row. Tests: tools/uitest/smsfacts.js, phone.js.

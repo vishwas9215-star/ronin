@@ -59,7 +59,12 @@ class LogicTest {
         // the OTP alone, for the big blue copy button and the notification's Copy OTP
         assertEquals("554581", Otp.find("554581 is your OTP for Dhan. Please do not share it with anyone"))
         assertEquals("6038", Otp.find("Your OTP for Login is 6038This OTP is valid ony for 20 minutes"))
-        assertEquals("630753", Otp.find("Enter the code 630753 to sign in to your FYERS account"))
+        // owner 19 Nov 2026: only an SMS that SAYS OTP has an OTP (no "code" / "pin" guessing, never digits inside a word)
+        assertEquals(null, Otp.find("Enter the code 630753 to sign in to your FYERS account"))
+        assertEquals(null, Otp.find("BSE Trade Confirmation Client Code WMZS70784L - Broker 6593 - EQ Value Rs 0.00 - FNO Value Rs 381084.00 - Dated 18-11-2026"))
+        assertEquals(null, Otp.find("BSE Trade Confirmation Client Code 7002187000 - Broker 6867 - EQ Value Rs 0.00"))
+        assertEquals("123456", Otp.find("OTP for txn of Rs 1000 at Amazon is 123456. Do not share"))
+        assertEquals("4821", Otp.find("आपका ओटीपी 4821 है"))
         assertEquals(null, Otp.find("IMPS INR 6,900.00 sent from HDFC Bank A/c XX6490 on 13-11-26"))
         assertEquals(null, Otp.find("Your shopping order to pincode 228001 is shipped"))
         assertEquals("scam", SmsSort.category("+919812345678", "x", false, "stop"))

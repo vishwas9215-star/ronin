@@ -73,9 +73,8 @@
     return h('div', { cls: 'av' }, (who(t)[0] || '?').toUpperCase());
   };
   // the OTP / code in a message (same rule as Otp.kt): shown big and blue, one tap copies only the digits
-  const OTP_BEFORE = /(otp|one.?time|\bcode|\bpin\b(?! ?code)|password|passcode|verification|ओटीपी|कोड|पासवर्ड)[^0-9]{0,40}?(?<!\d)(\d{4,8})(?!\d)/i;
-  const OTP_AFTER = /(?<!\d)(\d{4,8})(?!\d)[^0-9]{0,30}?(is your|is the|is ur|as your|otp|one.?time|code|ओटीपी|कोड)/i;
-  const otpOf = t => { const a = OTP_BEFORE.exec(t); if (a) return a[2]; const b = OTP_AFTER.exec(t); return b ? b[1] : ''; };
+  // an OTP only when the SMS says OTP (smsfacts.js; same rule as Otp.kt)
+  const otpOf = t => (window.RoninFacts ? window.RoninFacts.otp(t) : '');
   const URL_RE = /(https?:\/\/[^\s<>"']+|\b(?:[a-z0-9-]+\.)+[a-z]{2,}\/[^\s<>"']*)/gi;
   // the text of one SMS: links open in Ronin (it checks every site) except in the Scam box; the OTP is a copy button
   // the main point of an SMS (smsfacts.js): money coloured by what happened to it, PNR, delivery, expiry

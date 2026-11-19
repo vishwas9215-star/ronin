@@ -64,9 +64,13 @@ object SmsSort {
 
 /** The OTP / code in a message: shown big and blue, one tap copies only the digits. */
 object Otp {
-    private val before = Regex("(otp|one.?time|\\bcode|\\bpin\\b(?! ?code)|password|passcode|verification|ओटीपी|कोड|पासवर्ड)[^0-9]{0,40}?(?<!\\d)(\\d{4,8})(?!\\d)", RegexOption.IGNORE_CASE)
-    private val after = Regex("(?<!\\d)(\\d{4,8})(?!\\d)[^0-9]{0,30}?(is your|is the|is ur|as your|otp|one.?time|code|ओटीपी|कोड)", RegexOption.IGNORE_CASE)
-    fun find(body: String): String? = before.find(body)?.groupValues?.get(2) ?: after.find(body)?.groupValues?.get(1)
+    // an OTP only when the SMS SAYS OTP (owner, 19 Nov 2026: "Client Code WMZS70784L" in a BSE trade SMS was taken
+    // for an OTP). The code is a number on its own, never digits inside a word. Same rule as ui/tools/smsfacts.js.
+    private const val W = "(?:\\botp\\b|one.?time.?password|verification code|ओटीपी)"
+    private const val C = "(?<![A-Za-z0-9])(\\d{4,8})(?!\\d)"
+    private val otpRes = listOf(Regex(W + "\\s*(?:is|:|-|=)?\\s*" + C, RegexOption.IGNORE_CASE), Regex(W + "[^.\\n]{0,60}?\\b(?:is|are|:)\\s*" + C, RegexOption.IGNORE_CASE),
+        Regex(C + "[^0-9]{0,30}?" + W, RegexOption.IGNORE_CASE), Regex(W + "[^0-9]{0,40}?" + C, RegexOption.IGNORE_CASE))
+    fun find(body: String): String? = otpRes.firstNotNullOfOrNull { it.find(body)?.groupValues?.get(1) }
     // ---- old OTPs (owner, 18 Nov 2026): a short OTP (login, payment) goes 24 hours later; a delivery / gas
     // OTP (DAC) stays until the same company says it was DELIVERED (then 24 hours later); records never go.
     // the code joined to the word: "OTP is 123456", "OTP: 123456", "123456 is your OTP" (a helpline after

@@ -53,6 +53,12 @@
     if (exp) { const d = DATE.exec(s.slice(exp.index, exp.index + 60)); if (d) out.push({ kind: 'due', text: L('⏳ ख़त्म: ', '⏳ Ends: ') + d[1] }); }
     return out;
   }
-  root.RoninFacts = { amounts, facts };
+  // an OTP only when the SMS SAYS OTP (owner, 19 Nov 2026: a BSE trade SMS "Client Code WMZS70784L" was shown as
+  // an OTP). The code must be a number on its own, never digits inside a word like WMZS70784L.
+  const W = '(?:\\botp\\b|one.?time.?password|verification code|ओटीपी)', C = '(?<![A-Za-z0-9])(\\d{4,8})(?!\\d)';
+  const OTP = [new RegExp(W + '\\s*(?:is|:|-|=)?\\s*' + C, 'i'), new RegExp(W + '[^.\\n]{0,60}?\\b(?:is|are|:)\\s*' + C, 'i'),
+    new RegExp(C + '[^0-9]{0,30}?' + W, 'i'), new RegExp(W + '[^0-9]{0,40}?' + C, 'i')];
+  function otp(text) { const s = String(text || ''); for (const re of OTP) { const m = re.exec(s); if (m) return m[1]; } return ''; }
+  root.RoninFacts = { amounts, facts, otp };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.RoninFacts;
 })(typeof window !== 'undefined' ? window : globalThis);

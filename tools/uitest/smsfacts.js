@@ -18,4 +18,16 @@ t('आपके खाते से रु 500 कटे। शेष राश�
 none('Hi, kal milte hain. Bring the kids');
 none('554581 is your OTP for Dhan. Do not share it');
 none('Your parcel could not be delivered');
+// OTP only when the SMS says OTP (owner 19 Nov 2026: BSE "Client Code WMZS70784L" was shown as an OTP)
+const o = (sms, want) => { const got = F.otp(sms); if (got !== want) { console.log('FAIL otp', JSON.stringify(sms), 'want', want, 'got', got); fail++; } };
+o('BSE Trade Confirmation Client Code WMZS70784L - Broker 6593 - EQ Value Rs 0.00 - FNO Value Rs 381084.00 - Dated 18-11-2026', '');
+o('BSE Trade Confirmation Client Code 7002187000 - Broker 6867 - EQ Value Rs 0.00', '');
+o('Enter the code 630753 to sign in to your FYERS account', '');
+o('Your PNR 4512345678 booking code 482913', '');
+o('554581 is your OTP for Dhan. Please do not share it with anyone', '554581');
+o('Your OTP for Login is 6038This OTP is valid ony for 20 minutes', '6038');
+o('OTP for txn of Rs 1000 at Amazon is 123456. Do not share', '123456');
+o('Your One Time Password is 908172 for login', '908172');
+o('आपका ओटीपी 4821 है', '4821');
+o('Use verification code 7781 to verify your email', '7781');
 console.log(fail ? fail + ' FAILED' : 'sms facts OK'); process.exit(fail ? 1 : 0);
