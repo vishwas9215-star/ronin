@@ -295,6 +295,15 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Notification ✕ Close sent "pause": the next 1 s media check showed a paused card again (the 'flaky' song test).
   Now Close sends "stop" (pause + let go). Owner said "हाँ, V3.12.0 publish करो" 16:26.
 
+## 3.13.1 (NOT published; branch v3.13-work) — owner 19 Nov 07:08
+- Messages / Calls follow the PHONE's day / night (PhonePage: localNightMode FOLLOW_SYSTEM, window.__roninDark from
+  Resources.getSystem(), html.light CSS, live switch in onConfigurationChanged). The browser keeps its own switch:
+  Menu → Settings → "Browser का रंग" (दिन / रात). Test: phone.js day-mode check.
+- Tablet install that works: C:\Ronin Ecosystem\scrcpy\1-install-tablet.bat (owner double-clicks; log in qa\log.txt;
+  19 Nov 07:06 "Success", 3.13.0). 2-tablet-run.bat runs qa\cmds.sh on the tablet (model guard OPD2415) and pulls
+  screenshots to qa\shots. My Explorer double-clicks do NOT start programs (click tier), and the pylnk3 .lnk
+  shortcuts are broken (white icons): never make .lnk that way again.
+
 ## 3.13.0 (PUBLISHED 19 Nov 2026 00:28 IST on "हाँ, V3.13.0 publish करो"; run 44373234892; tag before-3.13 local) — asked 18 Nov 22:30
 Asked: Messages + Calls back (he liked Messages; ad SMS hidden), Mail only on the laptop, the browser more
 user friendly; design ideas from AI Fiesta (Qwen, Gemini 3.1 Pro, DeepSeek agreed). His answers: Messages + Calls

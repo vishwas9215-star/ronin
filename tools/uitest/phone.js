@@ -159,6 +159,18 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   await p7.click('#settings'); await p7.waitForSelector('#langCard');
   await p7.click('[data-lang=hi]'); await p7.waitForTimeout(100);
   if (!(await p7.evaluate(() => window.__log.some(m => m.op === 'setLang' && m.value === 'hi')))) bad('language not changed');
+  // 3.13: Messages / Calls follow the PHONE's day / night (Ronin sets html.light on a day-mode phone)
+  for (const pg of ['messages', 'calls']) {
+    const p8 = await b.newPage({ viewport: { width: 412, height: 860 } });
+    await serve(p8); await p8.addInitScript(phone({ isDefault: true, read: true, log: true, contacts: true }));
+    await p8.addInitScript(() => { window.__roninDark = false; });
+    await p8.goto('https://ronin.home/tools/' + pg + '.html'); await p8.waitForSelector('.th');
+    const bg = await p8.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    if (!/244, 246, 249/.test(bg)) bad(pg + ' not light on a day-mode phone: ' + bg);
+    const fg = await p8.$eval('.th b', e => getComputedStyle(e).color);
+    if (!/17, 24, 39|185, 28, 28/.test(fg)) bad(pg + ' names not dark on light: ' + fg);
+    await p8.screenshot({ path: path.join(out, pg + '-day.png') });
+  }
   console.log(fail ? fail + ' FAILED' : 'phone pages OK');
   await b.close(); process.exit(fail ? 1 : 0);
 })();

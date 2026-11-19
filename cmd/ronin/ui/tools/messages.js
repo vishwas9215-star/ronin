@@ -5,6 +5,8 @@
 // (only a company's website is asked once for its small icon).
 (function () {
   'use strict';
+  // the phone's own day / night (Ronin tells the page); the browser's switch does not change this
+  document.documentElement.classList.toggle('light', window.__roninDark === false);
   const app = document.getElementById('app');
   const P = window.roninPhone;
   let seq = 0; const waits = {};

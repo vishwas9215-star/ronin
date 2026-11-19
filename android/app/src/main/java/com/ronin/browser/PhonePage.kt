@@ -39,15 +39,29 @@ abstract class PhonePage : AppCompatActivity() {
     abstract fun handle(op: String, a: JSONObject, done: (Any?) -> Unit)
 
     @SuppressLint("SetJavaScriptEnabled")
+    override fun onConfigurationChanged(c: android.content.res.Configuration) {
+        super.onConfigurationChanged(c)
+        // the phone switched day / night while this screen is open: the page changes with it
+        if (::web.isInitialized) {
+            web.setBackgroundColor(Color.parseColor(if (systemDark()) "#121212" else "#F4F6F9"))
+            web.evaluateJavascript("window.__roninDark=" + systemDark() + ";document.documentElement.classList.toggle('light'," + !systemDark() + ")", null)
+        }
+    }
+
+    /** Messages / Calls follow the PHONE's own day / night (owner, 19 Nov 2026); the browser has its own switch. */
+    fun systemDark(): Boolean = (android.content.res.Resources.getSystem().configuration.uiMode and
+        android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+
     override fun onCreate(saved: Bundle?) {
+        delegate.localNightMode = androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
         super.onCreate(saved)
         web = WebView(this)
-        web.setBackgroundColor(Color.parseColor("#0f1218"))
+        web.setBackgroundColor(Color.parseColor(if (systemDark()) "#121212" else "#F4F6F9"))
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
         val rules = RoninApp.instance.rules
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            WebViewCompat.addDocumentStartJavaScript(web, Lang.pageScript(this) + "window.__roninLinkLists=" + rules.safeLinks.json + ";window.__roninScamRules=" + rules.scamRulesJson + ";", setOf("https://ronin.home"))
+            WebViewCompat.addDocumentStartJavaScript(web, Lang.pageScript(this) + "window.__roninDark=" + systemDark() + ";document.documentElement.classList.toggle('light'," + !systemDark() + ");window.__roninLinkLists=" + rules.safeLinks.json + ";window.__roninScamRules=" + rules.scamRulesJson + ";", setOf("https://ronin.home"))
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             WebViewCompat.addWebMessageListener(web, "roninPhone", setOf("https://ronin.home")) { _, msg, origin, main, proxy ->

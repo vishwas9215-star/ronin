@@ -1301,7 +1301,8 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             phone.add(Sheet.Row("📱", L("Messages / Calls चालू-बंद", "Turn Messages / Calls on or off"), "", "#334155", "m-parts") { Parts.choose(this, first = false) })
         }
         val settings = arrayListOf(
-            Sheet.Row(if (app.store.night) "☀" else "☾", if (app.store.night) L("दिन वाला रंग", "Day mode") else L("रात वाला रंग", "Night mode"), "", "#334155", "m-night") {
+            // the BROWSER's own day / night (Messages / Calls follow the phone's setting instead)
+            Sheet.Row(if (app.store.night) "☾" else "☀", L("Browser का रंग (दबाकर बदलें)", "Browser colours (tap to switch)"), if (app.store.night) L("रात", "Night") else L("दिन", "Day"), "#334155", "m-night") {
                 app.store.night = !app.store.night
                 AppCompatDelegate.setDefaultNightMode(if (app.store.night) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO)
                 recreate()

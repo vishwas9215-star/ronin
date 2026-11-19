@@ -48,6 +48,18 @@ input.txt{display:block;width:100%;font:inherit;padding:12px;border-radius:12px;
 .b.oldotp{opacity:.45}.b.oldotp .otp{border-color:#475569;background:#1f2937;color:#94a3b8;font-size:18px}
 a.lnk{color:#93c5fd;text-decoration:underline;word-break:break-all}
 .fab{position:fixed;right:16px;bottom:calc(20px + env(safe-area-inset-bottom));z-index:6;min-height:56px;padding:0 22px;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+
+/* the phone's own DAY look (window.__roninDark=false from Ronin; owner 19 Nov 2026) */
+html.light{--bg:#f4f6f9;--card:#ffffff;--fg:#111827;--mut:#5b6474;--line:#dfe3ea;color-scheme:light}
+html.light .th.scam,html.light .th.flag{background:#fee2e2}
+html.light .warn{background:#fee2e2;color:#7f1d1d}html.light .warn.amber{background:#fef3c7;color:#78350f}
+html.light .b.out{background:#dbeafe;color:#0f172a}
+html.light a.lnk{color:#1d4ed8}
+html.light .otp{background:#dbeafe;color:#1e3a8a;border-color:#3b82f6}html.light .otp.done{color:#166534;border-color:#16a34a}
+html.light .b.oldotp .otp{background:#f1f5f9;color:#64748b;border-color:#cbd5e1}
+html.light .lbl{color:#92400e}
+html.light .wd.out{color:#1d4ed8}html.light .wd.in{color:#15803d}html.light .wd.miss,html.light .th b.miss{color:#b91c1c}html.light .wd.rej{color:#b45309}html.light .wd.blk{color:#4b5563}
+html.light .fab{box-shadow:0 4px 14px rgba(0,0,0,.18)}
 </style></head><body>
 <main id="app"></main>
 <script src="scamcheck.js"></script>
