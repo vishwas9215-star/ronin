@@ -24,6 +24,10 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   await p.evaluate(() => { location.hash = 'scamcheck:' + encodeURIComponent('Congratulations! You won an iPhone. Pay 499 delivery charge to claim, send OTP'); });
   await p.waitForTimeout(1500);
   if (!await p.$('#verdict')) { fail++; console.log('hash change: no verdict; page says: ' + (await p.evaluate(() => document.body.innerText)).slice(0, 200)); }
+  // tablet 19 Nov 2026: the tools page was already open and Menu → Scam check only changed #scamcheck
+  await p.goto('https://ronin.home/tools/'); await p.waitForSelector('.tool');
+  await p.evaluate(() => { location.hash = 'scamcheck'; }); await p.waitForTimeout(800);
+  if (await p.$$eval('.tool', a => a.length) > 3 && !(await p.evaluate(() => /scam|ठगी/i.test((document.querySelector('h1,h2') || {}).innerText || '')))) { fail++; console.log('#scamcheck on an open tools page did not open Scam Check: ' + (await p.evaluate(() => document.body.innerText)).slice(0, 120)); }
   await b.close();
   console.log(fail ? fail + ' FAILED' : 'scam check page OK');
   process.exit(fail ? 1 : 0);

@@ -299,6 +299,8 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Messages / Calls follow the PHONE's day / night (PhonePage: localNightMode FOLLOW_SYSTEM, window.__roninDark from
   Resources.getSystem(), html.light CSS, live switch in onConfigurationChanged). The browser keeps its own switch:
   Menu → Settings → "Browser का रंग" (दिन / रात). Test: phone.js day-mode check.
+- Fixed (real tablet test 19 Nov): Menu → Scam check on an already open Tools page showed the list; tools.js
+  hashchange now opens any #tool (scampage.js test).
 - Messages: the MAIN point of each SMS (ui/tools/smsfacts.js): amounts coloured by meaning (💰 balance green,
   ➖ money out red, ➕ money in green, 🧾 bill / fee to pay amber with last date), PNR, delivered / out for delivery,
   plan expiry; chips on top of the SMS and under the list row. Tests: tools/uitest/smsfacts.js, phone.js.

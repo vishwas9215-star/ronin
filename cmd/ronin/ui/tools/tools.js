@@ -1793,5 +1793,7 @@ const start = location.hash.slice(1);
 // "#scamcheck:<text>": a message shared to Ronin from WhatsApp / SMS (stays on this device)
 if (start.startsWith('scamcheck:')) open('scamcheck', decodeURIComponent(start.slice(10)));
 else if (T[start]) open(start); else home();
-window.addEventListener('hashchange', () => { const h0 = location.hash.slice(1); if (h0.startsWith('scamcheck:')) open('scamcheck', decodeURIComponent(h0.slice(10))); });
+// the tools page is already open (only the #part changes, the page does not reload): open that tool too
+// (tablet test 19 Nov 2026: Menu → Scam check showed the tools list, not Scam Check)
+window.addEventListener('hashchange', () => { const h0 = location.hash.slice(1); if (h0.startsWith('scamcheck:')) open('scamcheck', decodeURIComponent(h0.slice(10))); else if (T[h0]) open(h0); });
 window.__roninToolsOpen = open;
