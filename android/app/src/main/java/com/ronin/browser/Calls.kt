@@ -214,6 +214,7 @@ class RoninInCallService : InCallService() {
         if (CallHub.calls.none { it.state == Call.STATE_ACTIVE || it.state == Call.STATE_HOLDING }) RecordService.stop(this)
         getSystemService(NotificationManager::class.java).cancel(CallHub.NOTE)
         if (CallHub.calls.isEmpty()) getSystemService(NotificationManager::class.java).cancel(CallHub.NOTE + 1)
+        if (CallHub.calls.isEmpty()) { CallHub.muted = null; CallHub.pending = null } // the next call starts fresh
         CallHub.changed()
     }
     override fun onCallAudioStateChanged(s: CallAudioState?) = CallHub.changed()
