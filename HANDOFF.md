@@ -295,7 +295,7 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Notification ✕ Close sent "pause": the next 1 s media check showed a paused card again (the 'flaky' song test).
   Now Close sends "stop" (pause + let go). Owner said "हाँ, V3.12.0 publish करो" 16:26.
 
-## 3.13.0 (IN PROGRESS, branch v3.13-work, not published) — owner 18 Nov 2026 22:30
+## 3.13.0 (PUBLISHED 19 Nov 2026 00:28 IST on "हाँ, V3.13.0 publish करो"; run 44373234892; tag before-3.13 local) — asked 18 Nov 22:30
 Asked: Messages + Calls back (he liked Messages; ad SMS hidden), Mail only on the laptop, the browser more
 user friendly; design ideas from AI Fiesta (Qwen, Gemini 3.1 Pro, DeepSeek agreed). His answers: Messages + Calls
 both; laptop Ronin Mail shortcut + Safe Mail; Messages and browser together; address bar at the BOTTOM;
@@ -315,6 +315,9 @@ Messages' 4 boxes as a strip at the TOP.
   DeviceTest roninMessagesSortsScamAndWorkSms / roninCallsOpensOnRecentAndHasAKeypad.
 - Laptop: "Ronin Mail" shortcuts back (--mail opens Gmail); Safe Mail = cmd/ronin/mail_windows.go +
   ui/inject_mail.js, runs only on email sites (tools/uitest/safemail.js).
+- Old-OTP rule had 4 rounds of independent QA (no blocker left). Tablet: Install-Ronin-3.13-tablet.lnk (adb install -r)
+  run 19 Nov 06:30 but could not be checked (scrcpy window cannot be granted to computer use; cmd shortcuts are not
+  used). TV APK: C:\Ronin Ecosystem\TV\Ronin-TV-3.13.0.apk.
 - Warn owner: SMS permissions may again make Play Protect / Advanced Protection block the install (he decides).
 
 ## Agreed for 3.9 (not started)
