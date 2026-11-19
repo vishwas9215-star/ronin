@@ -69,7 +69,11 @@ object Otp {
     private const val W = "(?:\\botp\\b|one.?time.?password|verification code|ओटीपी)"
     private const val C = "(?<![A-Za-z0-9])(\\d{4,8})(?!\\d)"
     private val otpRes = listOf(Regex(W + "\\s*(?:is|:|-|=)?\\s*" + C, RegexOption.IGNORE_CASE), Regex(W + "[^.\\n]{0,60}?\\b(?:is|are|:)\\s*" + C, RegexOption.IGNORE_CASE),
-        Regex(C + "[^0-9]{0,30}?" + W, RegexOption.IGNORE_CASE), Regex(W + "[^0-9]{0,40}?" + C, RegexOption.IGNORE_CASE))
+        Regex(C + "[^0-9]{0,30}?" + W, RegexOption.IGNORE_CASE), Regex(W + "[^0-9]{0,40}?" + C, RegexOption.IGNORE_CASE),
+        // a sign-in code is an OTP too (owner 19 Nov 2026: FYERS "Enter the code 630753 to sign in to your FYERS account")
+        Regex("\\b(?:enter|use|type)\\s+(?:the\\s+|this\\s+)?(?:code|pin)\\s*:?\\s*" + C + "[^.\\n]{0,40}?\\b(?:sign.?in|log.?in|login|verify|confirm your login)", RegexOption.IGNORE_CASE),
+        Regex("\\b(?:login|log.?in|sign.?in|security|authentication)\\s+(?:code|pin)\\s*(?:is|:|-)?\\s*" + C, RegexOption.IGNORE_CASE),
+        Regex(C + "\\s+is\\s+(?:your|the)\\s+(?:login|log.?in|sign.?in|security|authentication)\\s+(?:code|pin)", RegexOption.IGNORE_CASE))
     fun find(body: String): String? = otpRes.firstNotNullOfOrNull { it.find(body)?.groupValues?.get(1) }
     // ---- old OTPs (owner, 18 Nov 2026): a short OTP (login, payment) goes 24 hours later; a delivery / gas
     // OTP (DAC) stays until the same company says it was DELIVERED (then 24 hours later); records never go.
@@ -101,7 +105,7 @@ object Otp {
     fun kind(address: String, body: String): Kind {
         if (!address.any { it.isLetter() }) return Kind.NONE // a person's number: never
         if (record.containsMatchIn(body) || forever.containsMatchIn(body)) return Kind.NONE
-        val otp = plain.containsMatchIn(body)
+        val otp = plain.containsMatchIn(body) || otpRes.drop(4).any { it.containsMatchIn(body) } // drop(4): the sign-in code rules
         if (delivery.containsMatchIn(body)) return if (otp || dac.containsMatchIn(body)) Kind.DELIVERY else Kind.NONE
         return if (otp) Kind.SHORT else Kind.NONE
     }

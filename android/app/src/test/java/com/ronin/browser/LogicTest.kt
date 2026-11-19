@@ -60,7 +60,9 @@ class LogicTest {
         assertEquals("554581", Otp.find("554581 is your OTP for Dhan. Please do not share it with anyone"))
         assertEquals("6038", Otp.find("Your OTP for Login is 6038This OTP is valid ony for 20 minutes"))
         // owner 19 Nov 2026: only an SMS that SAYS OTP has an OTP (no "code" / "pin" guessing, never digits inside a word)
-        assertEquals(null, Otp.find("Enter the code 630753 to sign in to your FYERS account"))
+        assertEquals("630753", Otp.find("Enter the code 630753 to sign in to your FYERS account")) // owner: a sign-in code is an OTP
+        assertEquals("445566", Otp.find("Your login code is 445566"))
+        assertEquals(null, Otp.find("Enter code 1234 to get 10% off"))
         assertEquals(null, Otp.find("BSE Trade Confirmation Client Code WMZS70784L - Broker 6593 - EQ Value Rs 0.00 - FNO Value Rs 381084.00 - Dated 18-11-2026"))
         assertEquals(null, Otp.find("BSE Trade Confirmation Client Code 7002187000 - Broker 6867 - EQ Value Rs 0.00"))
         assertEquals("123456", Otp.find("OTP for txn of Rs 1000 at Amazon is 123456. Do not share"))
@@ -80,6 +82,7 @@ class LogicTest {
         assertEquals(S, Otp.kind("JM-DHANHQ-S", "554581 is your OTP for Dhan. Please do not share it with anyone"))
         assertEquals(S, Otp.kind("VM-AMAZON-T", "Your One Time Password is 908172 for login"))
         assertEquals(S, Otp.kind("JD-FYERSS-S", "Your OTP for Login is 6038. This OTP is valid only for 20 minutes"))
+        assertEquals(S, Otp.kind("JD-FYERSS-S", "Enter the code 630753 to sign in to your FYERS account")) // a sign-in code is a short OTP
         for ((a, b) in listOf(
             "+919812345678" to "554581 is your OTP for Dhan",
             "VM-HDFCBK-S" to "OTP 482913 to pay Rs 500 at Amazon. Never share it",

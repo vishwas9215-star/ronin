@@ -22,7 +22,10 @@ none('Your parcel could not be delivered');
 const o = (sms, want) => { const got = F.otp(sms); if (got !== want) { console.log('FAIL otp', JSON.stringify(sms), 'want', want, 'got', got); fail++; } };
 o('BSE Trade Confirmation Client Code WMZS70784L - Broker 6593 - EQ Value Rs 0.00 - FNO Value Rs 381084.00 - Dated 18-11-2026', '');
 o('BSE Trade Confirmation Client Code 7002187000 - Broker 6867 - EQ Value Rs 0.00', '');
-o('Enter the code 630753 to sign in to your FYERS account', '');
+o('Enter the code 630753 to sign in to your FYERS account', '630753'); // owner: a sign-in code is an OTP
+o('Your login code is 445566', '445566');
+o('882211 is your sign-in code for Zerodha', '882211');
+o('Enter code 1234 to get 10% off', '');
 o('Your PNR 4512345678 booking code 482913', '');
 o('554581 is your OTP for Dhan. Please do not share it with anyone', '554581');
 o('Your OTP for Login is 6038This OTP is valid ony for 20 minutes', '6038');

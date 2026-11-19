@@ -55,9 +55,15 @@
   }
   // an OTP only when the SMS SAYS OTP (owner, 19 Nov 2026: a BSE trade SMS "Client Code WMZS70784L" was shown as
   // an OTP). The code must be a number on its own, never digits inside a word like WMZS70784L.
-  const W = '(?:\\botp\\b|one.?time.?password|verification code|ओटीपी)', C = '(?<![A-Za-z0-9])(\\d{4,8})(?!\\d)';
+  const W = '(?:\\botp\\b|one.?time.?password|verification code|ओटीपी)';
+  const LOGIN_ENTER = '\\b(?:enter|use|type)\\s+(?:the\\s+|this\\s+)?(?:code|pin)\\s*:?\\s*';
+  const LOGIN_AFTER = '[^.\\n]{0,40}?\\b(?:sign.?in|log.?in|login|verify|confirm your login)';
+  const LOGIN_WORD = '\\b(?:login|log.?in|sign.?in|security|authentication)\\s+(?:code|pin)\\s*(?:is|:|-)?\\s*';
+  const LOGIN_IS = '\\s+is\\s+(?:your|the)\\s+(?:login|log.?in|sign.?in|security|authentication)\\s+(?:code|pin)', C = '(?<![A-Za-z0-9])(\\d{4,8})(?!\\d)';
   const OTP = [new RegExp(W + '\\s*(?:is|:|-|=)?\\s*' + C, 'i'), new RegExp(W + '[^.\\n]{0,60}?\\b(?:is|are|:)\\s*' + C, 'i'),
-    new RegExp(C + '[^0-9]{0,30}?' + W, 'i'), new RegExp(W + '[^0-9]{0,40}?' + C, 'i')];
+    new RegExp(C + '[^0-9]{0,30}?' + W, 'i'), new RegExp(W + '[^0-9]{0,40}?' + C, 'i'),
+    // a sign-in code is an OTP too (owner 19 Nov 2026: FYERS "Enter the code 630753 to sign in to your FYERS account")
+    new RegExp(LOGIN_ENTER + C + LOGIN_AFTER, 'i'), new RegExp(LOGIN_WORD + C, 'i'), new RegExp(C + LOGIN_IS, 'i')];
   function otp(text) { const s = String(text || ''); for (const re of OTP) { const m = re.exec(s); if (m) return m[1]; } return ''; }
   root.RoninFacts = { amounts, facts, otp };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.RoninFacts;

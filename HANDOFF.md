@@ -295,6 +295,12 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Notification ✕ Close sent "pause": the next 1 s media check showed a paused card again (the 'flaky' song test).
   Now Close sends "stop" (pause + let go). Owner said "हाँ, V3.12.0 publish करो" 16:26.
 
+## 3.13.2 (NOT published) — owner 19 Nov 07:56
+- A sign-in code is an OTP too: "Enter the code 630753 to sign in to your FYERS account", "Your login code is ...",
+  "... is your sign-in code" (smsfacts.js otp() + Otp.find); counts as a short OTP for the 24 h clean-up.
+  Promo "Enter code 1234 to get 10% off" and BSE "Client Code WMZS70784L" stay non-OTP.
+- Real tablet, 3.13.1 (19 Nov 07:55): installed "Success", all 13 screens OK, Scam check opens directly.
+
 ## 3.13.1 (PUBLISHED 19 Nov 2026 07:46 IST on "हाँ, V3.13.1 publish करो"; run 44441651992; tag before-3.13.1 local) — owner 19 Nov 07:08
 - Messages / Calls follow the PHONE's day / night (PhonePage: localNightMode FOLLOW_SYSTEM, window.__roninDark from
   Resources.getSystem(), html.light CSS, live switch in onConfigurationChanged). The browser keeps its own switch:
