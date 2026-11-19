@@ -295,7 +295,7 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Notification ✕ Close sent "pause": the next 1 s media check showed a paused card again (the 'flaky' song test).
   Now Close sends "stop" (pause + let go). Owner said "हाँ, V3.12.0 publish करो" 16:26.
 
-## 3.13.3 (NOT published) — owner 19 Nov 22:58 (screenshot of a call to 1909)
+## 3.13.3 (PUBLISHED 19 Nov 2026 ~23:55 IST; owner 23:02: "आपको पूरी अनुमति है... ऐप से अपडेट करके" while going to sleep; run 44582876479; tag before-3.13.3) — owner 19 Nov 22:58 (screenshot of a call to 1909)
 - Call screen (InCallActivity): Mute / Speaker / Keypad and Hang up / Answer sit at the BOTTOM (a weight-1 gap);
   the yellow "Unknown number ... Digital arrest" text is gone (owner: "ये सब मत लिखो"). Recent still marks numbers.
 - Speaker needed 2-3 taps (owner 19 Nov 23:00): Android 14+ reports speaker / mute via CallEndpoint +
