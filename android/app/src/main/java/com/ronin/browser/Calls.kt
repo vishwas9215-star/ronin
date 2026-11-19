@@ -217,12 +217,58 @@ class RoninInCallService : InCallService() {
         CallHub.changed()
     }
     override fun onCallAudioStateChanged(s: CallAudioState?) = CallHub.changed()
+    // Android 14+: the speaker / earpiece / Bluetooth "endpoint" and mute come here (3.13.3: the old
+    // callAudioState was often stale, so Speaker needed 2-3 taps on the owner's phone)
+    override fun onCallEndpointChanged(e: android.telecom.CallEndpoint) { CallHub.endpoint = e; CallHub.pending = null; CallHub.changed() }
+    override fun onAvailableCallEndpointsChanged(l: List<android.telecom.CallEndpoint>) { CallHub.endpoints = l; CallHub.changed() }
+    override fun onMuteStateChanged(m: Boolean) { CallHub.muted = m; CallHub.changed() }
     override fun onDestroy() { if (CallHub.service == this) CallHub.service = null; super.onDestroy() }
 }
 
 object CallHub {
     const val NOTE = 7101
     var service: InCallService? = null
+    var endpoint: android.telecom.CallEndpoint? = null
+    var endpoints: List<android.telecom.CallEndpoint> = emptyList()
+    var muted: Boolean? = null
+    /** what the owner just asked for (shown at once, before Android confirms): true = speaker */
+    var pending: Boolean? = null
+
+    fun speakerOn(): Boolean {
+        pending?.let { return it }
+        if (Build.VERSION.SDK_INT >= 34) endpoint?.let { return it.endpointType == android.telecom.CallEndpoint.TYPE_SPEAKER }
+        return service?.callAudioState?.route == CallAudioState.ROUTE_SPEAKER
+    }
+    fun isMuted(): Boolean { muted?.let { return it }; return service?.callAudioState?.isMuted ?: false }
+    /** at the ear (not speaker / Bluetooth / headset): only then may the screen go dark near the face */
+    fun atEar(): Boolean {
+        if (speakerOn()) return false
+        if (Build.VERSION.SDK_INT >= 34) endpoint?.let { return it.endpointType == android.telecom.CallEndpoint.TYPE_EARPIECE }
+        val r = service?.callAudioState?.route ?: return true
+        return r == CallAudioState.ROUTE_EARPIECE || r == CallAudioState.ROUTE_WIRED_OR_EARPIECE && service?.callAudioState?.supportedRouteMask?.and(CallAudioState.ROUTE_WIRED_HEADSET) == 0
+    }
+    fun setSpeaker(on: Boolean) {
+        val svc = service ?: return
+        pending = on
+        if (Build.VERSION.SDK_INT >= 34 && endpoints.isNotEmpty()) {
+            val want = if (on) endpoints.firstOrNull { it.endpointType == android.telecom.CallEndpoint.TYPE_SPEAKER }
+                else endpoints.firstOrNull { it.endpointType == android.telecom.CallEndpoint.TYPE_BLUETOOTH }
+                    ?: endpoints.firstOrNull { it.endpointType == android.telecom.CallEndpoint.TYPE_WIRED_HEADSET }
+                    ?: endpoints.firstOrNull { it.endpointType == android.telecom.CallEndpoint.TYPE_EARPIECE }
+            if (want != null) {
+                svc.requestCallEndpointChange(want, svc.mainExecutor, object : android.os.OutcomeReceiver<Void, android.telecom.CallEndpointException> {
+                    override fun onResult(r: Void?) { pending = null; changed() }
+                    override fun onError(e: android.telecom.CallEndpointException) { pending = null; changed() }
+                })
+                changed(); return
+            }
+        }
+        svc.setAudioRoute(if (on) CallAudioState.ROUTE_SPEAKER else CallAudioState.ROUTE_WIRED_OR_EARPIECE)
+        // the old way has no answer: trust the request for a moment, then go back to what Android reports
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ pending = null; changed() }, 1500)
+        changed()
+    }
+    fun setMute(m: Boolean) { muted = m; service?.setMuted(m); changed() }
     val calls = ArrayList<Call>()
     val incoming = HashMap<Call, Boolean>()
 
@@ -319,7 +365,24 @@ class InCallActivity : AppCompatActivity() {
     private lateinit var simName: TextView
     private lateinit var simRow: LinearLayout
     private var prox: PowerManager.WakeLock? = null
-    private val tick = Runnable { refresh() }
+    // every second only the timer changes (a full redraw each second could swallow a tap)
+    private val tick = Runnable { val c = top(); if (c != null && c.state == Call.STATE_ACTIVE) { state.text = "⏱ " + elapsed(c) + (if (CallRecorder.recordingNumber != null) "   🎙 Rec" else ""); who.postDelayed(tickRef, 1000) } }
+    private val tickRef: Runnable get() = tick
+    private lateinit var muteBtn: Button; private lateinit var speakerBtn: Button; private lateinit var keypadBtn: Button
+    private var lastSims = -1
+    /** ON buttons are coloured, so one tap is clearly seen to have worked */
+    private fun paintButtons() {
+        if (!::muteBtn.isInitialized) return
+        val d = resources.displayMetrics.density
+        fun paint(b: Button, on: Boolean, onColor: String, label: String, onLabel: String) {
+            b.text = if (on) onLabel else label
+            ((b.background as? android.graphics.drawable.RippleDrawable)?.getDrawable(0) as? GradientDrawable)?.setColor(Color.parseColor(if (on) onColor else "#334155"))
+            b.contentDescription = b.text
+        }
+        paint(muteBtn, CallHub.isMuted(), "#b45309", "🔇 Mute", L("🔇 Mute चालू", "🔇 Muted"))
+        paint(speakerBtn, CallHub.speakerOn(), "#16a34a", "🔊 Speaker", L("🔊 Speaker चालू", "🔊 Speaker ON"))
+        paint(keypadBtn, keypad.visibility == android.view.View.VISIBLE, "#1d4ed8", "⌨ Keypad", "⌨ Keypad")
+    }
 
     override fun onCreate(s: Bundle?) {
         super.onCreate(s)
@@ -329,8 +392,12 @@ class InCallActivity : AppCompatActivity() {
         val d = resources.displayMetrics.density
         fun btn(t: String, bg: String, f: () -> Unit) = Button(this).apply {
             text = t; textSize = 20f; setTextColor(Color.WHITE); isAllCaps = false
-            background = GradientDrawable().apply { setColor(Color.parseColor(bg)); cornerRadius = 40 * d }
-            minHeight = (72 * d).toInt(); setOnClickListener { f() }
+            // a visible "press" ripple + a small buzz, like a normal phone app (3.13.3)
+            background = android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(Color.parseColor("#55FFFFFF")),
+                GradientDrawable().apply { setColor(Color.parseColor(bg)); cornerRadius = 40 * d }, null)
+            stateListAnimator = null
+            isHapticFeedbackEnabled = true
+            minHeight = (72 * d).toInt(); setOnClickListener { performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); f() }
             layoutParams = LinearLayout.LayoutParams(0, (76 * d).toInt(), 1f).apply { setMargins((8 * d).toInt(), (8 * d).toInt(), (8 * d).toInt(), (8 * d).toInt()) }
         }
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.parseColor("#0f1218")); setPadding((16 * d).toInt(), (40 * d).toInt(), (16 * d).toInt(), (24 * d).toInt()); gravity = Gravity.CENTER_HORIZONTAL }
@@ -346,9 +413,10 @@ class InCallActivity : AppCompatActivity() {
             addView(btn(L("❌ काटें", "❌ Decline"), "#dc2626") { top()?.reject(false, null) }); addView(btn(L("✅ उठाएँ", "✅ Answer"), "#16a34a") { top()?.answer(VideoProfile.STATE_AUDIO_ONLY) }) }
         talkRow = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val r1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL
-            addView(btn("🔇 Mute", "#334155") { CallHub.service?.let { it.setMuted(!(it.callAudioState?.isMuted ?: false)) } })
-            addView(btn("🔊 Speaker", "#334155") { CallHub.service?.let { val sp = it.callAudioState?.route == CallAudioState.ROUTE_SPEAKER; it.setAudioRoute(if (sp) CallAudioState.ROUTE_WIRED_OR_EARPIECE else CallAudioState.ROUTE_SPEAKER) } })
-            addView(btn("⌨ Keypad", "#334155") { keypad.visibility = if (keypad.visibility == android.view.View.VISIBLE) android.view.View.GONE else android.view.View.VISIBLE }) }
+            muteBtn = btn("🔇 Mute", "#334155") { CallHub.setMute(!CallHub.isMuted()) }
+            speakerBtn = btn("🔊 Speaker", "#334155") { CallHub.setSpeaker(!CallHub.speakerOn()) }
+            keypadBtn = btn("⌨ Keypad", "#334155") { keypad.visibility = if (keypad.visibility == android.view.View.VISIBLE) android.view.View.GONE else android.view.View.VISIBLE; paintButtons() }
+            addView(muteBtn); addView(speakerBtn); addView(keypadBtn) }
         val r2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; addView(btn(L("📵 Call काटें", "📵 Hang up"), "#dc2626") { top()?.disconnect() }) }
         talkRow.addView(r1); talkRow.addView(r2)
         keypad = GridLayout(this).apply { columnCount = 3; visibility = android.view.View.GONE
@@ -387,6 +455,8 @@ class InCallActivity : AppCompatActivity() {
 
     /** Dual SIM with "ask every time": Android waits for the SIM choice. */
     private fun sims(c: Call) {
+        if (c.state == lastSims && simRow.childCount > 0 == (c.state == Call.STATE_SELECT_PHONE_ACCOUNT)) return // nothing changed
+        lastSims = c.state
         simRow.removeAllViews()
         if (c.state != Call.STATE_SELECT_PHONE_ACCOUNT) return
         val d = resources.displayMetrics.density
@@ -429,7 +499,10 @@ class InCallActivity : AppCompatActivity() {
         // automatic recording: every call except the "do not record" people (Settings)
         if (active && CallRecorder.recordingNumber == null && CallRecorder.wanted(this, num)) RecordService.start(this, num)
         state.text = state.text.toString() + if (CallRecorder.recordingNumber != null) "   🎙 Rec" else ""
-        prox?.let { if (active && !it.isHeld) it.acquire(3 * 60 * 60 * 1000L) else if (!active && it.isHeld) it.release() }
+        // the screen goes dark near the face only at the ear; on speaker / headset it stays on for tapping
+        val ear = active && CallHub.atEar()
+        prox?.let { if (ear && !it.isHeld) it.acquire(3 * 60 * 60 * 1000L) else if (!ear && it.isHeld) it.release() }
+        paintButtons()
         if (active) who.postDelayed(tick, 1000)
     }
     private fun elapsed(c: Call): String {

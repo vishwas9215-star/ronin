@@ -473,6 +473,20 @@ class DeviceTest {
     }
 
     @Test
+    fun callButtonsShowWhatWasTappedAtOnce() {
+        // 3.13.3 (owner: Speaker needed 2-3 taps): a tap shows its result at once, before Android confirms,
+        // and on speaker the screen must not go dark near the face (no proximity lock)
+        CallHub.pending = true
+        assertTrue(CallHub.speakerOn()); assertFalse(CallHub.atEar())
+        CallHub.pending = false
+        assertFalse(CallHub.speakerOn())
+        CallHub.pending = null
+        CallHub.muted = true; assertTrue(CallHub.isMuted())
+        CallHub.muted = false; assertFalse(CallHub.isMuted())
+        CallHub.muted = null
+    }
+
+    @Test
     fun roninCallsOpensOnRecentAndHasAKeypad() {
         if (!Parts.hasPhone(app)) return
         Parts.set(app, Parts.CALLS, true)
