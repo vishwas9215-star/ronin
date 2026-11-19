@@ -1,12 +1,12 @@
 {
  "app": "Ronin Teachers Master Data — Sultanpur",
  "code": {
-  "ver": 111,
-  "file": "code/index_111.html",
-  "sha256": "6be7566b19ce08431d23798d535c44e16696ec9b2150a48f57d001d047b07996",
-  "sig": "qx8GiKnj79PwaujNmDzZc04i+tOQzIOs2T3/Smrk/1OBD8IeF4qw/9EIfUeewYKyAioFJ6Pye0eXypwxCAJ7rA==",
-  "note": "PIN pad नीचे, ऊपर छोटे अक्षर, खोज नहीं रुकती, Backup बैनर बंद",
-  "size": 1965549
+  "ver": 112,
+  "file": "code/index_112.html",
+  "sha256": "a3818cd5569753f4528d5739d587855f8a0c4ee4e6cd51a966d42ee1ad2d739b",
+  "sig": "hjPi6gSE6w1XhaFVTCWdfu+yHlMkK+OFwxFJpwUH6tOS46WAz2pTuWJkYDrmdjSr8XVSpsyNlFlU+uuWTRQ9jQ==",
+  "note": "app वापस खुलने पर भी अपडेट जाँच; PIN pad नीचे, छोटी पट्टी, खोज नहीं रुकती",
+  "size": 1966046
  },
  "data": {
   "created": "2026-11-18",
