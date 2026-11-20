@@ -86,6 +86,7 @@ class MainActivity : AppCompatActivity() {
         @Volatile var topHost = ""
         @Volatile var isTools = false // Ronin's own PDF / Photo tools page is open in this tab
         var isPrivate = false // adult / gambling site: own cookies, no history, wiped when closed
+        var crashedAt = 0L // when its page engine was last ended (a second time within 30 s = no automatic reload)
         var claudeOrigin: String? = null // set = the "🤖 Claude" tab (his own server's live view; cookies kept, nothing injected)
     }
 
@@ -129,6 +130,7 @@ class MainActivity : AppCompatActivity() {
     private var lowered = false // the background player was set to its smallest picture (battery)
     private val httpAllowed = HashSet<String>() // sites he chose to open without https ("Open anyway"), until Ronin closes
     private var lastAsk: AlertDialog? = null
+    private var restoring = true // the tabs of the last time are being put back (not saved again one by one)
 
     private val voice = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         val text = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
@@ -182,9 +184,10 @@ class MainActivity : AppCompatActivity() {
                 select(tabs[saved.second.coerceIn(0, tabs.size - 1)])
                 if (start != null && start.startsWith("http")) openFromOutside(start)
             }
-            start != null && start.startsWith("http") -> if (isClaudeLink(start)) { newTab(HOME); openFromOutside(start) } else newTab(start)
+            start != null && start.startsWith("http") -> if (isClaudeLink(start) || Nav.claudePairingHost(start) != null) { newTab(HOME); openFromOutside(start) } else newTab(start)
             else -> newTab(HOME)
         }
+        restoring = false
         handleSpecial(intent)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -192,6 +195,12 @@ class MainActivity : AppCompatActivity() {
                 when {
                     fullView != null -> fullCallback?.onCustomViewHidden()
                     t != null && t.isTools -> leaveTools()
+                    // Ronin's error page: one Back goes past the failed address too (never back into the same error)
+                    t != null && t.failedUrl != null -> when {
+                        t.web.canGoBackOrForward(-2) -> { t.failedUrl = null; t.web.goBackOrForward(-2) }
+                        browsingTabs().size > 1 -> closeTab(t)
+                        else -> { t.failedUrl = null; load(t, HOME) }
+                    }
                     t != null && t.web.canGoBack() -> t.web.goBack()
                     browsingTabs().size > 1 && t != null -> closeTab(t)
                     else -> moveTaskToBack(true) // the song keeps playing
@@ -527,7 +536,7 @@ class MainActivity : AppCompatActivity() {
             WebSettingsCompat.setAlgorithmicDarkeningAllowed(w.settings, app.store.night)
         }
         CookieManager.getInstance().setAcceptThirdPartyCookies(w, false)
-        if (claude != null) {
+        if (claude != null && claude.startsWith("https://")) {
             // Claude's live view: no ad layer, no song tricks; its Paste button may read the clipboard, only on its own
             // host, only in the tab on screen and only within 3 s of his own tap
             if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
@@ -538,7 +547,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 WebViewCompat.addDocumentStartJavaScript(w, PageScripts.CLAUDE_PASTE, setOf(claude))
             }
-        } else if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+        } else if (claude == null && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(w, PageScripts.BACKGROUND_PLAY, PageScripts.backgroundOrigins)
             WebViewCompat.addDocumentStartJavaScript(w, adblockJs, setOf("*"))
             WebViewCompat.addDocumentStartJavaScript(w, PageScripts.KEEP_BLOBS, setOf("*"))
@@ -549,12 +558,27 @@ class MainActivity : AppCompatActivity() {
         w.setOnLongClickListener { linkMenu(t()) }
         w.setFindListener { at, n, done -> if (done && w === current?.web) findCount.text = if (n == 0) "0/0" else "${at + 1}/$n" }
         w.onPull = { armed, done ->
-            if (done) { pullBadge.visibility = View.GONE; t().let { tb -> if (tb.failedUrl != null) load(tb, tb.failedUrl!!) else tb.web.reload() } }
+            val tb = t()
+            if (tb.isTools || tb.claudeOrigin != null) pullBadge.visibility = View.GONE // tools / Claude: never by a pull
+            else if (done) { pullBadge.visibility = View.GONE; pullReload(tb) }
             else { pullBadge.visibility = if (armed) View.VISIBLE else View.GONE; if (armed) pullBadge.bringToFront() }
         }
         w.layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         return w
     }
+
+    /** Pull-to-reload: a form with typed text is never thrown away without one question. */
+    fun pullReload(tb: Tab) {
+        if (tb.failedUrl != null) { load(tb, tb.failedUrl!!); return }
+        tb.web.evaluateJavascript(PageScripts.HAS_TYPED_TEXT) { r ->
+            if (r != "true") tb.web.reload()
+            else showAsk(AlertDialog.Builder(this).setTitle(L("Page फिर से खोलें?", "Reload this page?"))
+                .setMessage(L("इस page के form में आपका लिखा text मिट जाएगा।", "The text you typed into this page's form will be lost."))
+                .setPositiveButton(L("हाँ, reload", "Yes, reload")) { _, _ -> tb.web.reload() }
+                .setNegativeButton(L("नहीं", "No"), null))
+        }
+    }
+    fun pullReloadForTest() { current?.let { pullReload(it) } }
 
     private val adblockJs: String by lazy { assets.open("ronin/inject_adblock.js").bufferedReader().readText() }
     /** url "" = an empty tab (a page fills it: new window); lazy = the page loads when the tab is first shown. */
@@ -571,6 +595,7 @@ class MainActivity : AppCompatActivity() {
         else if (url.isNotEmpty()) load(tab, url)
         if (select || (current == null && !lazy)) select(tab)
         updateTabsButton()
+        if (!restoring) saveTabs()
         return tab
     }
 
@@ -605,6 +630,7 @@ class MainActivity : AppCompatActivity() {
         }
         val rest = browsingTabs()
         if (rest.isEmpty()) newTab(HOME) else if (current == t) select(rest[(minOf(i, rest.size) - 1).coerceAtLeast(0)])
+        saveTabs()
         updateTabsButton()
     }
 
@@ -689,7 +715,7 @@ class MainActivity : AppCompatActivity() {
         // a site he already chose to open without https ("Open anyway") stays http
         if (typed.startsWith("http://", ignoreCase = true) && Rules.hostOf(typed) in httpAllowed) { load(t, typed); return }
         val url = Omnibox.resolve(text) ?: return
-        load(t, url)
+        load(t, url, typed = true)
         // https first; if the site has no https, Ronin's error page offers the plain address (never for banks)
         if (url.startsWith("https://") && !typed.startsWith("https://", ignoreCase = true) && !url.startsWith("https://www.google.com/search?"))
             t.httpFallback = "http://" + url.substring(8)
@@ -703,13 +729,24 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, L("🕶 Private tab: इसकी history और cookies save नहीं होंगी", "🕶 Private tab: its history and cookies are not saved"), Toast.LENGTH_SHORT).show()
     }
 
-    fun load(t: Tab, url0: String) {
+    /** typed = he typed / spoke this address himself (only then may a pairing link name a NEW Claude server). */
+    fun load(t: Tab, url0: String, typed: Boolean = false) {
+        // the Claude tab shows only Claude's own pages: anything else opens in a normal tab with all checks
+        if (t.claudeOrigin != null && !isUnderClaude(url0, t)) { newTab(url0); return }
         t.pending = null; t.httpFallback = null; t.failedUrl = null
         // Family Filter: SafeSearch also for searches typed or spoken in the address bar (not only for links)
-        val url = (if (Family.adultBlocked(this)) Family.safeSearch(url0) else null) ?: url0
+        var url = (if (Family.adultBlocked(this)) Family.safeSearch(url0) else null) ?: url0
         // Claude's browser: its pairing link and its pages always open in the Claude tab
-        Nav.claudePairingHost(url)?.let { h -> if (t.claudeOrigin != "https://$h") { pairClaude(h, url); return } }
-        if (t.claudeOrigin == null && url.startsWith(claudeOrigin() + "/")) { openClaude(url); return }
+        Nav.claudePairingHost(url)?.let { h ->
+            if ("https://$h" == claudeOrigin()) { if (t.claudeOrigin == null) { openClaude(url); return } }
+            else if (typed) { pairClaude(h, url); return } // a NEW server only from his own typing (or another app's link)
+        }
+        if (t.claudeOrigin == null && isClaudeLink(url)) { openClaude(url); return }
+        // https first for every address (links, bookmarks, history too), unless he chose "Open anyway" for that site
+        if (url.startsWith("http://", ignoreCase = true)) {
+            val h = Rules.hostOf(url)
+            if (!Nav.isLocalHost(h) && h !in httpAllowed) { t.httpFallback = url; url = "https://" + url.substring(7) }
+        }
         if (Sensitive.site(url) && Family.adultBlocked(this)) { blockAdult(t, url); return }
         if (!t.isPrivate && Sensitive.site(url)) { openPrivate(url, t); return }
         if (url.startsWith(TOOLS)) {
@@ -727,10 +764,17 @@ class MainActivity : AppCompatActivity() {
         }
         if (openSafeMoneyIfBank(url)) return
         if (!neutralUa(url)) t.web.settings.userAgentString = uaForTab(t, url)
+        val fallback = t.httpFallback
         t.url = url
         t.topHost = Rules.hostOf(url)
         siteSettings(t.web, url)
         t.web.loadUrl(url)
+        t.httpFallback = fallback
+    }
+
+    private fun isUnderClaude(url: String, t: Tab): Boolean {
+        val o = t.claudeOrigin ?: return false
+        return o.isNotEmpty() && url.startsWith("$o/")
     }
 
     /** Per site: text size (A− / A+) and whether sound / video may start without a tap (only the song sites). */
@@ -805,15 +849,16 @@ class MainActivity : AppCompatActivity() {
                     httpAllowed.add(Rules.hostOf(fb))
                     load(t, fb)
                     Toast.makeText(this@MainActivity, L("⚠ यह साइट सुरक्षित (https) नहीं है: password, OTP या card नंबर न डालें", "⚠ This site is not secure (no https): never type a password, OTP or card number"), Toast.LENGTH_LONG).show()
-                } else load(t, t.failedUrl ?: t.url)
+                } else if (t.claudeOrigin != null) openClaude() // the Claude tab reloads Claude's live view (or says "not paired")
+                else load(t, t.failedUrl ?: t.url)
                 return true
             }
             if (req.isForMainFrame) {
                 val t = tab()
-                Nav.claudePairingHost(url)?.let { h -> if (t.claudeOrigin != "https://$h") { pairClaude(h, url); return true } }
-                if (t.claudeOrigin == null && url.startsWith(claudeOrigin() + "/")) { openClaude(url); return true }
+                // only HIS saved Claude server goes to the Claude tab; an unknown /k/ link on a page is a normal link
+                if (t.claudeOrigin == null && isClaudeLink(url)) { openClaude(url); return true }
                 // a link to another site from Claude's view opens in a normal tab (with all of Ronin's checks)
-                if (t.claudeOrigin != null && !url.startsWith(t.claudeOrigin + "/") && (scheme == "http" || scheme == "https")) { newTab(url); return true }
+                if (t.claudeOrigin != null && !isUnderClaude(url, t) && (scheme == "http" || scheme == "https")) { newTab(url); return true }
             }
             if (req.isForMainFrame && Sensitive.site(url) && Family.adultBlocked(this@MainActivity)) { blockAdult(tab(), url); return true }
             if (req.isForMainFrame && Family.adultBlocked(this@MainActivity) && Family.safeSearch(url) != null) { view.loadUrl(Family.safeSearch(url)!!); return true }
@@ -962,12 +1007,16 @@ class MainActivity : AppCompatActivity() {
         old.destroy()
         if (t !in tabs || t.web !== old) return
         if (t == mediaTab) { mediaTab = null; mediaPlaying = false; MediaPlaybackService.stop(this) }
-        val w = makeWebView({ t }, t.isPrivate)
+        val w = makeWebView({ t }, t.isPrivate, t.claudeOrigin)
         t.web = w
         holder.addView(w, if (i >= 0) i else holder.indexOfChild(pullBadge).coerceAtLeast(0))
         w.visibility = if (t == current) View.VISIBLE else View.GONE
         val url = if (t.isTools) TOOLS else t.url.ifEmpty { HOME }
-        if (t == current) load(t, url) else { t.pending = url; t.url = url }
+        val again = System.currentTimeMillis() - t.crashedAt < 30_000
+        t.crashedAt = System.currentTimeMillis()
+        // the same page broke the engine twice in 30 s: no endless reload, Ronin's page with a Reload button instead
+        if (again && url.startsWith("http")) { t.url = url; showErrorPage(t, url, L("यह page बार-बार बंद हो रहा है", "This page keeps closing"), offerHttp = false) }
+        else if (t == current) load(t, url) else { t.pending = url; t.url = url }
         if (System.currentTimeMillis() - recoveredAt > 5000) {
             recoveredAt = System.currentTimeMillis()
             Toast.makeText(this, L("Memory कम थी: page फिर से खोला गया", "Memory was low: the page was opened again"), Toast.LENGTH_LONG).show()
@@ -976,10 +1025,12 @@ class MainActivity : AppCompatActivity() {
 
     /** Ronin's error page: Reload (big), and "Open anyway" when the site has no https (never for a bank). */
     private fun showErrorPage(t: Tab, url: String, why: String, offerHttp: Boolean = true) {
-        val fb = t.httpFallback?.takeIf { offerHttp && Rules.hostOf(it) == Rules.hostOf(url) && app.rules.classify(url, app.store.userBanks).let { k -> k != Kind.BANK && k != Kind.PAYMENT } }
+        val fb = t.httpFallback?.takeIf { offerHttp && Rules.hostOf(it) == Rules.hostOf(url) && app.rules.classify(url, app.store.userBanks).let { k -> k != Kind.BANK && k != Kind.PAYMENT && k != Kind.AUTH } }
         t.failedUrl = url
         val h = android.text.TextUtils.htmlEncode(Rules.hostOf(url))
-        val http = if (fb == null) "" else "<p class=m>" + L("यह साइट https (सुरक्षित तरीका) नहीं देती।", "This site does not offer https (the secure way).") +
+        val note = if (why == "SSL") L("इस साइट का सुरक्षा certificate सही नहीं है। यह साइट का पुराना पता हो सकता है, या कोई बीच में बात सुन रहा हो।", "This site's security certificate is not valid. It may be an old address, or someone may be listening in.")
+            else L("यह साइट https (सुरक्षित तरीका) नहीं देती।", "This site does not offer https (the secure way).")
+        val http = if (fb == null) "" else "<p class=m>" + note +
             "</p><a id=http class=g href=\"$HTTP_LINK?k=$pageKey\">" + L("फिर भी खोलें (असुरक्षित)", "Open anyway (not secure)") + "</a>"
         val html = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${L("Page नहीं खुला", "Page did not open")}</title>
 <style>body{margin:0;background:#14171f;color:#e8eaf0;font:17px sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center}
@@ -993,7 +1044,8 @@ a{display:block;margin:16px auto 0;max-width:340px;padding:18px;border-radius:14
 
     // ---- 🤖 Claude: Claude's own browser on his server, seen live in one tab ------------------------------
 
-    private fun claudeOrigin() = "https://" + Rules.hostOf(app.store.claudeViewUrl)
+    /** "https://host" of his paired Claude server, or "" before the first pairing. */
+    private fun claudeOrigin() = app.store.claudeViewUrl.let { if (it.isEmpty()) "" else "https://" + Rules.hostOf(it) }
 
     /** Opens (or shows) the one Claude tab; url = a page of Claude's host (pairing link), else the saved live view. */
     fun openClaude(url: String? = null) {
@@ -1004,10 +1056,11 @@ a{display:block;margin:16px auto 0;max-width:340px;padding:18px;border-radius:14
         if (t == null) {
             t = newTab("", select = true, claude = origin)
             t.title = "Claude"
-            load(t, url ?: view)
+            if (view.isEmpty()) showClaudeDown(t, "", notPaired = true) else load(t, url ?: view)
         } else {
             select(t)
-            if (url != null || !t.url.startsWith("$origin/")) load(t, url ?: view)
+            if (view.isEmpty()) showClaudeDown(t, "", notPaired = true)
+            else if (url != null || !t.url.startsWith("$origin/")) load(t, url ?: view)
         }
         updateTabsButton()
     }
@@ -1021,7 +1074,8 @@ a{display:block;margin:16px auto 0;max-width:340px;padding:18px;border-radius:14
             .setNegativeButton(L("नहीं", "No"), null))
     }
 
-    private fun isClaudeLink(u: String) = Nav.claudePairingHost(u) != null || u.startsWith(claudeOrigin() + "/")
+    /** A page of HIS saved Claude server (never of another host). */
+    private fun isClaudeLink(u: String) = claudeOrigin().isNotEmpty() && u.startsWith(claudeOrigin() + "/")
 
     /** A link from another app (Telegram...): Claude's links go to the Claude tab, everything else to a new tab. */
     private fun openFromOutside(u: String) {
@@ -1040,7 +1094,7 @@ a{display:block;margin:16px auto 0;max-width:340px;padding:18px;border-radius:14
 
     /** Claude's server is off / unreachable, or this device is not paired yet: one simple page with Reload. */
     private fun showClaudeDown(t: Tab, url: String, notPaired: Boolean) {
-        t.failedUrl = if (url.contains("/k/")) app.store.claudeViewUrl else url // a pairing key works only once
+        t.failedUrl = (if (url.contains("/k/") || url.isEmpty()) app.store.claudeViewUrl else url).ifEmpty { null } // a pairing key works only once
         val why = if (notPaired) L("यह tablet अभी जुड़ा नहीं है: Telegram में आया 📺 live-view link Ronin में एक बार खोलें।", "This device is not paired yet: open the 📺 live-view link from Telegram in Ronin once.")
             else L("Server पर Claude का browser बंद है या पहुँच से बाहर है। Claude से काम कहने पर यह अपने-आप चालू होता है।", "Claude's browser on the server is off or cannot be reached. It starts by itself when you ask Claude for a task.")
         val html = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Claude</title>
@@ -1056,11 +1110,15 @@ a{display:block;margin:20px auto 0;max-width:340px;padding:18px;border-radius:14
     fun claudeIsCurrentForTest() = current?.claudeOrigin != null
     fun timersPausedForTest() = timersPaused
     fun mediaTabIsClaudeForTest() = mediaTab?.claudeOrigin != null
+    fun pageLinkForTest(url: String) { current?.let { it.web.evaluateJavascript("location.href=" + JSONObject.quote(url), null) } }
     fun loadClaudeHtmlForTest(html: String) {
-        openClaude()
-        val t = current ?: return
+        val origin = claudeOrigin()
+        val t = tabs.firstOrNull { it.claudeOrigin == origin } ?: newTab("", select = true, claude = origin)
+        select(t)
+        t.url = app.store.claudeViewUrl
         t.web.loadDataWithBaseURL(app.store.claudeViewUrl, html, "text/html", "utf-8", null)
     }
+    fun loadForTest(url: String) { current?.let { load(it, url) } }
 
     private fun askOutside(url: String, view: WebView) {
         val shown = url.substringBefore('#').take(70)
@@ -1073,6 +1131,7 @@ a{display:block;margin:20px auto 0;max-width:340px;padding:18px;border-radius:14
     /** Shows a question, never on a closed screen; the tests can find the last one. */
     private fun showAsk(b: AlertDialog.Builder): AlertDialog? {
         if (isFinishing || isDestroyed) return null
+        if (lastAsk?.isShowing == true) return null // one question at a time (a page cannot pile them up)
         return b.show().also { lastAsk = it }
     }
     fun lastAskForTest(): AlertDialog? = lastAsk
@@ -1123,9 +1182,11 @@ a{display:block;margin:20px auto 0;max-width:340px;padding:18px;border-radius:14
                     askMedia.launch(perms)
                 }
                 val what = if (wanted.size == 2) L("camera और microphone", "camera and microphone") else if (perms[0] == Manifest.permission.CAMERA) "camera" else "microphone"
-                if (call || host in app.store.mediaSites) ask() else showAsk(AlertDialog.Builder(this@MainActivity)
+                // remembered per site AND per device: "microphone yes" never means "camera yes"
+                val keys = wanted.map { host + "|" + (if (it == PermissionRequest.RESOURCE_AUDIO_CAPTURE) "microphone" else "camera") }
+                if (call || app.store.mediaSites.containsAll(keys)) ask() else showAsk(AlertDialog.Builder(this@MainActivity)
                     .setMessage(L("$host आपका $what इस्तेमाल करना चाहता है।\n(हाँ कहने पर Ronin इस साइट के लिए याद रखेगा)", "$host wants to use your $what.\n(If you allow it, Ronin remembers this site)"))
-                    .setPositiveButton(L("हाँ", "Allow")) { _, _ -> app.store.mediaSites = app.store.mediaSites + host; ask() }
+                    .setPositiveButton(L("हाँ", "Allow")) { _, _ -> app.store.mediaSites = app.store.mediaSites + keys; ask() }
                     .setNegativeButton(L("नहीं", "Block")) { _, _ -> req.deny() }
                     .setOnCancelListener { req.deny() }) // Back / a tap outside = no
                     ?: req.deny()
@@ -1146,7 +1207,7 @@ a{display:block;margin:20px auto 0;max-width:340px;padding:18px;border-radius:14
 
         override fun onCloseWindow(window: WebView) {
             val t = tab()
-            if (t in tabs && t.web === window) closeTab(t, undo = false)
+            if (t in tabs && t.web === window) closeTab(t, undo = true)
         }
 
         override fun onShowCustomView(view: View, cb: CustomViewCallback) {
@@ -1567,9 +1628,10 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     /** A file the page made itself as a data: address (many government portals do this). */
     private fun saveDataUrl(url: String, name: String) {
         kotlin.concurrent.thread(name = "ronin-data-dl") {
-            val d = Nav.decodeDataUrl(url)
+            val d = try { Nav.decodeDataUrl(url) } catch (e: Throwable) { null }
             val file = Nav.cleanFileName(name, d?.first ?: "")
-            val uri = try { if (d == null) null else saveToDownloads(file, d.first, d.second) } catch (e: Exception) { null }
+            if (Nav.isAppFile(file, d?.first ?: "")) { runOnUiThread { refuseApp() }; return@thread }
+            val uri = try { if (d == null) null else saveToDownloads(file, d.first, d.second) } catch (e: Throwable) { null }
             runOnUiThread { downloadDone(file, uri, d?.first ?: "") }
         }
     }
@@ -1579,7 +1641,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         Toast.makeText(this, L("File save हो रही है...", "Saving the file..."), Toast.LENGTH_SHORT).show()
         val q = JSONObject.quote(url)
         t.web.evaluateJavascript("(function(u,n){window.__roninDl={s:'reading'};if(!n){var a=[].filter.call(document.querySelectorAll('a[download]'),function(x){return x.href===u})[0];if(a)n=a.getAttribute('download')||''}" +
-            "fetch(u).then(function(r){return r.blob()}).then(function(b){if(b.size>150*1024*1024)throw new Error('too big');var f=new FileReader();" +
+            "fetch(u).then(function(r){return r.blob()}).then(function(b){if(b.size>30*1024*1024)throw new Error('too big');var f=new FileReader();" +
             "f.onload=function(){var s=String(f.result),d=s.slice(s.indexOf(',')+1);window.__roninDl={s:'ok',m:b.type||'',f:n,d:d,n:Math.ceil(d.length/524288)}};" +
             "f.onerror=function(){window.__roninDl={s:'failed'}};f.readAsDataURL(b)}).catch(function(e){window.__roninDl={s:'failed',e:String(e)}});return 1})($q," + JSONObject.quote(name) + ")", null)
         val b64 = StringBuilder()
@@ -1588,7 +1650,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             if (i == n) {
                 t.web.evaluateJavascript("delete window.__roninDl", null)
                 kotlin.concurrent.thread(name = "ronin-blob-dl") {
-                    val uri = try { saveToDownloads(file, mime, android.util.Base64.decode(b64.toString(), android.util.Base64.DEFAULT)) } catch (e: Exception) { null }
+                    val uri = try { saveToDownloads(file, mime, android.util.Base64.decode(b64.toString(), android.util.Base64.DEFAULT)) } catch (e: Throwable) { null } // also OutOfMemoryError
                     runOnUiThread { downloadDone(file, uri, mime) }
                 }
                 return
@@ -1604,12 +1666,22 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                 val o = try { JSONObject(jsString(raw)) } catch (e: Exception) { JSONObject() }
                 when (o.optString("s")) {
                     "reading" -> if (tries < 240) ui.postDelayed({ poll(tries + 1) }, 500) else fail()
-                    "ok" -> { val mime = o.optString("m"); part(0, o.optInt("n"), Nav.cleanFileName(o.optString("f").ifEmpty { name }, mime), mime.ifEmpty { "application/octet-stream" }) }
+                    "ok" -> {
+                        val mime = o.optString("m"); val file = Nav.cleanFileName(o.optString("f").ifEmpty { name }, mime)
+                        // an app file made inside a page never skips the .apk warning: it is not saved at all
+                        if (Nav.isAppFile(file, mime)) { t.web.evaluateJavascript("delete window.__roninDl", null); refuseApp() }
+                        else part(0, o.optInt("n"), file, mime.ifEmpty { "application/octet-stream" })
+                    }
                     else -> fail()
                 }
             }
         }
         ui.postDelayed({ poll(0) }, 300)
+    }
+
+    private fun refuseApp() {
+        if (isFinishing || isDestroyed) return
+        Toast.makeText(this, L("⛔ Page के अंदर बनी app file (.apk) save नहीं होती। Apps सिर्फ़ Play Store से लें।", "⛔ An app file (.apk) made inside a page is not saved. Get apps only from the Play Store."), Toast.LENGTH_LONG).show()
     }
 
     private fun downloadDone(name: String, uri: Uri?, mime: String) {
@@ -1703,7 +1775,8 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                 t.web.evaluateJavascript(PageScripts.MEDIA_STATE) { r -> onMediaState(t, r) }
             }
             // battery: every 3 s on screen, 2 s while a song plays in the background, 5 s when it is paused
-            val next = if (onScreen) 3000L else if (mediaPlaying) 2000L else 5000L
+            // until a song is found: every 1 s on screen (its card shows quickly); then 3 s on screen, 2 s playing, 5 s paused
+            val next = if (onScreen) (if (mediaTab == null) 1000L else 3000L) else if (mediaPlaying) 2000L else 5000L
             if (mediaTab != null || onScreen) ui.postDelayed(this, next) // closed and nothing playing: stop checking
         }
     }
@@ -1832,7 +1905,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     /** The menu: slides up from the bottom (thumb), big buttons for every day, short groups for the rest. */
     private fun showMenu(@Suppress("UNUSED_PARAMETER") anchor: View) {
         val t = current
-        val web = t != null && t.url.startsWith("http")
+        val web = t != null && t.url.startsWith("http") && t.claudeOrigin == null // the Claude tab: no share / bookmark of its page
         val on = L("चालू", "ON"); val off = L("बंद", "OFF")
         val bigs = ArrayList<Sheet.Big>()
         bigs.add(Sheet.Big("＋", L("नया tab", "New tab"), "m-newtab", "#1D4ED8") { newTab(HOME) })
@@ -1845,7 +1918,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                 Toast.makeText(this, if (added) L("Bookmark बन गया", "Bookmark saved") else L("Bookmark हटा", "Bookmark removed"), Toast.LENGTH_SHORT).show()
             })
             bigs.add(Sheet.Big("🔊", L("पढ़कर सुनाएँ", "Read aloud"), "m-read", "#7C3AED") { startReading() })
-            bigs.add(Sheet.Big("⟳", L("Reload", "Reload"), "m-reload", "#334155") { t.web.reload() })
+            bigs.add(Sheet.Big("⟳", L("Reload", "Reload"), "m-reload", "#334155") { if (t.failedUrl != null) load(t, t.failedUrl!!) else t.web.reload() })
             if (t.web.canGoForward()) bigs.add(Sheet.Big("→", L("आगे", "Forward"), "m-forward", "#334155") { t.web.goForward() })
             bigs.add(Sheet.Big("↗", L("भेजें", "Share"), "m-share", "#15803D") { shareText(t.url, t.title) })
             bigs.add(Sheet.Big("🔍", L("Page में खोजें", "Find in page"), "m-find", "#334155") { openFind() })
@@ -1937,7 +2010,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
      * when something would be lost: text typed into a form, a private tab, or a song that plays.
      */
     private fun safeRecreate(change: () -> Unit) {
-        val web = browsingTabs().filter { it.url.startsWith("http") && it.pending == null }
+        val web = tabs.filter { (it.url.startsWith("http") || it.isTools) && it.pending == null }
         var left = web.size
         var typed = false
         val decide = {
@@ -1945,10 +2018,10 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             if (typed) lose.add(L("form में लिखा text", "text typed into a form"))
             if (tabs.any { it.isPrivate }) lose.add(L("private tabs", "private tabs"))
             if (mediaPlaying) lose.add(L("चलता गाना", "the song that plays"))
-            if (lose.isEmpty()) { change(); recreate() }
+            if (lose.isEmpty()) { releaseMedia(); change(); recreate() }
             else showAsk(AlertDialog.Builder(this).setTitle(L("Screen फिर से बनेगी", "Ronin redraws its screen"))
                 .setMessage(L("Tabs वापस आ जाएँगे, पर ये खो जाएँगे: ", "Your tabs come back, but these are lost: ") + lose.joinToString(", ") + L("\n\nअभी बदलें?", "\n\nChange it now?"))
-                .setPositiveButton(L("हाँ, बदलें", "Yes, change")) { _, _ -> change(); recreate() }
+                .setPositiveButton(L("हाँ, बदलें", "Yes, change")) { _, _ -> releaseMedia(); change(); recreate() } // the song's card goes with its page
                 .setNegativeButton(L("बाद में", "Later"), null))
         }
         if (left == 0) { decide(); return }
@@ -1970,7 +2043,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                 Sheet.Row("🏦", h, "✕", "#1D4ED8", "r-bank") { app.store.userBanks = app.store.userBanks - h; Toast.makeText(this, L("हटाया: $h", "Removed: $h"), Toast.LENGTH_SHORT).show() }
             })
             .group(L("Camera / microphone", "Camera / microphone"), media.map { h ->
-                Sheet.Row("🎙", h, "✕", "#334155", "r-media") { app.store.mediaSites = app.store.mediaSites - h; Toast.makeText(this, L("हटाया: $h", "Removed: $h"), Toast.LENGTH_SHORT).show() }
+                Sheet.Row(if (h.endsWith("|camera")) "📷" else "🎙", h.replace("|", " · "), "✕", "#334155", "r-media") { app.store.mediaSites = app.store.mediaSites - h; Toast.makeText(this, L("हटाया: $h", "Removed: $h"), Toast.LENGTH_SHORT).show() }
             }).show()
     }
     fun menuSheetForTest() = menuSheet

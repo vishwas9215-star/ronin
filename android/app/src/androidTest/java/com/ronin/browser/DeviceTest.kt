@@ -696,6 +696,11 @@ class DeviceTest {
             Thread.sleep(1000)
             eval(sc, "document.getElementById('b').click(),1")
             assertTrue("blob: file not saved", waitFor(25) { recentDownloads(before, "ronin_dl_blob").any { it.second > 5 } })
+            // an app file (.apk) made inside a page never gets past the app warning: not saved at all
+            eval(sc, "var x=document.createElement('a');x.href='data:application/octet-stream;base64,UEsDBA==';x.download='ronin_dl_app.apk';document.body.appendChild(x);x.click();" +
+                "var y=document.createElement('a');y.href=URL.createObjectURL(new Blob(['PK'],{type:'application/vnd.android.package-archive'}));y.download='ronin_dl_app2.apk';document.body.appendChild(y);setTimeout(function(){y.click()},1500);1")
+            Thread.sleep(8000)
+            assertTrue("an .apk from inside a page was saved", recentDownloads(before, "ronin_dl_app").isEmpty())
         }
     }
 
@@ -919,30 +924,42 @@ class DeviceTest {
 
     // ---- 🤖 Claude tab ----------------------------------------------------------------------
 
+    private val claudeTest = "https://claude-test.invalid/view" // a name that never resolves: quick, no real server needed
+
     @Test
     fun claudeButtonOpensTheClaudeTab() {
+        val store = (app.applicationContext as RoninApp).store
         ActivityScenario.launch(MainActivity::class.java).use { sc ->
             Thread.sleep(1500)
             if (app.resources.configuration.smallestScreenWidthDp >= 600) sc.onActivity { a -> assertNotNull("no 🤖 Claude button on the tablet bar", findTag(a.window.decorView, "claude-top")) }
+            // not paired yet: no server is guessed, the tab says how to pair
             sc.onActivity { a -> a.showMenuForTest() }
             Thread.sleep(800)
             sc.onActivity { a -> findTag(a.menuSheetForTest()!!.window!!.decorView, "m-claude")!!.performClick() }
-            var url: String? = null; var n = 0
-            sc.onActivity { a -> url = a.claudeUrlForTest(); n = a.tabUrlsForTest().size; assertTrue(a.claudeIsCurrentForTest()) }
-            assertEquals(Nav.CLAUDE_VIEW_DEFAULT, url)
-            // a second press shows the same tab, never a second one
-            sc.onActivity { a -> a.openClaude() }
-            sc.onActivity { a -> assertEquals(n, a.tabUrlsForTest().size) }
-            // server unreachable: one simple Hindi / English page with Reload (a name that never resolves, so it is quick)
-            val store = (app.applicationContext as RoninApp).store
-            store.claudeViewUrl = "https://claude-test.invalid/view"
+            sc.onActivity { a -> assertTrue(a.claudeIsCurrentForTest()) }
+            assertTrue("no 'not paired' page: " + pageText(sc).take(200), waitFor(15) { pageText(sc).contains(L("जुड़ा नहीं", "not paired")) })
+            shot("26-claude-not-paired")
+            var n = 0
+            sc.onActivity { a -> n = a.tabUrlsForTest().size }
+            // paired, server unreachable: one simple Hindi / English page with Reload, still one Claude tab
+            store.claudeViewUrl = claudeTest
             try {
                 sc.onActivity { a -> a.openClaude() }
+                var url: String? = null
+                sc.onActivity { a -> url = a.claudeUrlForTest(); assertEquals("a moved server left an old Claude tab", n, a.tabUrlsForTest().size) }
+                assertEquals(claudeTest, url)
                 assertTrue("no 'not on' page: " + pageText(sc).take(200), waitFor(25) { pageText(sc).contains(L("Claude का browser अभी चालू नहीं", "Claude's browser is not on right now")) })
                 assertEquals("1", eval(sc, "document.getElementById('reload')?1:0"))
                 shot("26-claude-not-on")
-                sc.onActivity { a -> assertEquals("the moved server left an old Claude tab", n, a.tabUrlsForTest().size) }
-            } finally { store.claudeViewUrl = Nav.CLAUDE_VIEW_DEFAULT }
+                sc.onActivity { a -> a.openClaude() }
+                sc.onActivity { a -> assertEquals("a second press made a second Claude tab", n, a.tabUrlsForTest().size) }
+                // the Claude tab never loads another site: that opens in a normal tab
+                sc.onActivity { a -> a.go("https://example.com/from-claude-tab") }
+                var urls = emptyList<String>()
+                sc.onActivity { a -> urls = a.tabUrlsForTest(); url = a.claudeUrlForTest() }
+                assertTrue("other site not in its own tab: $urls", urls.contains("https://example.com/from-claude-tab"))
+                assertEquals("the Claude tab was taken over", claudeTest, url)
+            } finally { store.claudeViewUrl = "" }
         }
     }
 
@@ -952,7 +969,7 @@ class DeviceTest {
         val key = "ab".repeat(24)
         ActivityScenario.launch(MainActivity::class.java).use { sc ->
             Thread.sleep(1500)
-            // a new host is asked about once
+            // typed by him: a new host is asked about once
             sc.onActivity { a -> a.go("https://1-2-3-4.sslip.io/k/$key") }
             Thread.sleep(500)
             sc.onActivity { a -> val d = a.lastAskForTest(); assertTrue("no question for a new Claude host", d?.isShowing == true); d!!.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick() }
@@ -962,51 +979,104 @@ class DeviceTest {
             var url: String? = null
             sc.onActivity { a -> url = a.claudeUrlForTest() }
             assertTrue("pairing link not opened in the Claude tab: $url", url!!.startsWith("https://1-2-3-4.sslip.io/"))
+            // a link inside a web page can never re-point Claude (anyone can make a *.sslip.io name)
+            sc.onActivity { a -> a.newTab("https://example.com/", select = true, lazy = true) }
+            sc.onActivity { a -> a.pageLinkForTest("https://5-6-7-8.sslip.io/k/$key") }
+            Thread.sleep(1500)
+            sc.onActivity { a -> assertFalse("a page link asked to change Claude", a.lastAskForTest()?.isShowing == true) }
+            assertEquals("https://1-2-3-4.sslip.io/view", store.claudeViewUrl)
             // a look-alike link from elsewhere never becomes Claude
             sc.onActivity { a -> a.go("https://evil.example/k/$key") }
             Thread.sleep(500)
             assertEquals("https://1-2-3-4.sslip.io/view", store.claudeViewUrl)
+            // a link from another app (Telegram) may name a new server: asked first
+            app.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://9-9-9-9.sslip.io/k/$key"), app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            assertTrue("a link from another app was not asked about", waitFor(10) { var s = false; sc.onActivity { a -> s = a.lastAskForTest()?.isShowing == true }; s })
+            sc.onActivity { a -> a.lastAskForTest()?.dismiss() }
+            assertEquals("https://1-2-3-4.sslip.io/view", store.claudeViewUrl)
         }
-        store.claudeViewUrl = Nav.CLAUDE_VIEW_DEFAULT
+        store.claudeViewUrl = ""
     }
 
     @Test
     fun claudeTabRestsWhenRoninIsInTheBackground() {
-        ActivityScenario.launch(MainActivity::class.java).use { sc ->
-            Thread.sleep(1500)
-            sc.onActivity { a -> a.loadClaudeHtmlForTest("<html><body><h1>Claude view test</h1><script>window.__vis=[];document.addEventListener('visibilitychange',function(){__vis.push(document.visibilityState)})</script></body></html>") }
-            Thread.sleep(1500)
-            assertEquals("false", eval(sc, "document.hidden"))
-            androidx.test.uiautomator.UiDevice.getInstance(inst).pressHome()
-            Thread.sleep(2500)
-            var paused = false; var media = true
-            sc.onActivity { a -> paused = a.timersPausedForTest(); media = a.mediaTabIsClaudeForTest() }
-            assertTrue("page timers still running with Ronin in the background", paused)
-            assertFalse("the Claude tab became the background player", media)
-            // back to Ronin the way he does it (its icon): the same screen comes to the front
-            app.startActivity(Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            assertTrue("Ronin did not come back", waitFor(15) { sc.state == Lifecycle.State.RESUMED })
-            Thread.sleep(1500)
-            assertTrue("the page was never told it is hidden: " + eval(sc, "JSON.stringify(window.__vis)"), eval(sc, "JSON.stringify(window.__vis)").contains("hidden"))
-        }
+        val store = (app.applicationContext as RoninApp).store
+        store.claudeViewUrl = claudeTest
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { sc ->
+                Thread.sleep(1500)
+                sc.onActivity { a -> a.loadClaudeHtmlForTest("<html><body><h1>Claude view test</h1><script>window.__vis=[];document.addEventListener('visibilitychange',function(){__vis.push(document.visibilityState)})</script></body></html>") }
+                Thread.sleep(1500)
+                assertEquals("false", eval(sc, "document.hidden"))
+                androidx.test.uiautomator.UiDevice.getInstance(inst).pressHome()
+                Thread.sleep(2500)
+                var paused = false; var media = true
+                sc.onActivity { a -> paused = a.timersPausedForTest(); media = a.mediaTabIsClaudeForTest() }
+                assertTrue("page timers still running with Ronin in the background", paused)
+                assertFalse("the Claude tab became the background player", media)
+                // back to Ronin the way he does it (its icon): the same screen comes to the front
+                app.startActivity(Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                assertTrue("Ronin did not come back", waitFor(15) { sc.state == Lifecycle.State.RESUMED })
+                Thread.sleep(1500)
+                assertTrue("the page was never told it is hidden: " + eval(sc, "JSON.stringify(window.__vis)"), eval(sc, "JSON.stringify(window.__vis)").contains("hidden"))
+            }
+        } finally { store.claudeViewUrl = "" }
     }
 
     @Test
     fun claudePasteReadsTheClipboardOnlyAfterATap() {
+        val store = (app.applicationContext as RoninApp).store
+        store.claudeViewUrl = claudeTest
         inst.runOnMainSync { (app.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("t", "Ronin paste test")) }
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { sc ->
+                Thread.sleep(1500)
+                sc.onActivity { a -> a.loadClaudeHtmlForTest("<html><body style='margin:0'><button id=p style='width:100%;height:400px;font-size:30px' onclick=\"navigator.clipboard.readText().then(function(s){window.__got=s},function(){window.__got='no'})\">Paste</button></body></html>") }
+                Thread.sleep(1500)
+                // the page by itself (no tap): nothing
+                eval(sc, "navigator.clipboard.readText().then(function(s){window.__self=s},function(){window.__self='no'}),1")
+                assertTrue(waitFor(5) { eval(sc, "window.__self||''") == "\"no\"" })
+                // his tap on the page's Paste button: the text arrives
+                noSystemDialogs()
+                val loc = IntArray(2); var w = 0
+                sc.onActivity { a -> a.webForTest().getLocationOnScreen(loc); w = a.webForTest().width }
+                androidx.test.uiautomator.UiDevice.getInstance(inst).click(loc[0] + w / 2, loc[1] + 200)
+                assertTrue("Paste after a tap got: " + eval(sc, "window.__got||''"), waitFor(8) { eval(sc, "window.__got||''") == "\"Ronin paste test\"" })
+            }
+        } finally { store.claudeViewUrl = "" }
+    }
+
+    // ---- QA round (21 Nov) ----------------------------------------------------------------------
+
+    @Test
+    fun pullToReloadAsksBeforeLosingATypedForm() {
         ActivityScenario.launch(MainActivity::class.java).use { sc ->
             Thread.sleep(1500)
-            sc.onActivity { a -> a.loadClaudeHtmlForTest("<html><body style='margin:0'><button id=p style='width:100%;height:400px;font-size:30px' onclick=\"navigator.clipboard.readText().then(function(s){window.__got=s},function(){window.__got='no'})\">Paste</button></body></html>") }
+            sc.onActivity { a -> a.loadHtmlForTest("<html><body><input id=n></body></html>", "https://form2.example.gov.in/") }
+            Thread.sleep(1200)
+            eval(sc, "document.getElementById('n').value='Ravi Kumar',1")
+            sc.onActivity { a -> a.pullReloadForTest() }
+            assertTrue("pull-to-reload threw a typed form away without asking", waitFor(8) { var s = false; sc.onActivity { a -> s = a.lastAskForTest()?.isShowing == true }; s })
+            assertEquals("\"Ravi Kumar\"", eval(sc, "document.getElementById('n').value"))
+            sc.onActivity { a -> a.lastAskForTest()?.dismiss() }
+        }
+    }
+
+    @Test
+    fun backLeavesRoninsErrorPageAndLinksGoHttpsFirst() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
             Thread.sleep(1500)
-            // the page by itself (no tap): nothing
-            eval(sc, "navigator.clipboard.readText().then(function(s){window.__self=s},function(){window.__self='no'}),1")
-            assertTrue(waitFor(5) { eval(sc, "window.__self||''") == "\"no\"" })
-            // his tap on the page's Paste button: the text arrives
-            noSystemDialogs()
-            val loc = IntArray(2); var w = 0
-            sc.onActivity { a -> a.webForTest().getLocationOnScreen(loc); w = a.webForTest().width }
-            androidx.test.uiautomator.UiDevice.getInstance(inst).click(loc[0] + w / 2, loc[1] + 200)
-            assertTrue("Paste after a tap got: " + eval(sc, "window.__got||''"), waitFor(8) { eval(sc, "window.__got||''") == "\"Ronin paste test\"" })
+            sc.onActivity { a -> a.go("ronin-back-test.invalid") }
+            assertTrue(waitFor(25) { eval(sc, "document.getElementById('reload')?1:0") == "1" })
+            sc.onActivity { a -> a.onBackPressedDispatcher.onBackPressed() }
+            assertTrue("Back is stuck on the error page", waitFor(10) { eval(sc, "document.getElementById('reload')?1:0") != "1" || sc.state != Lifecycle.State.RESUMED })
+            // a plain-http address from a bookmark / history / link is opened https first too
+            var url = ""
+            sc.onActivity { a -> a.loadForTest("http://ronin-https-first.invalid/page"); url = a.currentUrlForTest() }
+            assertEquals("https://ronin-https-first.invalid/page", url)
+            // the router stays plain http
+            sc.onActivity { a -> a.loadForTest("http://192.168.1.1/"); url = a.currentUrlForTest() }
+            assertEquals("http://192.168.1.1/", url)
         }
     }
 }

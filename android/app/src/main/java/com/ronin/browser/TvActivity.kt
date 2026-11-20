@@ -65,7 +65,7 @@ class TvActivity : AppCompatActivity() {
                 (view.parent as? android.view.ViewGroup)?.removeView(view)
                 view.destroy(); webGone = true
                 finish()
-                startActivity(android.content.Intent(this@TvActivity, TvActivity::class.java))
+                if (System.currentTimeMillis() - lastCrash > 30_000) { lastCrash = System.currentTimeMillis(); startActivity(android.content.Intent(this@TvActivity, TvActivity::class.java)) }
                 return true
             }
             override fun onPageFinished(view: WebView, url: String?) {
@@ -118,6 +118,8 @@ class TvActivity : AppCompatActivity() {
 
     companion object {
         const val START = "https://www.youtube.com/tv"
+        /** A second page-engine crash within 30 s closes Ronin TV instead of restarting it again and again. */
+        @Volatile private var lastCrash = 0L
         /** A living-room device name: YouTube then serves its TV screen (remote-control layout) instead of the phone site. */
         const val TV_UA = "Mozilla/5.0 (Linux; Android 12; Ronin TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Cobalt/24.lts.30-gold v8/8.8.278.17-jit gles Starboard/15, Ronin_TV/3.11 (Google, TV, Wired)"
         val YT_HOST = Regex("(^|\\.)(youtube\\.com|youtu\\.be|ytimg\\.com|googlevideo\\.com|google\\.com|gstatic\\.com|googleapis\\.com|googleusercontent\\.com|ggpht\\.com|accounts\\.google\\.[a-z.]+)$")

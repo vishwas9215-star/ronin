@@ -90,8 +90,8 @@ object PageScripts {
     /** true when a form on the page has text the user typed (it would be lost if the page loads again). */
     const val HAS_TYPED_TEXT = """
 (function(){
-  try {
-    var f = document.querySelectorAll('input,textarea,select');
+  function typed(doc) {
+    var f = doc.querySelectorAll('input,textarea,select');
     for (var i = 0; i < f.length; i++) {
       var e = f[i], t = (e.type || '').toLowerCase();
       if (/^(hidden|submit|button|reset|image|search|file)$/.test(t)) continue;
@@ -99,8 +99,15 @@ object PageScripts {
       if (t === 'checkbox' || t === 'radio') { if (e.checked !== e.defaultChecked) return true; continue; }
       if (e.value && e.value !== e.defaultValue) return true;
     }
-  } catch (e) {}
-  return false;
+    // a writing box (mail, comment, letter): text in it counts too
+    var ed = doc.querySelectorAll('[contenteditable=""],[contenteditable="true"]');
+    for (var k = 0; k < ed.length; k++) if ((ed[k].innerText || '').trim().length > 0 && ed[k] !== doc.body) return true;
+    // frames of the same site (portals put their forms there)
+    var fr = doc.querySelectorAll('iframe,frame');
+    for (var m = 0; m < fr.length; m++) { try { var d = fr[m].contentDocument; if (d && typed(d)) return true; } catch (e) {} }
+    return false;
+  }
+  try { return typed(document); } catch (e) { return false; }
 })()
 """
 

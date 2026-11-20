@@ -79,7 +79,7 @@
   function watchDom(fn, gap) {
     var timer = 0, last = 0;
     var run = function () { timer = 0; if (document.hidden) return; last = Date.now(); fn(); };
-    var soon = function () { if (!timer) timer = setTimeout(run, Math.max(500, last + gap - Date.now())); };
+    var soon = function () { if (document.hidden || timer) return; timer = setTimeout(run, Math.max(500, last + gap - Date.now())); };
     try { new MutationObserver(soon).observe(document, { childList: true, subtree: true }); } catch (e) {}
     document.addEventListener("visibilitychange", soon);
     soon();

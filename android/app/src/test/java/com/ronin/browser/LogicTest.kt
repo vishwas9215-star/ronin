@@ -367,6 +367,14 @@ class LogicTest {
         assertNull(Nav.claudePairingHost("https://sslip.io.evil.example/k/$key"))
         assertNull(Nav.claudePairingHost("https://16-4-152-212.sslip.io/k/abc"))
         assertNull(Nav.claudePairingHost("https://16-4-152-212.sslip.io/view"))
-        assertEquals("https://16-4-152-212.sslip.io/view", Nav.CLAUDE_VIEW_DEFAULT)
+    }
+
+    @Test fun appFilesAndPaymentSteps() {
+        assertTrue(Nav.isAppFile("Bank KYC.APK ", "")); assertTrue(Nav.isAppFile("x.bin", "application/vnd.android.package-archive"))
+        assertFalse(Nav.isAppFile("list.csv", "text/csv"))
+        // card 3-D Secure / gateways / e-KYC stay inside Safe Money
+        for (h in listOf("api.razorpay.com", "secure.payu.in", "pgi.billdesk.com", "secure.ccavenue.com", "acs.icicibank.com", "acs2.hdfcbank.com", "3dsecure.example-bank.in", "resident.uidai.gov.in", "digilocker.gov.in", "api.juspay.in"))
+            assertTrue(h, Nav.paymentStep(h))
+        for (h in listOf("www.google.com", "razorpay.com.evil.in", "facebook.com", "acsfake")) assertFalse(h, Nav.paymentStep(h))
     }
 }

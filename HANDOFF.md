@@ -353,7 +353,7 @@ merge PR #1 into main first, then `gh workflow run build.yml --ref main -f publi
 - Error page: no "Open anyway" when the name does not exist (DNS); address bar keeps the failed address.
 - 🤖 Claude tab (coordinator request 21 Nov, for the server-side "Ronin Claude Browser" in /home/claude/claude-browser,
   NOT deployed yet): menu big button "🤖 Claude" (m-claude) + tablet top-bar button (claude-top) open / show ONE Claude
-  tab on Store.claudeViewUrl (default https://16-4-152-212.sslip.io/view). A pairing link https://<host>/k/<48 hex>
+  tab on Store.claudeViewUrl (no default since the QA round: "not paired" until the first pairing). A pairing link https://<host>/k/<48 hex>
   opened in Ronin (Telegram, typed, clicked) goes to the Claude tab; a NEW host is remembered after one question and
   only for *.sslip.io / *.nip.io / *.duckdns.org (Nav.claudePairingHost). Claude tab: normal profile (cookies kept,
   CookieManager.flush in onStop), no ad layer / danger list / song scripts, not in history / saved tabs / undo, never
@@ -366,6 +366,25 @@ merge PR #1 into main first, then `gh workflow run build.yml --ref main -f publi
   claudePasteReadsTheClipboardOnlyAfterATap.
 - TvTest youtubeTvScreenWithoutAdsAndRemoteKeys flaked 2 of 5 runs (YouTube's page replaced the document between the
   guard call and the check): now one script. TV job stays continue-on-error.
+- Independent QA on d829d76 (21 Nov) found and I fixed: H1 a web page could re-point the Claude tab (anyone can make
+  a *.sslip.io name) -> a NEW Claude server only from a link of another app (Telegram) or his own typing, after one
+  question; a /k/ link inside a page is a normal link; showAsk never stacks a second question (no dialog loops);
+  L2 no default Claude server any more ("not paired" page until the first pairing). M1 anything not under Claude's
+  host loads in a normal tab, never inside the Claude tab. M2 https first in load() for every address (bookmarks,
+  history, links), router / LAN stay http. M3 an .apk made inside a page (blob: / data:) is never saved. M4 pull to
+  reload asks when a form has typed text; never in Tools / Claude tabs. M5 Back on Ronin's error page goes past the
+  failed address (or closes the tab); menu Reload reloads the failed address. M6 Day/Night/Language release the song
+  card before redrawing. Low: recovered Claude tab keeps its kind; a second renderer crash within 30 s shows a page
+  (MainActivity) or closes (Messages/Calls, TV) instead of looping; Safe Money keeps 3-D Secure / gateways / UPI /
+  e-KYC / DigiLocker steps inside (Nav.paymentStep) and blocks plain http; "Open anyway" never for sign-in pages,
+  own wording for a bad certificate; camera / mic remembered per site AND device (host|camera, host|microphone; older
+  entries ask once more); media check every 1 s on screen until a song is found; window.close keeps Undo; blob limit
+  30 MB + OutOfMemoryError caught; tabs saved on every open / close too; typed-text check includes same-site frames,
+  writing boxes and the Tools tab; Claude tab menu has no Share / Bookmark / page tools; ad layer schedules nothing
+  while hidden. L15: left as it is, to be checked on his device.
+  Tests: LogicTest appFilesAndPaymentSteps (+ claudePairingLinks), DeviceTest pullToReloadAsksBeforeLosingATypedForm,
+  backLeavesRoninsErrorPageAndLinksGoHttpsFirst, claude* tests rewritten (not paired page, page link cannot re-point,
+  other-app link asks, Claude tab never loads another site), filesMadeInsideThePageAreSaved (+ .apk refused).
 - NOT done (owner decides): two APKs (review C1), removing call recorder / SMS (C2), any permission change,
   UPDATE_PACKAGES_WITHOUT_USER_ACTION / PackageInstaller session (C4), discarding idle tabs after 15 min, page-reported
   media state instead of polling (B7 rest), third-party cookies per site, Sensitive.kt substring false matches

@@ -103,7 +103,9 @@ abstract class PhonePage : AppCompatActivity() {
             override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
                 (view.parent as? android.view.ViewGroup)?.removeView(view)
                 view.destroy(); webGone = true
-                finish(); startActivity(intent)
+                finish()
+                // once: a second crash within 30 s only closes the screen (no endless restart)
+                if (System.currentTimeMillis() - lastCrash > 30_000) { lastCrash = System.currentTimeMillis(); startActivity(intent) }
                 return true
             }
             override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean {
@@ -136,6 +138,7 @@ abstract class PhonePage : AppCompatActivity() {
     override fun onDestroy() { if (!webGone) try { web.destroy() } catch (e: Exception) { }; super.onDestroy() }
     override fun onStart() { super.onStart(); if (::web.isInitialized && !webGone) web.resumeTimers() } // the browser may have rested all page timers
     private var webGone = false
+    companion object { @Volatile private var lastCrash = 0L }
     fun webForTest(): WebView = web
 
     /** The page is told something happened (a new SMS, a call ended). */

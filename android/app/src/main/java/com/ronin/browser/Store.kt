@@ -91,7 +91,7 @@ class Store(ctx: Context) {
 
     /** Claude's live view (his own server); a pairing link he opens in Ronin sets its host. */
     var claudeViewUrl: String
-        get() = p.getString("claudeView", "")?.takeIf { it.startsWith("https://") } ?: Nav.CLAUDE_VIEW_DEFAULT
+        get() = p.getString("claudeView", "")?.takeIf { it.startsWith("https://") } ?: "" // "" = not paired yet
         set(v) { p.edit().putString("claudeView", v).apply() }
 
     /** Sites he allowed to use the camera / microphone once: they are not asked again. */

@@ -80,6 +80,8 @@ class SafeMoneyActivity : AppCompatActivity() {
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? {
                 val url = req.url.toString()
+                // never plain http inside Safe Money (a bank page is https only)
+                if (req.url.scheme == "http") return WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), ByteArrayInputStream(ByteArray(0)))
                 val k = app.rules.classify(url, app.store.userBanks)
                 if (k == Kind.BANK || k == Kind.PAYMENT || k == Kind.AUTH) return null
                 return if (app.blocker.blocked(url))
@@ -92,7 +94,7 @@ class SafeMoneyActivity : AppCompatActivity() {
                 if (req.url.scheme != "https") return true // banks are always https; nothing else here
                 if (!req.isForMainFrame) return false
                 val k = app.rules.classify(url, app.store.userBanks)
-                if (k == Kind.BANK || k == Kind.PAYMENT || k == Kind.AUTH) return false
+                if (k == Kind.BANK || k == Kind.PAYMENT || k == Kind.AUTH || Nav.paymentStep(req.url.host ?: "")) return false
                 // any other site (a tap OR a redirect by itself) never sits under the green "protected" badge:
                 // it goes to the normal window, which also runs the danger / fake-bank checks
                 startActivity(Intent(this@SafeMoneyActivity, MainActivity::class.java).setData(req.url))
