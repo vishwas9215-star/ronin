@@ -298,5 +298,8 @@ Installed on laptop: 3.1.2 (C:\Ronin Ecosystem\Ronin Browser). Tested OK on lapt
 - [b] Battery: song in the background uses YouTube's smallest picture, page timers rest when nothing plays, ad layer
       sleeps on quiet pages, slower media checks, lists not read on SMS / call starts, TV screen sleeps when paused
 - [b] Update continues by itself after "Allow from this source"
+- [b] 🤖 Claude button (menu + tablet bar): one Claude tab with the live view of Claude's own browser on his server;
+      the Telegram pairing link remembers the server; Paste works after his tap; the tab rests when not on screen;
+      "Claude का browser अभी चालू नहीं" + Reload when the server is off (server part not deployed yet)
 - [-] Two APKs / removing call recorder / permission changes / silent self-update: owner's decision (questions in HANDOFF)
 

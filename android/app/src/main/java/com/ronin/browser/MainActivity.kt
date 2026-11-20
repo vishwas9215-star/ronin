@@ -598,7 +598,7 @@ class MainActivity : AppCompatActivity() {
         // only the tab that was being read stops the Data export (another tab closing used to let a second one start)
         if (exporting && t == exportTab) { exporting = false; readBar.visibility = View.GONE }
         // a closed tab can come back with one tap for a few seconds (not private ones: nothing of them is kept)
-        if (undo && !t.isPrivate && t.url.startsWith("http")) {
+        if (undo && !t.isPrivate && t.claudeOrigin == null && t.url.startsWith("http")) { // the Claude tab comes back from its own button
             closedUrl = t.url
             undoBar.visibility = View.VISIBLE
             ui.removeCallbacks(hideUndo); ui.postDelayed(hideUndo, 6000)

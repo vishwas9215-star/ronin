@@ -351,6 +351,19 @@ merge PR #1 into main first, then `gh workflow run build.yml --ref main -f publi
   Read: `gh api repos/vishwas9215-star/ronin/actions/jobs/<job id>/logs > j.log`, then decode the blocks (python base64).
   SiteTourTest fails on phone + tablet emulators as on main 3.13.3 (report only, real heavy sites) - not new.
 - Error page: no "Open anyway" when the name does not exist (DNS); address bar keeps the failed address.
+- 🤖 Claude tab (coordinator request 21 Nov, for the server-side "Ronin Claude Browser" in /home/claude/claude-browser,
+  NOT deployed yet): menu big button "🤖 Claude" (m-claude) + tablet top-bar button (claude-top) open / show ONE Claude
+  tab on Store.claudeViewUrl (default https://16-4-152-212.sslip.io/view). A pairing link https://<host>/k/<48 hex>
+  opened in Ronin (Telegram, typed, clicked) goes to the Claude tab; a NEW host is remembered after one question and
+  only for *.sslip.io / *.nip.io / *.duckdns.org (Nav.claudePairingHost). Claude tab: normal profile (cookies kept,
+  CookieManager.flush in onStop), no ad layer / danger list / song scripts, not in history / saved tabs / undo, never
+  the media tab, never polled; onPause when another tab is in front, and with Ronin in the background (onStop pauses
+  every non-media tab + pauseTimers) so its page sees document.hidden and closes its stream. Paste: page's
+  navigator.clipboard.readText -> WebMessageListener "roninClip" (that origin only, main frame, tab on screen, within
+  3 s of his touch). Links to other sites open in a normal tab. Unreachable / 5xx: "Claude का browser अभी चालू नहीं"
+  + Reload; 404 = not paired yet (open the Telegram link once). Tests: LogicTest claudePairingLinks; DeviceTest
+  claudeButtonOpensTheClaudeTab, claudePairingLinkHostIsRemembered, claudeTabRestsWhenRoninIsInTheBackground,
+  claudePasteReadsTheClipboardOnlyAfterATap.
 - NOT done (owner decides): two APKs (review C1), removing call recorder / SMS (C2), any permission change,
   UPDATE_PACKAGES_WITHOUT_USER_ACTION / PackageInstaller session (C4), discarding idle tabs after 15 min, page-reported
   media state instead of polling (B7 rest), third-party cookies per site, Sensitive.kt substring false matches
