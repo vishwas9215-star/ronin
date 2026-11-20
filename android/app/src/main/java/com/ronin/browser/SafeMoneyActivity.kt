@@ -94,7 +94,7 @@ class SafeMoneyActivity : AppCompatActivity() {
                 if (req.url.scheme != "https") return true // banks are always https; nothing else here
                 if (!req.isForMainFrame) return false
                 val k = app.rules.classify(url, app.store.userBanks)
-                if (k == Kind.BANK || k == Kind.PAYMENT || k == Kind.AUTH || Nav.paymentStep(req.url.host ?: "")) return false
+                if (k == Kind.BANK || k == Kind.PAYMENT || k == Kind.AUTH || Nav.paymentStep(req.url.host ?: "") { u -> app.rules.classify(u, app.store.userBanks).let { it == Kind.BANK || it == Kind.PAYMENT } }) return false
                 // any other site (a tap OR a redirect by itself) never sits under the green "protected" badge:
                 // it goes to the normal window, which also runs the danger / fake-bank checks
                 startActivity(Intent(this@SafeMoneyActivity, MainActivity::class.java).setData(req.url))

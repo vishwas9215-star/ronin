@@ -373,8 +373,13 @@ class LogicTest {
         assertTrue(Nav.isAppFile("Bank KYC.APK ", "")); assertTrue(Nav.isAppFile("x.bin", "application/vnd.android.package-archive"))
         assertFalse(Nav.isAppFile("list.csv", "text/csv"))
         // card 3-D Secure / gateways / e-KYC stay inside Safe Money
-        for (h in listOf("api.razorpay.com", "secure.payu.in", "pgi.billdesk.com", "secure.ccavenue.com", "acs.icicibank.com", "acs2.hdfcbank.com", "3dsecure.example-bank.in", "resident.uidai.gov.in", "digilocker.gov.in", "api.juspay.in"))
-            assertTrue(h, Nav.paymentStep(h))
-        for (h in listOf("www.google.com", "razorpay.com.evil.in", "facebook.com", "acsfake")) assertFalse(h, Nav.paymentStep(h))
+        val bankOrPay = { u: String -> rules.classify(u).let { it == Kind.BANK || it == Kind.PAYMENT } }
+        for (h in listOf("api.razorpay.com", "secure.payu.in", "pgi.billdesk.com", "secure.ccavenue.com", "resident.uidai.gov.in", "digilocker.gov.in", "api.juspay.in"))
+            assertTrue(h, Nav.paymentStep(h, bankOrPay))
+        // a card check page counts only on a bank / payment site's own name
+        assertTrue(rules.classify("https://netbanking.hdfcbank.com/") == Kind.BANK)
+        assertTrue(Nav.paymentStep("acs.netbanking.hdfcbank.com", bankOrPay))
+        for (h in listOf("acs.evil-phish.in", "3ds-verify.attacker.xyz", "3dsecure.example-bank.in", "acs.hdfcbank.com.evil.in", "www.google.com", "razorpay.com.evil.in", "facebook.com", "acsfake"))
+            assertFalse(h, Nav.paymentStep(h, bankOrPay))
     }
 }

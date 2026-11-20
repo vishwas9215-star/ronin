@@ -94,6 +94,11 @@ class Store(ctx: Context) {
         get() = p.getString("claudeView", "")?.takeIf { it.startsWith("https://") } ?: "" // "" = not paired yet
         set(v) { p.edit().putString("claudeView", v).apply() }
 
+    /** Sites he opened with "Open anyway (not secure)": no https question again (never banks / payment / sign-in). */
+    var httpSites: Set<String>
+        get() = p.getStringSet("httpSites", emptySet()) ?: emptySet()
+        set(v) = p.edit().putStringSet("httpSites", v).apply()
+
     /** Sites he allowed to use the camera / microphone once: they are not asked again. */
     var mediaSites: Set<String>
         get() = p.getStringSet("mediaSites", emptySet()) ?: emptySet()

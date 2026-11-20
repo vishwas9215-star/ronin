@@ -196,10 +196,13 @@ class MainActivity : AppCompatActivity() {
                     fullView != null -> fullCallback?.onCustomViewHidden()
                     t != null && t.isTools -> leaveTools()
                     // Ronin's error page: one Back goes past the failed address too (never back into the same error)
-                    t != null && t.failedUrl != null -> when {
-                        t.web.canGoBackOrForward(-2) -> { t.failedUrl = null; t.web.goBackOrForward(-2) }
-                        browsingTabs().size > 1 -> closeTab(t)
-                        else -> { t.failedUrl = null; load(t, HOME) }
+                    t != null && t.failedUrl != null -> {
+                        val steps = backPastError(t)
+                        when {
+                            steps < 0 -> { t.failedUrl = null; t.web.goBackOrForward(steps) }
+                            browsingTabs().size > 1 -> closeTab(t)
+                            else -> { t.failedUrl = null; load(t, HOME) }
+                        }
                     }
                     t != null && t.web.canGoBack() -> t.web.goBack()
                     browsingTabs().size > 1 && t != null -> closeTab(t)
@@ -713,7 +716,7 @@ class MainActivity : AppCompatActivity() {
         val t = current ?: newTab(HOME)
         val typed = text.trim()
         // a site he already chose to open without https ("Open anyway") stays http
-        if (typed.startsWith("http://", ignoreCase = true) && Rules.hostOf(typed) in httpAllowed) { load(t, typed); return }
+        if (typed.startsWith("http://", ignoreCase = true) && httpOk(Rules.hostOf(typed))) { load(t, typed); return }
         val url = Omnibox.resolve(text) ?: return
         load(t, url, typed = true)
         // https first; if the site has no https, Ronin's error page offers the plain address (never for banks)
@@ -745,7 +748,7 @@ class MainActivity : AppCompatActivity() {
         // https first for every address (links, bookmarks, history too), unless he chose "Open anyway" for that site
         if (url.startsWith("http://", ignoreCase = true)) {
             val h = Rules.hostOf(url)
-            if (!Nav.isLocalHost(h) && h !in httpAllowed) { t.httpFallback = url; url = "https://" + url.substring(7) }
+            if (!Nav.isLocalHost(h) && !httpOk(h)) { t.httpFallback = url; url = "https://" + url.substring(7) }
         }
         if (Sensitive.site(url) && Family.adultBlocked(this)) { blockAdult(t, url); return }
         if (!t.isPrivate && Sensitive.site(url)) { openPrivate(url, t); return }
@@ -771,6 +774,19 @@ class MainActivity : AppCompatActivity() {
         t.web.loadUrl(url)
         t.httpFallback = fallback
     }
+
+    /** Steps back to the last page that is neither the failed address nor Ronin's error page (0 = none). */
+    private fun backPastError(t: Tab): Int {
+        val list = t.web.copyBackForwardList()
+        for (i in list.currentIndex - 1 downTo 0) {
+            val u = list.getItemAtIndex(i)?.url ?: continue
+            if (u != t.failedUrl && !u.startsWith(ERROR_PAGE)) return i - list.currentIndex
+        }
+        return 0
+    }
+
+    /** He chose "Open anyway" for this site (now, or before: remembered). */
+    private fun httpOk(host: String) = host in httpAllowed || host in app.store.httpSites
 
     private fun isUnderClaude(url: String, t: Tab): Boolean {
         val o = t.claudeOrigin ?: return false
@@ -835,7 +851,7 @@ class MainActivity : AppCompatActivity() {
         override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean {
             val url = req.url.toString()
             val scheme = req.url.scheme?.lowercase() ?: ""
-            if (scheme == "http" && req.isForMainFrame && !isLocal(req.url.host) && (req.url.host ?: "") !in httpAllowed) {
+            if (scheme == "http" && req.isForMainFrame && !isLocal(req.url.host) && !httpOk(req.url.host ?: "")) {
                 tab().httpFallback = url // if the site has no https, the error page offers this address
                 view.loadUrl("https" + url.substring(4)) // secure version first (HTTPS-only)
                 return true
@@ -846,10 +862,17 @@ class MainActivity : AppCompatActivity() {
                 if (req.url.getQueryParameter("k") != pageKey) return true
                 val fb = t.httpFallback
                 if (url.startsWith(HTTP_LINK) && fb != null) {
-                    httpAllowed.add(Rules.hostOf(fb))
+                    val fh = Rules.hostOf(fb)
+                    httpAllowed.add(fh)
+                    // remembered for good (his own servers ask only once); removable in Remembered sites. Never banks / payment / sign-in.
+                    if (app.rules.classify(fb, app.store.userBanks).let { it != Kind.BANK && it != Kind.PAYMENT && it != Kind.AUTH }) app.store.httpSites = app.store.httpSites + fh
                     load(t, fb)
                     Toast.makeText(this@MainActivity, L("⚠ यह साइट सुरक्षित (https) नहीं है: password, OTP या card नंबर न डालें", "⚠ This site is not secure (no https): never type a password, OTP or card number"), Toast.LENGTH_LONG).show()
-                } else if (t.claudeOrigin != null) openClaude() // the Claude tab reloads Claude's live view (or says "not paired")
+                } else if (t.claudeOrigin != null) {
+                    // the Claude tab: the live view again (paired), else the "not paired" page
+                    val v = app.store.claudeViewUrl
+                    if (v.isEmpty() || t.claudeOrigin != claudeOrigin()) openClaude() else load(t, t.failedUrl ?: v)
+                }
                 else load(t, t.failedUrl ?: t.url)
                 return true
             }
@@ -1039,7 +1062,7 @@ a{display:block;margin:16px auto 0;max-width:340px;padding:18px;border-radius:14
 <body><main><div style="font-size:52px">📡</div><h2>${L("Page नहीं खुला", "This page did not open")}</h2><code>$h</code>
 <p class=m>${L("Internet चालू है? फिर Reload दबाएँ या page को ऊपर से नीचे खींचें।", "Is the internet on? Press Reload, or pull the page down.")}</p>
 <a id=reload href="$RELOAD_LINK?k=$pageKey">⟳ ${L("फिर से खोलें", "Reload")}</a>$http<p class=m style="font-size:12px;margin-top:22px">${android.text.TextUtils.htmlEncode(why.take(80))}</p></main></body></html>"""
-        t.web.loadDataWithBaseURL(ERROR_PAGE, html, "text/html", "utf-8", null)
+        t.web.loadDataWithBaseURL(ERROR_PAGE, html, "text/html", "utf-8", ERROR_PAGE) // its history entry is known: Back skips it
     }
 
     // ---- 🤖 Claude: Claude's own browser on his server, seen live in one tab ------------------------------
@@ -1060,7 +1083,7 @@ a{display:block;margin:16px auto 0;max-width:340px;padding:18px;border-radius:14
         } else {
             select(t)
             if (view.isEmpty()) showClaudeDown(t, "", notPaired = true)
-            else if (url != null || !t.url.startsWith("$origin/")) load(t, url ?: view)
+            else if (url != null || t.failedUrl != null || !t.url.startsWith("$origin/")) load(t, url ?: t.failedUrl ?: view)
         }
         updateTabsButton()
     }
@@ -1103,7 +1126,7 @@ main{max-width:520px;padding:24px}.m{color:#9aa3b2;font-size:16px;line-height:1.
 a{display:block;margin:20px auto 0;max-width:340px;padding:18px;border-radius:14px;background:#c2410c;color:#fff;text-decoration:none;font-weight:bold;font-size:19px}</style></head>
 <body><main><div style="font-size:56px">🤖</div><h2>${L("Claude का browser अभी चालू नहीं", "Claude's browser is not on right now")}</h2>
 <p class=m>${android.text.TextUtils.htmlEncode(why)}</p><a id=reload href="$RELOAD_LINK?k=$pageKey">⟳ ${L("फिर से खोलें", "Reload")}</a></main></body></html>"""
-        t.web.loadDataWithBaseURL(ERROR_PAGE, html, "text/html", "utf-8", null)
+        t.web.loadDataWithBaseURL(ERROR_PAGE, html, "text/html", "utf-8", ERROR_PAGE) // its history entry is known: Back skips it
     }
 
     fun claudeUrlForTest(): String? = tabs.firstOrNull { it.claudeOrigin != null }?.url
@@ -1960,7 +1983,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             Sheet.Row("🛡", "Family Filter", if (Family.adultBlocked(this)) on else off, "#15803D", "m-family") { Family.chooseAdult(this, first = false) },
             Sheet.Row("🏦", "Ronin Safe Money", "", "#1D4ED8", "m-safemoney") { startActivity(Intent(this, SafeMoneyActivity::class.java)) },
             Sheet.Row("✅", L("ग़लती से रुकी साइटें", "Sites stopped by mistake"), "", "#334155", "m-safesites") { showSafeSites() },
-            Sheet.Row("🗂", L("याद रखी साइटें (bank, camera)", "Remembered sites (bank, camera)"), "", "#334155", "m-remembered") { showRemembered() },
+            Sheet.Row("🗂", L("याद रखी साइटें (bank, camera, http)", "Remembered sites (bank, camera, http)"), "", "#334155", "m-remembered") { showRemembered() },
         )
         val phone = ArrayList<Sheet.Row>()
         if (Parts.hasPhone(this)) {
@@ -2035,12 +2058,16 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     private fun showRemembered() {
         val banks = app.store.userBanks.sorted()
         val media = app.store.mediaSites.sorted()
-        if (banks.isEmpty() && media.isEmpty()) {
+        val http = app.store.httpSites.sorted()
+        if (banks.isEmpty() && media.isEmpty() && http.isEmpty()) {
             Toast.makeText(this, L("अभी कोई साइट याद नहीं रखी गई", "No remembered sites yet"), Toast.LENGTH_SHORT).show(); return
         }
         Sheet(this, L("याद रखी साइटें: हटाने के लिए दबाएँ", "Remembered sites: tap to remove"))
             .group(L("मेरे bank (Safe Money)", "My banks (Safe Money)"), banks.map { h ->
                 Sheet.Row("🏦", h, "✕", "#1D4ED8", "r-bank") { app.store.userBanks = app.store.userBanks - h; Toast.makeText(this, L("हटाया: $h", "Removed: $h"), Toast.LENGTH_SHORT).show() }
+            })
+            .group(L("बिना https (फिर भी खोलें)", "Without https (Open anyway)"), http.map { h ->
+                Sheet.Row("⚠", h, "✕", "#B45309", "r-http") { app.store.httpSites = app.store.httpSites - h; httpAllowed.remove(h); Toast.makeText(this, L("हटाया: $h", "Removed: $h"), Toast.LENGTH_SHORT).show() }
             })
             .group(L("Camera / microphone", "Camera / microphone"), media.map { h ->
                 Sheet.Row(if (h.endsWith("|camera")) "📷" else "🎙", h.replace("|", " · "), "✕", "#334155", "r-media") { app.store.mediaSites = app.store.mediaSites - h; Toast.makeText(this, L("हटाया: $h", "Removed: $h"), Toast.LENGTH_SHORT).show() }

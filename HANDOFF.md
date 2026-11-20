@@ -385,6 +385,13 @@ merge PR #1 into main first, then `gh workflow run build.yml --ref main -f publi
   Tests: LogicTest appFilesAndPaymentSteps (+ claudePairingLinks), DeviceTest pullToReloadAsksBeforeLosingATypedForm,
   backLeavesRoninsErrorPageAndLinksGoHttpsFirst, claude* tests rewritten (not paired page, page link cannot re-point,
   other-app link asks, Claude tab never loads another site), filesMadeInsideThePageAreSaved (+ .apk refused).
+- Re-QA on 570cb99 (PASS-WITH-NOTES) fixed: N1 Safe Money card-check pages (acs* / 3ds*) stay inside only when the
+  rest of the name is a BANK / PAYMENT site (acs.evil-phish.in, 3ds-verify.attacker.xyz are sent out); N2 Reload on the
+  "Claude not on" page tries the server again, the 🤖 button too; N3 Back from an error page goes to the last page that
+  is neither the failed address nor the error page (error pages carry history URL ERROR_PAGE). Low: "Open anyway" is
+  remembered for good in Store.httpSites (never BANK / PAYMENT / AUTH), removable in Menu -> Safety -> Remembered sites.
+  Tests: LogicTest appFilesAndPaymentSteps (look-alike ACS hosts), DeviceTest backFromADeadLinkShowsThePageBefore,
+  claudeButtonOpensTheClaudeTab (+ Reload), noInternetOrNoHttpsShowsReloadAndOpenAnyway (+ remembered).
 - NOT done (owner decides): two APKs (review C1), removing call recorder / SMS (C2), any permission change,
   UPDATE_PACKAGES_WITHOUT_USER_ACTION / PackageInstaller session (C4), discarding idle tabs after 15 min, page-reported
   media state instead of polling (B7 rest), third-party cookies per site, Sensitive.kt substring false matches

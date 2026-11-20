@@ -662,6 +662,12 @@ class DeviceTest {
             shot("20-error-page")
             eval(sc, "document.getElementById('http').click(),1")
             assertTrue("'Open anyway' did not open the http address", waitFor(10) { sc.onActivity { a -> url = a.currentUrlForTest() }; url == "http://ronin-old-portal.invalid/form" })
+            // remembered for good (his own servers ask only once), removable in Remembered sites
+            val store = (app.applicationContext as RoninApp).store
+            assertTrue("'Open anyway' not remembered", "ronin-old-portal.invalid" in store.httpSites)
+            sc.onActivity { a -> a.loadForTest("http://ronin-old-portal.invalid/again"); url = a.currentUrlForTest() }
+            assertEquals("asked https again for a remembered site", "http://ronin-old-portal.invalid/again", url)
+            store.httpSites = store.httpSites - "ronin-old-portal.invalid"
         }
     }
 
@@ -951,6 +957,9 @@ class DeviceTest {
                 assertTrue("no 'not on' page: " + pageText(sc).take(200), waitFor(25) { pageText(sc).contains(L("Claude का browser अभी चालू नहीं", "Claude's browser is not on right now")) })
                 assertEquals("1", eval(sc, "document.getElementById('reload')?1:0"))
                 shot("26-claude-not-on")
+                // its Reload really tries the server again (the page is made anew)
+                eval(sc, "window.__old=1;document.getElementById('reload').click(),1")
+                assertTrue("Reload on the 'not on' page did nothing", waitFor(25) { eval(sc, "(document.getElementById('reload')&&!window.__old)?1:0") == "1" })
                 sc.onActivity { a -> a.openClaude() }
                 sc.onActivity { a -> assertEquals("a second press made a second Claude tab", n, a.tabUrlsForTest().size) }
                 // the Claude tab never loads another site: that opens in a normal tab
@@ -1077,6 +1086,19 @@ class DeviceTest {
             // the router stays plain http
             sc.onActivity { a -> a.loadForTest("http://192.168.1.1/"); url = a.currentUrlForTest() }
             assertEquals("http://192.168.1.1/", url)
+        }
+    }
+
+    @Test
+    fun backFromADeadLinkShowsThePageBefore() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            sc.onActivity { a -> a.loadHtmlForTest("<html><body><h1>Page A for Back</h1><a id=d href='https://ronin-dead-link.invalid/x'>dead</a></body></html>", "https://page-a.example/") }
+            Thread.sleep(1500)
+            eval(sc, "document.getElementById('d').click(),1")
+            assertTrue("no error page", waitFor(25) { eval(sc, "document.getElementById('reload')?1:0") == "1" })
+            sc.onActivity { a -> a.onBackPressedDispatcher.onBackPressed() }
+            assertTrue("Back did not show page A: " + pageText(sc).take(120), waitFor(10) { pageText(sc).contains("Page A for Back") })
         }
     }
 }

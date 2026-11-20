@@ -103,9 +103,15 @@ object Nav {
      * e-KYC, DigiLocker. In Safe Money they stay inside (sending them out broke the payment).
      */
     private val payStep = Regex("(^|\\.)(razorpay\\.com|payu\\.in|payubiz\\.in|billdesk\\.com|ccavenue\\.com|cashfree\\.com|juspay\\.in|paytm\\.in|paytm\\.com|phonepe\\.com|npci\\.org\\.in|uidai\\.gov\\.in|digilocker\\.gov\\.in|meripehchaan\\.gov\\.in|wibmo\\.com|enstage-sas\\.com|cardinalcommerce\\.com|visa\\.com|mastercard\\.com|rupay\\.co\\.in)$")
-    fun paymentStep(host: String): Boolean {
-        val h = host.lowercase()
-        return payStep.containsMatchIn(h) || Regex("(^|\\.)(acs[a-z0-9-]*|3ds[a-z0-9-]*|3dsecure[a-z0-9-]*)\\.").containsMatchIn(h)
+    /**
+     * bankOrPay("https://<rest>/") says whether the rest of a name is a bank / payment site: a card check page
+     * "acs.<bank>" / "3ds.<gateway>" counts only on such a site (acs.evil-phish.in never does).
+     */
+    fun paymentStep(host: String, bankOrPay: (String) -> Boolean = { false }): Boolean {
+        val h = host.lowercase().trimEnd('.')
+        if (payStep.containsMatchIn(h)) return true
+        val first = h.substringBefore('.'); val rest = h.substringAfter('.', "")
+        return Regex("^(acs|3ds|3dsecure)[a-z0-9-]*$").matches(first) && rest.contains('.') && bankOrPay("https://$rest/")
     }
 
     /**
