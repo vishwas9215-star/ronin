@@ -38,27 +38,39 @@ class RoninWebView(context: Context) : WebView(context) {
     var onPull: ((armed: Boolean, done: Boolean) -> Unit)? = null
     private var downX = 0f
     private var downY = 0f
+    private var lastX = 0f
+    private var lastY = 0f
     private var startedAtTop = false
     private var overTop = false
     private var armed = false
+    private var fingerDown = false
+
+    private fun farEnough() = lastY - downY > resources.displayMetrics.density * 110 && lastY - downY > 2 * Math.abs(lastX - downX)
 
     // the page itself (not a box inside it) is at its top and is pulled further down
     override fun onOverScrolled(scrollX: Int, scrollY: Int, clampedX: Boolean, clampedY: Boolean) {
-        if (clampedY && scrollY <= 0) overTop = true
+        if (clampedY && scrollY <= 0) {
+            overTop = true
+            if (fingerDown && startedAtTop && onPull != null) setArmed(farEnough())
+        }
         super.onOverScrolled(scrollX, scrollY, clampedX, clampedY)
     }
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> { downX = e.x; downY = e.y; startedAtTop = scrollY <= 0; overTop = false; setArmed(false) }
+            MotionEvent.ACTION_DOWN -> { downX = e.x; downY = e.y; lastX = e.x; lastY = e.y; fingerDown = true; startedAtTop = scrollY <= 0; overTop = false; setArmed(false) }
             MotionEvent.ACTION_POINTER_DOWN -> { startedAtTop = false; setArmed(false) } // two fingers = zoom, never reload
-            MotionEvent.ACTION_MOVE -> if (startedAtTop && overTop && onPull != null) {
-                val dy = e.y - downY
-                setArmed(dy > resources.displayMetrics.density * 110 && dy > 2 * Math.abs(e.x - downX))
+            MotionEvent.ACTION_MOVE -> { lastX = e.x; lastY = e.y; if (startedAtTop && overTop && onPull != null) setArmed(farEnough()) }
+            MotionEvent.ACTION_UP -> {
+                fingerDown = false; lastX = e.x; lastY = e.y
+                val go = armed
+                setArmed(false)
+                if (go) onPull?.invoke(false, true)
+                // the engine can report "pulled past the top" a moment after the finger lifts
+                else if (startedAtTop && onPull != null && farEnough()) postDelayed({ if (overTop && !fingerDown) onPull?.invoke(false, true) }, 150)
             }
-            MotionEvent.ACTION_UP -> { val go = armed; setArmed(false); if (go) onPull?.invoke(false, true) }
-            MotionEvent.ACTION_CANCEL -> setArmed(false)
+            MotionEvent.ACTION_CANCEL -> { fingerDown = false; setArmed(false) }
         }
         return super.onTouchEvent(e)
     }
