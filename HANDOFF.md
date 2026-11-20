@@ -389,9 +389,15 @@ merge PR #1 into main first, then `gh workflow run build.yml --ref main -f publi
   rest of the name is a BANK / PAYMENT site (acs.evil-phish.in, 3ds-verify.attacker.xyz are sent out); N2 Reload on the
   "Claude not on" page tries the server again, the 🤖 button too; N3 Back from an error page goes to the last page that
   is neither the failed address nor the error page (error pages carry history URL ERROR_PAGE). Low: "Open anyway" is
-  remembered for good in Store.httpSites (never BANK / PAYMENT / AUTH), removable in Menu -> Safety -> Remembered sites.
+  remembered in Store.httpSites (never BANK / PAYMENT / AUTH; https still first, see below), removable in Menu ->
+  Safety -> Remembered sites.
   Tests: LogicTest appFilesAndPaymentSteps (look-alike ACS hosts), DeviceTest backFromADeadLinkShowsThePageBefore,
   claudeButtonOpensTheClaudeTab (+ Reload), noInternetOrNoHttpsShowsReloadAndOpenAnyway (+ remembered).
+- QA on 7d3fb72 note fixed: a remembered "Open anyway" site (Store.httpSites) no longer skips https: https is tried
+  first every time; only when https cannot connect (connect / timeout / TLS handshake) does Ronin open the http address
+  by itself, no tap (session-only httpAllowed). After a certificate error (onReceivedSslError -> Tab.sslBad): only the
+  warning, never "Open anyway", never a fallback, nothing remembered. DeviceTest
+  rememberedHttpSitesStillTryHttpsFirstAndNeverAfterABadCertificate.
 - NOT done (owner decides): two APKs (review C1), removing call recorder / SMS (C2), any permission change,
   UPDATE_PACKAGES_WITHOUT_USER_ACTION / PackageInstaller session (C4), discarding idle tabs after 15 min, page-reported
   media state instead of polling (B7 rest), third-party cookies per site, Sensitive.kt substring false matches

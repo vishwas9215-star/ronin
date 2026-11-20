@@ -78,6 +78,7 @@ class MainActivity : AppCompatActivity() {
         var pending: String? = null // opened later: the page loads only when the tab is first shown (battery)
         var desktop = false // "Desktop site" switched on in the menu for this tab
         var httpFallback: String? = null // the plain-http address Ronin turned into https (offered if https fails)
+        var sslBad: String? = null // a host whose certificate was refused: never fall back to http for it
         var failedUrl: String? = null // the page Ronin's error page stands for (its Reload button)
         @Volatile var dangerHost = ""
         var uaFixedFor = "" // the last address reloaded with another browser version // the fake-bank red page now showing (its "I know this site" link works only for it)
@@ -736,7 +737,7 @@ class MainActivity : AppCompatActivity() {
     fun load(t: Tab, url0: String, typed: Boolean = false) {
         // the Claude tab shows only Claude's own pages: anything else opens in a normal tab with all checks
         if (t.claudeOrigin != null && !isUnderClaude(url0, t)) { newTab(url0); return }
-        t.pending = null; t.httpFallback = null; t.failedUrl = null
+        t.pending = null; t.httpFallback = null; t.failedUrl = null; t.sslBad = null
         // Family Filter: SafeSearch also for searches typed or spoken in the address bar (not only for links)
         var url = (if (Family.adultBlocked(this)) Family.safeSearch(url0) else null) ?: url0
         // Claude's browser: its pairing link and its pages always open in the Claude tab
@@ -786,7 +787,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** He chose "Open anyway" for this site (now, or before: remembered). */
-    private fun httpOk(host: String) = host in httpAllowed || host in app.store.httpSites
+    /** He chose "Open anyway" for this site in THIS session (https is still tried first for sites remembered from before). */
+    private fun httpOk(host: String) = host in httpAllowed
 
     private fun isUnderClaude(url: String, t: Tab): Boolean {
         val o = t.claudeOrigin ?: return false
@@ -992,10 +994,7 @@ class MainActivity : AppCompatActivity() {
             if (!req.isForMainFrame) return
             val url = req.url.toString()
             if (!url.startsWith("http") || url.startsWith("https://ronin.")) return
-            if (tab().claudeOrigin != null) { showClaudeDown(tab(), url, notPaired = false); return }
-            if (err.errorCode !in setOf(ERROR_HOST_LOOKUP, ERROR_CONNECT, ERROR_TIMEOUT, ERROR_FAILED_SSL_HANDSHAKE, ERROR_IO)) return
-            // no such site (name not found): plain http would not help either, so no "Open anyway" then
-            showErrorPage(tab(), url, err.description?.toString() ?: "", offerHttp = err.errorCode != ERROR_HOST_LOOKUP)
+            mainFrameFailed(tab(), url, err.errorCode, err.description?.toString() ?: "")
         }
 
         /** Claude's server answers but its browser part is off (5xx), or this tablet is not paired yet (404). */
@@ -1008,8 +1007,9 @@ class MainActivity : AppCompatActivity() {
         override fun onReceivedSslError(view: WebView, handler: android.webkit.SslErrorHandler, error: android.net.http.SslError) {
             handler.cancel() // never past a broken certificate
             val t = tab(); val u = error.url ?: return
+            if (Rules.hostOf(u) == Rules.hostOf(t.url)) t.sslBad = Rules.hostOf(u)
             val fb = t.httpFallback ?: return
-            if (Rules.hostOf(u) == Rules.hostOf(fb) && Rules.hostOf(u) == Rules.hostOf(t.url)) view.post { showErrorPage(t, u, "SSL") }
+            if (Rules.hostOf(u) == Rules.hostOf(fb) && Rules.hostOf(u) == Rules.hostOf(t.url)) view.post { certFailed(t, u) }
         }
 
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
@@ -1046,14 +1046,40 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * The page did not open. A site he chose "Open anyway" for before: https is always tried first, and only when https
+     * cannot connect does Ronin open the plain address by itself (no tap). After a certificate error: never.
+     */
+    private fun mainFrameFailed(t: Tab, url: String, code: Int, why: String) {
+        if (t.claudeOrigin != null) { showClaudeDown(t, url, notPaired = false); return }
+        if (code !in setOf(WebViewClient.ERROR_HOST_LOOKUP, WebViewClient.ERROR_CONNECT, WebViewClient.ERROR_TIMEOUT, WebViewClient.ERROR_FAILED_SSL_HANDSHAKE, WebViewClient.ERROR_IO)) return
+        val host = Rules.hostOf(url)
+        if (t.sslBad == host) { showErrorPage(t, url, "SSL", offerHttp = false); return }
+        val fb = t.httpFallback
+        if (fb != null && Rules.hostOf(fb) == host && host in app.store.httpSites && url.startsWith("https://") &&
+            code in setOf(WebViewClient.ERROR_CONNECT, WebViewClient.ERROR_TIMEOUT, WebViewClient.ERROR_FAILED_SSL_HANDSHAKE) &&
+            app.rules.classify(fb, app.store.userBanks).let { it != Kind.BANK && it != Kind.PAYMENT && it != Kind.AUTH }) {
+            httpAllowed.add(host) // for this session; next time https is tried first again
+            load(t, fb)
+            return
+        }
+        // no such site (name not found): plain http would not help either, so no "Open anyway" then
+        showErrorPage(t, url, why, offerHttp = code != WebViewClient.ERROR_HOST_LOOKUP)
+    }
+
+    /** A certificate that is not valid: only the warning, never "Open anyway", nothing remembered. */
+    private fun certFailed(t: Tab, url: String) {
+        t.sslBad = Rules.hostOf(url)
+        showErrorPage(t, url, "SSL", offerHttp = false)
+    }
+
     /** Ronin's error page: Reload (big), and "Open anyway" when the site has no https (never for a bank). */
     private fun showErrorPage(t: Tab, url: String, why: String, offerHttp: Boolean = true) {
         val fb = t.httpFallback?.takeIf { offerHttp && Rules.hostOf(it) == Rules.hostOf(url) && app.rules.classify(url, app.store.userBanks).let { k -> k != Kind.BANK && k != Kind.PAYMENT && k != Kind.AUTH } }
         t.failedUrl = url
         val h = android.text.TextUtils.htmlEncode(Rules.hostOf(url))
-        val note = if (why == "SSL") L("इस साइट का सुरक्षा certificate सही नहीं है। यह साइट का पुराना पता हो सकता है, या कोई बीच में बात सुन रहा हो।", "This site's security certificate is not valid. It may be an old address, or someone may be listening in.")
-            else L("यह साइट https (सुरक्षित तरीका) नहीं देती।", "This site does not offer https (the secure way).")
-        val http = if (fb == null) "" else "<p class=m>" + note +
+        val ssl = if (why != "SSL") "" else "<p id=cert class=m style=\"color:#fca5a5\">" + L("⚠ इस साइट का सुरक्षा certificate सही नहीं है। यह पुराना पता हो सकता है, या कोई बीच में बात सुन रहा हो। यहाँ password, OTP या card नंबर बिल्कुल न डालें।", "⚠ This site's security certificate is not valid. It may be an old address, or someone may be listening in. Never type a password, OTP or card number here.") + "</p>"
+        val http = if (fb == null || why == "SSL") ssl else "<p class=m>" + L("यह साइट https (सुरक्षित तरीका) नहीं देती।", "This site does not offer https (the secure way).") +
             "</p><a id=http class=g href=\"$HTTP_LINK?k=$pageKey\">" + L("फिर भी खोलें (असुरक्षित)", "Open anyway (not secure)") + "</a>"
         val html = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${L("Page नहीं खुला", "Page did not open")}</title>
 <style>body{margin:0;background:#14171f;color:#e8eaf0;font:17px sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center}
@@ -1429,6 +1455,8 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     fun suggestBoxForTest(): LinearLayout = suggestBox
     fun findBarForTest(): View = findBar
     fun crashPageForTest() { current?.web?.loadUrl("chrome://crash") }
+    fun failForTest(https: String, code: Int) { current?.let { it.url = https; it.httpFallback = "http://" + https.removePrefix("https://"); mainFrameFailed(it, https, code, "test") } }
+    fun certFailForTest(https: String) { current?.let { it.url = https; it.httpFallback = "http://" + https.removePrefix("https://"); certFailed(it, https) } }
     fun httpErrorPageForTest(https: String) { current?.let { it.url = https; it.httpFallback = "http://" + https.removePrefix("https://"); showErrorPage(it, https, "test") } }
     fun safeRecreateForTest(change: () -> Unit) = safeRecreate(change)
     fun closeTabForTest(url: String) { tabs.firstOrNull { it.url == url }?.let { closeTab(it) } }

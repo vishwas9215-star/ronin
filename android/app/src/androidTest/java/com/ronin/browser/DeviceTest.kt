@@ -665,8 +665,6 @@ class DeviceTest {
             // remembered for good (his own servers ask only once), removable in Remembered sites
             val store = (app.applicationContext as RoninApp).store
             assertTrue("'Open anyway' not remembered", "ronin-old-portal.invalid" in store.httpSites)
-            sc.onActivity { a -> a.loadForTest("http://ronin-old-portal.invalid/again"); url = a.currentUrlForTest() }
-            assertEquals("asked https again for a remembered site", "http://ronin-old-portal.invalid/again", url)
             store.httpSites = store.httpSites - "ronin-old-portal.invalid"
         }
     }
@@ -1125,5 +1123,30 @@ class DeviceTest {
                 assertTrue("Back did not show page A ($hist): " + pageText(sc).take(80), waitFor(15) { pageText(sc).contains("Page A for Back") })
             }
         } finally { ss.close() }
+    }
+
+    @Test
+    fun rememberedHttpSitesStillTryHttpsFirstAndNeverAfterABadCertificate() {
+        val store = (app.applicationContext as RoninApp).store
+        store.httpSites = store.httpSites + "ronin-remembered.invalid" + "ronin-badcert.invalid"
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { sc ->
+                Thread.sleep(1500)
+                var url = ""
+                // remembered: https is still tried first
+                sc.onActivity { a -> a.loadForTest("http://ronin-remembered.invalid/p"); url = a.currentUrlForTest() }
+                assertEquals("https://ronin-remembered.invalid/p", url)
+                // https cannot connect: the plain address opens by itself, no tap, no error page
+                sc.onActivity { a -> a.failForTest("https://ronin-remembered.invalid/p", android.webkit.WebViewClient.ERROR_CONNECT); url = a.currentUrlForTest() }
+                assertEquals("no silent fallback for a remembered site", "http://ronin-remembered.invalid/p", url)
+                // a bad certificate: only the warning, no "Open anyway", no fallback (even for a remembered site)
+                sc.onActivity { a -> a.newTab(MainActivity.HOME); a.certFailForTest("https://ronin-badcert.invalid/") } // own tab: no late answer of the first one mixes in
+                assertTrue("no certificate warning", waitFor(10) { eval(sc, "document.getElementById('cert')?1:0") == "1" })
+                assertEquals("'Open anyway' offered after a certificate error", "0", eval(sc, "document.getElementById('http')?1:0"))
+                shot("27-bad-certificate")
+                sc.onActivity { a -> a.failForTest("https://ronin-badcert.invalid/", android.webkit.WebViewClient.ERROR_FAILED_SSL_HANDSHAKE); url = a.currentUrlForTest() }
+                assertEquals("fell back to http after a certificate error", "https://ronin-badcert.invalid/", url)
+            }
+        } finally { store.httpSites = store.httpSites - "ronin-remembered.invalid" - "ronin-badcert.invalid" }
     }
 }
