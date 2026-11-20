@@ -74,6 +74,17 @@
     };
   } catch (e) {}
 
+  // Battery: instead of checking the page every second for ever, Ronin looks again only when the page
+  // changes (at most once per `gap` ms), and not at all while the page is hidden (another tab, app closed).
+  function watchDom(fn, gap) {
+    var timer = 0, last = 0;
+    var run = function () { timer = 0; if (document.hidden) return; last = Date.now(); fn(); };
+    var soon = function () { if (!timer) timer = setTimeout(run, Math.max(500, last + gap - Date.now())); };
+    try { new MutationObserver(soon).observe(document, { childList: true, subtree: true }); } catch (e) {}
+    document.addEventListener("visibilitychange", soon);
+    soon();
+  }
+
   // ---- TradingView: close "Upgrade / Go Pro" pop-ups and hide upgrade buttons ----
   if (/(^|\.)tradingview\.com$/.test(host)) {
     var PROMO = /(upgrade now|upgrade your plan|go pro|try free for|start free trial|black friday|cyber monday|get started for free|unlock .* with|your plan has|several charts per tab|limit of|sale ends|% off)/i;
@@ -97,7 +108,7 @@
         }
       } catch (e) {}
     };
-    setInterval(tvClean, 700);
+    watchDom(tvClean, 700);
     return;
   }
 
@@ -123,7 +134,7 @@
       try { vid.playbackRate = savedRate === 16 ? 1 : savedRate; } catch (e) {}
       vid.muted = savedMuted;
     }
-  }, 200);
+  }, 500);
 
   // ---- 3. Other sites: video players that play an advert first ----
   // While the player shows "Skip ad" / "Ad - 00:08", the advert is muted, run
@@ -147,13 +158,20 @@
       }
       return out;
     }
-    setInterval(function () {
+    // runs only while a video plays (or an advert is being put back to normal): no timer on pages without video
+    var tick = 0;
+    var startTick = function () { if (!tick) tick = setInterval(checkPlayers, 400); };
+    document.addEventListener("play", startTick, true);
+    document.addEventListener("playing", startTick, true);
+    function checkPlayers() {
       try {
-        var vids = document.getElementsByTagName("video"), list = [];
+        var vids = document.getElementsByTagName("video"), list = [], busy = false;
         for (var i = 0; i < vids.length && i < 6; i++) {
+          if (vids[i].__roninAd || !vids[i].paused && !vids[i].ended) busy = true;
           if (vids[i].offsetWidth > 200 && vids[i].offsetHeight > 110 || vids[i].__roninAd) list.push(vids[i]);
         }
-        if (!list.length) return;
+        if (!busy) { clearInterval(tick); tick = 0; return; }
+        if (!list.length || document.hidden) return;
         var labels = findLabels();
         // each label belongs to the one video it is on (or nearest to, within 40 px)
         var rects = list.map(function (v) { return v.getBoundingClientRect(); });
@@ -189,10 +207,11 @@
           }
         }
       } catch (e) {}
-    }, 400);
+    }
+    startTick();
 
     // small "AD" labelled promotions and "Advertising" captions above blocked boxes
-    setInterval(function () {
+    watchDom(function () {
       try {
         if (!document.body) return;
         var all = document.body.getElementsByTagName("*");

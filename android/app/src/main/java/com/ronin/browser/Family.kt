@@ -18,12 +18,16 @@ object Family {
         val u = try { java.net.URI(url) } catch (e: Exception) { return null }
         val h = u.host ?: return null
         val q = u.rawQuery ?: ""
-        return when {
-            Regex("(^|\\.)google\\.[a-z.]+$").containsMatchIn(h) && u.path == "/search" && !q.contains("safe=active") -> "$url&safe=active"
-            (h == "www.bing.com" || h == "bing.com") && u.path == "/search" && !q.contains("adlt=strict") -> "$url&adlt=strict"
-            h == "duckduckgo.com" && q.contains("q=") && !q.contains("kp=1") -> "$url&kp=1"
-            else -> null
+        val add = when {
+            Regex("(^|\\.)google\\.[a-z.]+$").containsMatchIn(h) && u.path == "/search" && !q.contains("safe=active") -> "safe=active"
+            (h == "www.bing.com" || h == "bing.com") && u.path == "/search" && !q.contains("adlt=strict") -> "adlt=strict"
+            h == "duckduckgo.com" && q.contains("q=") && !q.contains("kp=1") -> "kp=1"
+            else -> return null
         }
+        // the part after '#' stays at the end (the setting must be in the address itself)
+        val base = url.substringBefore('#')
+        val frag = if (url.contains('#')) "#" + url.substringAfter('#') else ""
+        return base + (if (base.contains('?')) "&" else "?") + add + frag
     }
 
     fun chooseAdult(ctx: Context, first: Boolean) {

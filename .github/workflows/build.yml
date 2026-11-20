@@ -168,6 +168,15 @@ jobs:
           gh release view qa >/dev/null 2>&1 || gh release create qa --title "QA screenshots" --notes "Emulator screenshots from the last build (not a Ronin release)." --prerelease || true
           sleep 3
           for f in qa/*.png; do cp "$f" "${{ matrix.device }}-$(basename "$f")"; gh release upload qa "${{ matrix.device }}-$(basename "$f")" --clobber; done
+      - name: Screenshots as a run artifact (pull requests too)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-screens-${{ matrix.device }}
+          path: |
+            qa/*.png
+            qa2/*.png
+          if-no-files-found: ignore
       - name: Fail if a device test failed
         run: test ! -f device-tests-failed
       - name: Test summary

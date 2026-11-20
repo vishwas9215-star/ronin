@@ -36,6 +36,9 @@ class LogicTest {
 
     @Test fun safeSearchForced() {
         assertEquals("https://www.google.com/search?q=x&safe=active", Family.safeSearch("https://www.google.com/search?q=x"))
+        // 3.14: before the '#' part, never after it
+        assertEquals("https://www.google.com/search?q=x&safe=active#frag", Family.safeSearch("https://www.google.com/search?q=x#frag"))
+        assertEquals("https://www.bing.com/search?q=y&adlt=strict", Family.safeSearch("https://www.bing.com/search?q=y"))
         assertNull(Family.safeSearch("https://www.google.com/search?q=x&safe=active"))
         assertNull(Family.safeSearch("https://www.google.com/maps"))
     }
@@ -289,5 +292,69 @@ class LogicTest {
         // well-formed XML
         parts.values.forEach { javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(it.byteInputStream()) }
         java.io.File("build/test-table.xlsx").writeBytes(x)
+    }
+
+    // ---- 3.14 -----------------------------------------------------------------------------------
+
+    @Test fun routerAndHomeServersStayPlainHttp() {
+        assertEquals("http://192.168.1.1", Omnibox.resolve("192.168.1.1"))
+        assertEquals("http://10.0.0.5:8080/x", Omnibox.resolve("10.0.0.5:8080/x"))
+        assertEquals("http://printer.local/", Omnibox.resolve("printer.local/"))
+        assertEquals("https://8.8.8.8", Omnibox.resolve("8.8.8.8"))
+        assertEquals("http://172.20.0.9/", Omnibox.resolve("http://172.20.0.9/"))
+        assertEquals("https://172.40.0.9/", Omnibox.resolve("http://172.40.0.9/"))
+        assertTrue(Nav.isLocalHost("localhost")); assertTrue(Nav.isLocalHost("127.0.0.1"))
+        assertFalse(Nav.isLocalHost("10.example.com")); assertFalse(Nav.isLocalHost("192.168.example.com")); assertFalse(Nav.isLocalHost(null))
+    }
+
+    @Test fun otherAppsOpenOnlyAfterATap() {
+        assertEquals(Nav.OPEN, Nav.outsideAction(mainFrame = true, gesture = true))
+        assertEquals(Nav.ASK, Nav.outsideAction(mainFrame = true, gesture = false))
+        assertEquals(Nav.ASK, Nav.outsideAction(mainFrame = false, gesture = true))
+        assertEquals(Nav.DROP, Nav.outsideAction(mainFrame = false, gesture = false))
+    }
+
+    @Test fun filesMadeByThePageAreSaved() {
+        val csv = Nav.decodeDataUrl("data:text/csv;base64,TmFtZSxDbGFzcwpBc2hhLDUK")!!
+        assertEquals("text/csv", csv.first); assertEquals("Name,Class\nAsha,5\n", String(csv.second))
+        val txt = Nav.decodeDataUrl("data:text/plain;charset=utf-8,hello%20world+1")!!
+        assertEquals("text/plain", txt.first); assertEquals("hello world+1", String(txt.second))
+        assertNull(Nav.decodeDataUrl("https://x.example/a.pdf"))
+        assertEquals("report.pdf", Nav.nameFromDisposition("attachment; filename=\"report.pdf\""))
+        assertEquals("रिपोर्ट.pdf", Nav.nameFromDisposition("attachment; filename*=UTF-8''%E0%A4%B0%E0%A4%BF%E0%A4%AA%E0%A5%8B%E0%A4%B0%E0%A5%8D%E0%A4%9F.pdf"))
+        assertEquals("", Nav.nameFromDisposition(null))
+        assertEquals("y.csv", Nav.cleanFileName("../x/y.csv", "text/csv"))
+        assertEquals("list.xlsx", Nav.cleanFileName("list", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+        assertTrue(Nav.cleanFileName("", "application/pdf").let { it.startsWith("Ronin_download_") && it.endsWith(".pdf") })
+    }
+
+    @Test fun onlyRoninsOwnAppFileNeedsNoWarning() {
+        assertTrue(Nav.trustedApk("https://github.com/vishwas9215-star/ronin/releases/download/qa/Ronin-test.apk", ""))
+        assertTrue(Nav.trustedApk("https://objects.githubusercontent.com/github-production-release-asset/1?x=y", "https://github.com/vishwas9215-star/ronin/releases/download/v3.14.0/Ronin.apk"))
+        assertTrue(Nav.trustedApk("https://f-droid.org/F-Droid.apk", ""))
+        assertFalse(Nav.trustedApk("https://github.com/someone/fakebank/releases/download/v1/bank.apk", ""))
+        assertFalse(Nav.trustedApk("https://objects.githubusercontent.com/github-production-release-asset/2", "https://github.com/someone/fakebank/releases"))
+        assertFalse(Nav.trustedApk("https://raw.githubusercontent.com/someone/x/main/app.apk", ""))
+        assertFalse(Nav.trustedApk("http://github.com/vishwas9215-star/ronin/x.apk", ""))
+    }
+
+    @Test fun textSizeSteps() {
+        assertEquals(115, Nav.nextZoom(100, up = true)); assertEquals(85, Nav.nextZoom(100, up = false))
+        assertEquals(250, Nav.nextZoom(250, up = true)); assertEquals(50, Nav.nextZoom(50, up = false))
+    }
+
+    @Test fun addressSuggestions() {
+        val first = listOf(Nav.Hit("Prerna", "https://prernaup.in/"), Nav.Hit("UDISE+ All Modules", "https://udiseplus.gov.in/#/en/page/oldlink/109"))
+        val hist = listOf(Nav.Hit("Hindi news", "https://www.amarujala.com/"), Nav.Hit("Prerna login", "https://prernaup.in/"),
+            Nav.Hit("YouTube", "https://m.youtube.com/"), Nav.Hit("Pradhan Mantri", "https://pmindia.gov.in/"))
+        assertTrue(Nav.suggest("p", first, hist).isEmpty()) // one letter: nothing yet
+        val pr = Nav.suggest("pr", first, hist)
+        assertEquals("https://prernaup.in/", pr[0].url) // the quick link first, and only once
+        assertEquals(1, pr.count { it.url == "https://prernaup.in/" })
+        assertTrue(pr.any { it.url == "https://pmindia.gov.in/" })
+        assertEquals("https://m.youtube.com/", Nav.suggest("you", first, hist)[0].url)
+        assertEquals("https://udiseplus.gov.in/#/en/page/oldlink/109", Nav.suggest("udise", first, hist)[0].url)
+        assertTrue(Nav.suggest("zzz", first, hist).isEmpty())
+        assertTrue(Nav.suggest("a", first, hist, limit = 2).size <= 2)
     }
 }

@@ -19,6 +19,29 @@ class RoninApp : Application() {
         store = Store(this)
         rules = Rules(assets.open("ronin/rules.json").bufferedReader().readText())
         blocker = AdBlocker(rules)
+        // how many Ronin screens are open (the browser rests its pages' timers only when none is)
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityStarted(a: android.app.Activity) { visibleScreens++ }
+            override fun onActivityStopped(a: android.app.Activity) { visibleScreens = (visibleScreens - 1).coerceAtLeast(0) }
+            override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) {}
+            override fun onActivityResumed(a: android.app.Activity) {}
+            override fun onActivityPaused(a: android.app.Activity) {}
+            override fun onActivitySaveInstanceState(a: android.app.Activity, b: android.os.Bundle) {}
+            override fun onActivityDestroyed(a: android.app.Activity) {}
+        })
+    }
+
+    @Volatile var visibleScreens = 0
+        private set
+    @Volatile private var listsStarted = false
+
+    /**
+     * The big ad / danger lists are read when a browser screen opens, not on every start of the app
+     * (an SMS or a call also starts it: that no longer reads lakhs of addresses - battery).
+     */
+    fun startLists() {
+        if (listsStarted) return
+        listsStarted = true
         thread(name = "ronin-lists") {
             loadSavedThreats() // saved lists first: protection and ad-block work at once
             loadAndRefreshLists()

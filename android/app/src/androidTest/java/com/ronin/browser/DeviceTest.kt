@@ -37,6 +37,15 @@ class DeviceTest {
     init {
         // the "which parts?" question of the first start does not cover the tests
         InstrumentationRegistry.getInstrumentation().targetContext.getSharedPreferences("ronin_parts", Context.MODE_PRIVATE).edit().putBoolean("asked", true).putBoolean("adultAsked", true).commit()
+        // 3.14 keeps the open tabs for the next start: every test starts with one fresh tab
+        InstrumentationRegistry.getInstrumentation().targetContext.getSharedPreferences("ronin", Context.MODE_PRIVATE).edit().remove("savedTabs").commit()
+    }
+
+    private fun findTag(v: android.view.View?, tag: String): android.view.View? {
+        if (v == null) return null
+        if (v.tag == tag) return v
+        if (v is android.view.ViewGroup) for (i in 0 until v.childCount) findTag(v.getChildAt(i), tag)?.let { return it }
+        return null
     }
 
     private fun eval(sc: ActivityScenario<MainActivity>, js: String): String {
@@ -583,4 +592,256 @@ class DeviceTest {
         return out
     }
 
+
+    // ---- 3.14: review fixes, battery, easier use ------------------------------------------------
+
+    @Test
+    fun aCrashedPageEngineReloadsTheTabInsteadOfClosingRonin() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(2500)
+            var before: android.webkit.WebView? = null
+            sc.onActivity { a -> before = a.webForTest(); a.crashPageForTest() }
+            assertTrue("tab did not get a new page engine", waitFor(25) { var now: android.webkit.WebView? = null; sc.onActivity { a -> now = a.webForTest() }; now != null && now !== before })
+            assertTrue("new tab page did not come back", waitFor(20) { pageText(sc).contains("Ronin Browser") })
+            assertEquals(Lifecycle.State.RESUMED, sc.state)
+        }
+    }
+
+    @Test
+    fun openTabsComeBackAfterRoninIsClosed() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            sc.onActivity { a -> a.newTab("https://example.com/", select = false, lazy = true); a.newTab("https://example.org/", select = false, lazy = true) }
+        }
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            var urls = emptyList<String>()
+            sc.onActivity { a -> urls = a.tabUrlsForTest() }
+            assertTrue("tabs not restored: $urls", urls.size == 3 && "https://example.com/" in urls && "https://example.org/" in urls)
+        }
+    }
+
+    @Test
+    fun aClosedTabComesBackWithUndo() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            sc.onActivity { a -> a.newTab("https://example.net/", select = false, lazy = true); a.closeTabForTest("https://example.net/") }
+            var undo: android.view.View? = null
+            sc.onActivity { a -> undo = findTag(a.undoBarForTest(), "undo"); assertTrue("no Undo bar", a.undoBarForTest().visibility == android.view.View.VISIBLE) }
+            shot("21-undo-close-tab")
+            sc.onActivity { undo!!.performClick() }
+            var urls = emptyList<String>()
+            sc.onActivity { a -> urls = a.tabUrlsForTest() }
+            assertTrue("Undo did not bring the tab back: $urls", "https://example.net/" in urls)
+        }
+    }
+
+    @Test
+    fun noInternetOrNoHttpsShowsReloadAndOpenAnyway() {
+        assertTrue("router pages (http) are blocked", android.security.NetworkSecurityPolicy.getInstance().isCleartextTrafficPermitted("192.168.1.1"))
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            sc.onActivity { a -> a.go("ronin-no-such-site.invalid") }
+            assertTrue("no Ronin error page: " + pageText(sc).take(200), waitFor(25) { eval(sc, "document.getElementById('reload')?1:0") == "1" })
+            assertEquals("no 'Open anyway' for a site that has no https", "1", eval(sc, "document.getElementById('http')?1:0"))
+            shot("20-error-page")
+            // Reload goes back to the same address (and fails again here)
+            eval(sc, "document.getElementById('reload').click(),1")
+            assertTrue(waitFor(25) { eval(sc, "document.getElementById('reload')?1:0") == "1" })
+            var url = ""
+            sc.onActivity { a -> url = a.currentUrlForTest() }
+            assertTrue("reload lost the address: $url", url.contains("ronin-no-such-site.invalid"))
+        }
+    }
+
+    @Test
+    fun aPageCannotOpenAnotherAppByItself() {
+        val filter = android.content.IntentFilter(Intent.ACTION_VIEW).apply { addDataScheme("tel") }
+        val mon = inst.addMonitor(filter, null, true)
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { sc ->
+                Thread.sleep(1500)
+                sc.onActivity { a -> a.loadHtmlForTest("<html><body><script>setTimeout(function(){location.href='tel:1234567890'},300)</script>ad</body></html>", "https://ads.example.com/") }
+                var asked = false
+                assertTrue("Ronin did not ask before opening another app", waitFor(15) { sc.onActivity { a -> asked = a.lastAskForTest()?.isShowing == true }; asked })
+                assertEquals("another app was opened without a tap", 0, mon.hits)
+                sc.onActivity { a -> a.lastAskForTest()?.dismiss() }
+            }
+        } finally { inst.removeMonitor(mon) }
+    }
+
+    @Test
+    fun filesMadeInsideThePageAreSaved() {
+        val csv = Base64.encodeToString("Name,Class\nAsha,5\n".toByteArray(), Base64.NO_WRAP)
+        val page = "<html><body style='font:20px sans-serif'><a id=d href='data:text/csv;base64,$csv' download='ronin_dl_data.csv'>data file</a><br>" +
+            "<a id=b download='ronin_dl_blob.csv'>blob file</a><script>document.getElementById('b').href=URL.createObjectURL(new Blob(['Name,Class\\nRavi,4\\n'],{type:'text/csv'}))</script></body></html>"
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            sc.onActivity { a -> a.loadHtmlForTest(page, "https://portal.example.gov.in/") }
+            Thread.sleep(1500)
+            val before = System.currentTimeMillis()
+            eval(sc, "document.getElementById('d').click(),1")
+            assertTrue("data: file not saved", waitFor(20) { recentDownloads(before, "ronin_dl_data").any { it.second > 5 } })
+            Thread.sleep(1000)
+            eval(sc, "document.getElementById('b').click(),1")
+            assertTrue("blob: file not saved", waitFor(25) { recentDownloads(before, "ronin_dl_blob").any { it.second > 5 } })
+        }
+    }
+
+    @Test
+    fun longPressMenuOpensALinkInANewTab() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            var n = 0
+            sc.onActivity { a -> n = a.tabUrlsForTest().size; a.showLinkMenu(null, "https://example.com/long-press", null) }
+            Thread.sleep(800)
+            shot("22-link-menu")
+            sc.onActivity { a ->
+                val d = a.linkSheetForTest()!!
+                assertTrue(d.isShowing)
+                for (t in listOf("l-newtab", "l-copy", "l-share")) assertNotNull("$t missing", findTag(d.window!!.decorView, t))
+                findTag(d.window!!.decorView, "l-newtab")!!.performClick()
+            }
+            var urls = emptyList<String>()
+            sc.onActivity { a -> urls = a.tabUrlsForTest() }
+            assertEquals(n + 1, urls.size)
+            assertTrue("https://example.com/long-press" in urls)
+        }
+    }
+
+    @Test
+    fun menuHasTextSizeFindShareAndDesktopSite() {
+        val store = (app.applicationContext as RoninApp).store
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            sc.onActivity { a -> a.loadHtmlForTest("<html><head><title>Text size test</title></head><body><p>Ronin text size test. Find me.</p></body></html>", "https://textsize.example/") }
+            Thread.sleep(1200)
+            sc.onActivity { a -> a.showMenuForTest() }
+            Thread.sleep(800)
+            sc.onActivity { a ->
+                val v = a.menuSheetForTest()!!.window!!.decorView
+                for (t in listOf("m-share", "m-find", "m-desktop", "m-textdown", "m-textup")) assertNotNull("$t missing in the menu", findTag(v, t))
+                findTag(v, "m-textup")!!.performClick(); findTag(v, "m-textup")!!.performClick()
+                assertTrue("A+ closed the menu", a.menuSheetForTest()!!.isShowing)
+                assertEquals(130, a.webForTest().settings.textZoom)
+            }
+            assertEquals("text size not remembered for the site", 130, store.textZoom("textsize.example"))
+            shot("23-menu-text-size")
+            sc.onActivity { a ->
+                findTag(a.menuSheetForTest()!!.window!!.decorView, "m-find")!!.performClick()
+                assertEquals(android.view.View.VISIBLE, a.findBarForTest().visibility)
+            }
+            Thread.sleep(800)
+            shot("24-find-in-page")
+            store.setTextZoom("textsize.example", 100)
+        }
+    }
+
+    @Test
+    fun addressBarSuggestsBookmarksAndHistory() {
+        val store = (app.applicationContext as RoninApp).store
+        if (!store.isBookmarked("https://suggest-test.example/page")) store.toggleBookmark("Ronin suggest test", "https://suggest-test.example/page")
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { sc ->
+                Thread.sleep(1500)
+                sc.onActivity { a -> a.typeForTest("sugg") }
+                Thread.sleep(800)
+                var rows = 0
+                sc.onActivity { a -> val b = a.suggestBoxForTest(); rows = (0 until b.childCount).count { b.getChildAt(it).tag == "sug" } }
+                assertTrue("no suggestion for a bookmark", rows >= 1)
+                shot("25-suggestions")
+            }
+        } finally { store.removeBookmark("https://suggest-test.example/page") }
+    }
+
+    @Test
+    fun myBankAsksFirstAndSafeSearchCoversTypedSearches() {
+        val store = (app.applicationContext as RoninApp).store
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            sc.onActivity { a -> a.loadHtmlForTest("<html><body>not a bank</body></html>", "https://notabank.example/") }
+            Thread.sleep(800)
+            sc.onActivity { a -> a.showMenuForTest() }
+            Thread.sleep(800)
+            sc.onActivity { a -> findTag(a.menuSheetForTest()!!.window!!.decorView, "m-bank")!!.performClick() }
+            Thread.sleep(500)
+            sc.onActivity { a -> assertTrue("no question before 'my bank'", a.lastAskForTest()?.isShowing == true); a.lastAskForTest()?.dismiss() }
+            assertFalse("added as a bank with one tap", "notabank.example" in store.userBanks)
+            // Family Filter: a typed search is SafeSearch too
+            val fam = app.getSharedPreferences("ronin_parts", Context.MODE_PRIVATE)
+            val was = fam.getBoolean("adultBlock", false)
+            fam.edit().putBoolean("adultBlock", true).commit()
+            try {
+                var url = ""
+                sc.onActivity { a -> a.go("ronin safe search test"); url = a.currentUrlForTest() }
+                assertTrue("typed search without SafeSearch: $url", url.contains("safe=active"))
+            } finally { fam.edit().putBoolean("adultBlock", was).commit() }
+        }
+    }
+
+    @Test
+    fun closingRoninEndsTheSongCard() {
+        val song = Base64.encodeToString(inst.context.assets.open("song.webm").readBytes(), Base64.NO_WRAP)
+        val sc = ActivityScenario.launch(MainActivity::class.java)
+        sc.onActivity { a -> a.loadHtmlForTest("<html><head><title>Close test - YouTube</title></head><body><video id=v loop playsinline src='data:video/webm;base64,$song'></video></body></html>", "https://m.youtube.com/ronin-close-test") }
+        Thread.sleep(3000)
+        eval(sc, "document.getElementById('v').play(); 1")
+        assertTrue("no 'playing' notification", waitFor(15) { ourNotification() })
+        sc.close() // like a swipe-away: the page is gone
+        assertTrue("player card (and its wake lock) left behind after Ronin closed", waitFor(10) { !ourNotification() })
+    }
+
+    @Test
+    fun historyIsWrittenWithoutStoppingTheScreen() {
+        val store = (app.applicationContext as RoninApp).store
+        var took = 0L
+        inst.runOnMainSync {
+            val t0 = System.nanoTime()
+            for (i in 0 until 40) store.addHistory("Ronin history test $i", "https://history-test.example/$i")
+            took = (System.nanoTime() - t0) / 1_000_000
+        }
+        assertTrue("adding history blocked the screen for $took ms", took < 150)
+        assertTrue("history not saved", waitFor(10) { store.history.any { it.url == "https://history-test.example/39" } })
+        store.removeHistory { it.startsWith("https://history-test.example/") }
+    }
+
+    @Test
+    fun updateCarriesOnByItselfAfterInstallPermission() {
+        val f = java.io.File(java.io.File(app.cacheDir, "updates").apply { mkdirs() }, "Ronin.apk").apply { writeBytes(ByteArray(16)) }
+        val filter = android.content.IntentFilter(Intent.ACTION_VIEW).apply { addDataType("application/vnd.android.package-archive") }
+        val mon = inst.addMonitor(filter, null, true)
+        try {
+            shell("appops set ${app.packageName} REQUEST_INSTALL_PACKAGES deny")
+            ActivityScenario.launch(MainActivity::class.java).use { sc ->
+                Thread.sleep(1000)
+                Updater.waitingApk = f
+                sc.onActivity { a -> Updater.resume(a) }
+                assertEquals("installer opened without the permission", 0, mon.hits)
+                assertNotNull("the waiting update was forgotten", Updater.waitingApk)
+                shell("appops set ${app.packageName} REQUEST_INSTALL_PACKAGES allow")
+                sc.onActivity { a -> Updater.resume(a) }
+                assertTrue("update did not carry on by itself", waitFor(5) { mon.hits == 1 })
+                assertTrue(Updater.waitingApk == null)
+            }
+        } finally {
+            inst.removeMonitor(mon); Updater.waitingApk = null; f.delete()
+            shell("appops set ${app.packageName} REQUEST_INSTALL_PACKAGES default")
+        }
+    }
+
+    @Test
+    fun pullingThePageDownReloadsIt() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            sc.onActivity { a -> a.loadHtmlForTest("<html><body style='margin:0'><div style='height:3000px;font:22px sans-serif'>Pull test</div><script>window.mark=1</script></body></html>", "https://pull.example/") }
+            Thread.sleep(1500)
+            assertEquals("1", eval(sc, "window.mark"))
+            eval(sc, "window.notReloaded=5,1") // a reload starts the page again: this mark is then gone
+            val loc = IntArray(2); var w = 0; var h = 0
+            sc.onActivity { a -> a.webForTest().getLocationOnScreen(loc); w = a.webForTest().width; h = a.webForTest().height }
+            val d = androidx.test.uiautomator.UiDevice.getInstance(inst)
+            d.swipe(loc[0] + w / 2, loc[1] + 40, loc[0] + w / 2, loc[1] + minOf(h - 20, 900), 60)
+            assertTrue("pulling down at the top did not reload the page", waitFor(10) { eval(sc, "window.notReloaded===5?1:0") == "0" })
+        }
+    }
 }
