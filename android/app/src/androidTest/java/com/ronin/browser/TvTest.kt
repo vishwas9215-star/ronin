@@ -44,8 +44,8 @@ class TvTest {
     fun youtubeTvScreenWithoutAdsAndRemoteKeys() {
         ActivityScenario.launch(TvActivity::class.java).use { sc ->
             // the advert part of a player answer is removed, the video part stays
-            js(sc, TvActivity.NO_ADS_JS)
-            val pruned = js(sc, "JSON.stringify(JSON.parse('{\"adPlacements\":[1],\"playerAds\":[2],\"adSlots\":[3],\"videoDetails\":{\"title\":\"x\"},\"playerResponse\":{\"adPlacements\":[4],\"streamingData\":{}}}'))")
+            // one script (guard + check together): YouTube's own page may replace the document between two calls
+            val pruned = js(sc, TvActivity.NO_ADS_JS + ";JSON.stringify(JSON.parse('{\"adPlacements\":[1],\"playerAds\":[2],\"adSlots\":[3],\"videoDetails\":{\"title\":\"x\"},\"playerResponse\":{\"adPlacements\":[4],\"streamingData\":{}}}'))")
             assertTrue("ads left in the player answer: $pruned", !pruned.contains("adPlacements") && !pruned.contains("playerAds") && !pruned.contains("adSlots"))
             assertTrue("video part removed: $pruned", pruned.contains("videoDetails") && pruned.contains("streamingData"))
 

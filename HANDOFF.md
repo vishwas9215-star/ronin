@@ -364,6 +364,8 @@ merge PR #1 into main first, then `gh workflow run build.yml --ref main -f publi
   + Reload; 404 = not paired yet (open the Telegram link once). Tests: LogicTest claudePairingLinks; DeviceTest
   claudeButtonOpensTheClaudeTab, claudePairingLinkHostIsRemembered, claudeTabRestsWhenRoninIsInTheBackground,
   claudePasteReadsTheClipboardOnlyAfterATap.
+- TvTest youtubeTvScreenWithoutAdsAndRemoteKeys flaked 2 of 5 runs (YouTube's page replaced the document between the
+  guard call and the check): now one script. TV job stays continue-on-error.
 - NOT done (owner decides): two APKs (review C1), removing call recorder / SMS (C2), any permission change,
   UPDATE_PACKAGES_WITHOUT_USER_ACTION / PackageInstaller session (C4), discarding idle tabs after 15 min, page-reported
   media state instead of polling (B7 rest), third-party cookies per site, Sensitive.kt substring false matches
