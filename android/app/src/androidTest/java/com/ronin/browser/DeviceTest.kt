@@ -1107,13 +1107,18 @@ class DeviceTest {
 
     @Test
     fun backFromADeadLinkShowsThePageBefore() {
-        val ss = tinyServer("<html><body><h1>Page A for Back</h1><a id=d href='https://ronin-dead-link.invalid/x'>dead</a></body></html>")
+        val ss = tinyServer("<html><body style='margin:0'><h1>Page A for Back</h1><a id=d href='https://ronin-dead-link.invalid/x' style='display:block;height:400px;background:#2563eb;color:#fff;font:30px sans-serif'>dead link</a></body></html>")
         try {
             ActivityScenario.launch(MainActivity::class.java).use { sc ->
                 Thread.sleep(1500)
                 sc.onActivity { a -> a.go("http://127.0.0.1:${ss.localPort}/a") }
                 assertTrue("page A did not load", waitFor(20) { pageText(sc).contains("Page A for Back") })
-                eval(sc, "document.getElementById('d').click(),1")
+                // a real tap, as he does it (a page's own script click would be a "skippable" history entry)
+                noSystemDialogs()
+                val top = eval(sc, "Math.round(document.getElementById('d').getBoundingClientRect().top+150)").toIntOrNull() ?: 300
+                val loc = IntArray(2); var w = 0; var dens = 1f
+                sc.onActivity { a -> a.webForTest().getLocationOnScreen(loc); w = a.webForTest().width; dens = a.resources.displayMetrics.density }
+                androidx.test.uiautomator.UiDevice.getInstance(inst).click(loc[0] + w / 2, loc[1] + (top * dens).toInt())
                 assertTrue("no error page", waitFor(25) { eval(sc, "document.getElementById('reload')?1:0") == "1" })
                 var hist = ""
                 sc.onActivity { a -> hist = a.historyForTest(); a.onBackPressedDispatcher.onBackPressed() }

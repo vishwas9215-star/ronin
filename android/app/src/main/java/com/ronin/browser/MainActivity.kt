@@ -956,7 +956,7 @@ class MainActivity : AppCompatActivity() {
             // a page opened in a new window comes here without the usual checks
             if (url.startsWith("http") && Sensitive.site(url) && Family.adultBlocked(this@MainActivity)) { view.stopLoading(); blockAdult(t, url); return }
             if (!url.startsWith(TOOLS)) t.isTools = false
-            if (!url.startsWith("https://ronin.home")) { t.failedUrl = null; siteSettings(view, url) }
+            if (url.startsWith("http") && !url.startsWith("https://ronin.home")) { t.failedUrl = null; siteSettings(view, url) }
             view.setBackgroundColor(if (url.startsWith("http") && !url.startsWith("https://ronin.home")) Color.WHITE else homeBg())
             if (url.startsWith("http") && !url.startsWith("https://ronin.home") && !neutralUa(url) && view.settings.userAgentString != uaForTab(t, url) && t.uaFixedFor != url) {
                 t.uaFixedFor = url // once per address: never a reload loop
