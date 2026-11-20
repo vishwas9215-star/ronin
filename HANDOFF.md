@@ -341,9 +341,16 @@ merge PR #1 into main first, then `gh workflow run build.yml --ref main -f publi
   noInternetOrNoHttpsShowsReloadAndOpenAnyway, aPageCannotOpenAnotherAppByItself, filesMadeInsideThePageAreSaved,
   longPressMenuOpensALinkInANewTab, menuHasTextSizeFindShareAndDesktopSite, addressBarSuggestsBookmarksAndHistory,
   myBankAsksFirstAndSafeSearchCoversTypedSearches, closingRoninEndsTheSongCard, historyIsWrittenWithoutStoppingTheScreen,
-  updateCarriesOnByItselfAfterInstallPermission, pullingThePageDownReloadsIt. JS: tools/uitest/abbattery.js (a quiet
+  updateCarriesOnByItselfAfterInstallPermission, pullingThePageDownReloadsIt, safeMoneyAnswersBankQuestionsAndSendsOtherSitesOut,
+  coloursOrLanguageAskBeforeLosingATypedForm (+ autoplay rule), aLinkThatOpensANewWindowOpensANewTab; TvTest
+  tvScreenStaysOnOnlyWhileAVideoPlays. Never take REQUEST_INSTALL_PACKAGES away in a test (Android kills the app).
+  The emulator's "Pixel Launcher isn't responding" box can eat real taps / swipes: noSystemDialogs() presses Wait. JS: tools/uitest/abbattery.js (a quiet
   page is woken <= 1 time in 4 s; was 13) + playerads/t.js now in build.sh. DeviceTest init clears savedTabs.
-- CI: PR runs upload screenshots as run artifacts `qa-screens-<device>` (the "qa" release is only for main / dispatch).
+- CI: on pull requests the screenshots are printed base64 in the device job log between `QAPNG-BEGIN name` /
+  `QAPNG-END` (artifact downloads are blocked by this session's proxy; the "qa" release stays main / dispatch only).
+  Read: `gh api repos/vishwas9215-star/ronin/actions/jobs/<job id>/logs > j.log`, then decode the blocks (python base64).
+  SiteTourTest fails on phone + tablet emulators as on main 3.13.3 (report only, real heavy sites) - not new.
+- Error page: no "Open anyway" when the name does not exist (DNS); address bar keeps the failed address.
 - NOT done (owner decides): two APKs (review C1), removing call recorder / SMS (C2), any permission change,
   UPDATE_PACKAGES_WITHOUT_USER_ACTION / PackageInstaller session (C4), discarding idle tabs after 15 min, page-reported
   media state instead of polling (B7 rest), third-party cookies per site, Sensitive.kt substring false matches
