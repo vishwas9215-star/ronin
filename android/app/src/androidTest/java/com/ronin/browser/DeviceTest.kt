@@ -956,7 +956,9 @@ class DeviceTest {
             sc.onActivity { a -> a.go("https://1-2-3-4.sslip.io/k/$key") }
             Thread.sleep(500)
             sc.onActivity { a -> val d = a.lastAskForTest(); assertTrue("no question for a new Claude host", d?.isShowing == true); d!!.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick() }
-            assertEquals("https://1-2-3-4.sslip.io/view", store.claudeViewUrl)
+            // a dialog button answers a moment later (Android posts it): wait for it
+            assertTrue("new Claude host not remembered: " + store.claudeViewUrl, waitFor(5) { store.claudeViewUrl == "https://1-2-3-4.sslip.io/view" })
+            Thread.sleep(500)
             var url: String? = null
             sc.onActivity { a -> url = a.claudeUrlForTest() }
             assertTrue("pairing link not opened in the Claude tab: $url", url!!.startsWith("https://1-2-3-4.sslip.io/"))
