@@ -1107,7 +1107,7 @@ class DeviceTest {
 
     @Test
     fun backFromADeadLinkShowsThePageBefore() {
-        val ss = tinyServer("<html><body style='margin:0'><h1>Page A for Back</h1><a id=d href='https://ronin-dead-link.invalid/x' style='display:block;height:400px;background:#2563eb;color:#fff;font:30px sans-serif'>dead link</a></body></html>")
+        val ss = tinyServer("<html><head><meta name=viewport content='width=device-width,initial-scale=1'></head><body style='margin:0'><h1>Page A for Back</h1><a id=d href='https://ronin-dead-link.invalid/x' style='display:block;height:400px;background:#2563eb;color:#fff;font:30px sans-serif'>dead link</a></body></html>")
         try {
             ActivityScenario.launch(MainActivity::class.java).use { sc ->
                 Thread.sleep(1500)
