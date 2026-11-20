@@ -1089,18 +1089,36 @@ class DeviceTest {
         }
     }
 
+    /** A tiny web server inside the test (real http page with a real address; no internet needed). */
+    private fun tinyServer(html: String): java.net.ServerSocket {
+        val ss = java.net.ServerSocket(0, 10, java.net.InetAddress.getByName("127.0.0.1"))
+        Thread {
+            while (!ss.isClosed) try {
+                ss.accept().use { c ->
+                    val r = c.getInputStream().bufferedReader()
+                    while (true) { val l = r.readLine() ?: break; if (l.isEmpty()) break }
+                    val body = html.toByteArray()
+                    c.getOutputStream().write(("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n").toByteArray() + body)
+                }
+            } catch (e: Exception) { }
+        }.start()
+        return ss
+    }
+
     @Test
     fun backFromADeadLinkShowsThePageBefore() {
-        ActivityScenario.launch(MainActivity::class.java).use { sc ->
-            Thread.sleep(1500)
-            // page A (with its own address in the history, like a real page), then a link on it that leads nowhere
-            sc.onActivity { a -> a.loadPageForTest("<html><body><h1>Example Domain</h1><a id=d href='https://ronin-dead-link.invalid/x'>dead</a></body></html>", "https://page-a.example/") }
-            assertTrue("page A did not load", waitFor(15) { pageText(sc).contains("Example Domain") })
-            eval(sc, "document.getElementById('d').click(),1")
-            assertTrue("no error page", waitFor(25) { eval(sc, "document.getElementById('reload')?1:0") == "1" })
-            var hist = ""
-            sc.onActivity { a -> hist = a.historyForTest(); a.onBackPressedDispatcher.onBackPressed() }
-            assertTrue("Back did not show page A ($hist): " + pageText(sc).take(80), waitFor(15) { pageText(sc).contains("Example Domain") })
-        }
+        val ss = tinyServer("<html><body><h1>Page A for Back</h1><a id=d href='https://ronin-dead-link.invalid/x'>dead</a></body></html>")
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { sc ->
+                Thread.sleep(1500)
+                sc.onActivity { a -> a.go("http://127.0.0.1:${ss.localPort}/a") }
+                assertTrue("page A did not load", waitFor(20) { pageText(sc).contains("Page A for Back") })
+                eval(sc, "document.getElementById('d').click(),1")
+                assertTrue("no error page", waitFor(25) { eval(sc, "document.getElementById('reload')?1:0") == "1" })
+                var hist = ""
+                sc.onActivity { a -> hist = a.historyForTest(); a.onBackPressedDispatcher.onBackPressed() }
+                assertTrue("Back did not show page A ($hist): " + pageText(sc).take(80), waitFor(15) { pageText(sc).contains("Page A for Back") })
+            }
+        } finally { ss.close() }
     }
 }
