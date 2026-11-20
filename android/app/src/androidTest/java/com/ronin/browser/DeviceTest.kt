@@ -981,7 +981,9 @@ class DeviceTest {
             sc.onActivity { a -> paused = a.timersPausedForTest(); media = a.mediaTabIsClaudeForTest() }
             assertTrue("page timers still running with Ronin in the background", paused)
             assertFalse("the Claude tab became the background player", media)
-            sc.moveToState(Lifecycle.State.RESUMED)
+            // back to Ronin the way he does it (its icon): the same screen comes to the front
+            app.startActivity(Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            assertTrue("Ronin did not come back", waitFor(15) { sc.state == Lifecycle.State.RESUMED })
             Thread.sleep(1500)
             assertTrue("the page was never told it is hidden: " + eval(sc, "JSON.stringify(window.__vis)"), eval(sc, "JSON.stringify(window.__vis)").contains("hidden"))
         }
