@@ -649,14 +649,19 @@ class DeviceTest {
             Thread.sleep(1500)
             sc.onActivity { a -> a.go("ronin-no-such-site.invalid") }
             assertTrue("no Ronin error page: " + pageText(sc).take(200), waitFor(25) { eval(sc, "document.getElementById('reload')?1:0") == "1" })
-            assertEquals("no 'Open anyway' for a site that has no https", "1", eval(sc, "document.getElementById('http')?1:0"))
-            shot("20-error-page")
+            assertEquals("'Open anyway' offered for a site that does not exist at all", "0", eval(sc, "document.getElementById('http')?1:0"))
             // Reload goes back to the same address (and fails again here)
             eval(sc, "document.getElementById('reload').click(),1")
             assertTrue(waitFor(25) { eval(sc, "document.getElementById('reload')?1:0") == "1" })
             var url = ""
             sc.onActivity { a -> url = a.currentUrlForTest() }
             assertTrue("reload lost the address: $url", url.contains("ronin-no-such-site.invalid"))
+            // a site without https: "Open anyway (not secure)" opens the plain http address
+            sc.onActivity { a -> a.httpErrorPageForTest("https://ronin-old-portal.invalid/form") }
+            assertTrue("no 'Open anyway' for a site without https", waitFor(15) { eval(sc, "document.getElementById('http')?1:0") == "1" })
+            shot("20-error-page")
+            eval(sc, "document.getElementById('http').click(),1")
+            assertTrue("'Open anyway' did not open the http address", waitFor(10) { sc.onActivity { a -> url = a.currentUrlForTest() }; url == "http://ronin-old-portal.invalid/form" })
         }
     }
 

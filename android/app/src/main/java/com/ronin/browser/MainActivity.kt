@@ -863,7 +863,7 @@ class MainActivity : AppCompatActivity() {
                 return
             }
             if (!url.startsWith("https://ronin.home")) { t.url = url; t.topHost = Rules.hostOf(url) }
-            if (t == current && !address.hasFocus()) address.setText(display(url))
+            if (t == current && !address.hasFocus()) address.setText(display(if (url.startsWith(ERROR_PAGE)) t.failedUrl ?: url else url))
             if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                 view.evaluateJavascript(adblockJs, null)
                 if (PageScripts.backgroundOrigins.any { url.startsWith(it) }) view.evaluateJavascript(PageScripts.BACKGROUND_PLAY, null)
@@ -890,7 +890,8 @@ class MainActivity : AppCompatActivity() {
             val url = req.url.toString()
             if (!url.startsWith("http") || url.startsWith("https://ronin.")) return
             if (err.errorCode !in setOf(ERROR_HOST_LOOKUP, ERROR_CONNECT, ERROR_TIMEOUT, ERROR_FAILED_SSL_HANDSHAKE, ERROR_IO)) return
-            showErrorPage(tab(), url, err.description?.toString() ?: "")
+            // no such site (name not found): plain http would not help either, so no "Open anyway" then
+            showErrorPage(tab(), url, err.description?.toString() ?: "", offerHttp = err.errorCode != ERROR_HOST_LOOKUP)
         }
 
         override fun onReceivedSslError(view: WebView, handler: android.webkit.SslErrorHandler, error: android.net.http.SslError) {
@@ -903,7 +904,7 @@ class MainActivity : AppCompatActivity() {
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
             val t = tab()
             if (url.startsWith("http") && !url.startsWith("https://ronin.home")) { t.url = url; t.topHost = Rules.hostOf(url) }
-            if (t == current && !address.hasFocus()) address.setText(display(url))
+            if (t == current && !address.hasFocus()) address.setText(display(if (url.startsWith(ERROR_PAGE)) t.failedUrl ?: url else url))
         }
     }
 
@@ -931,8 +932,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Ronin's error page: Reload (big), and "Open anyway" when the site has no https (never for a bank). */
-    private fun showErrorPage(t: Tab, url: String, why: String) {
-        val fb = t.httpFallback?.takeIf { Rules.hostOf(it) == Rules.hostOf(url) && app.rules.classify(url, app.store.userBanks).let { k -> k != Kind.BANK && k != Kind.PAYMENT } }
+    private fun showErrorPage(t: Tab, url: String, why: String, offerHttp: Boolean = true) {
+        val fb = t.httpFallback?.takeIf { offerHttp && Rules.hostOf(it) == Rules.hostOf(url) && app.rules.classify(url, app.store.userBanks).let { k -> k != Kind.BANK && k != Kind.PAYMENT } }
         t.failedUrl = url
         val h = android.text.TextUtils.htmlEncode(Rules.hostOf(url))
         val http = if (fb == null) "" else "<p class=m>" + L("यह साइट https (सुरक्षित तरीका) नहीं देती।", "This site does not offer https (the secure way).") +
@@ -944,7 +945,7 @@ a{display:block;margin:16px auto 0;max-width:340px;padding:18px;border-radius:14
 <body><main><div style="font-size:52px">📡</div><h2>${L("Page नहीं खुला", "This page did not open")}</h2><code>$h</code>
 <p class=m>${L("Internet चालू है? फिर Reload दबाएँ या page को ऊपर से नीचे खींचें।", "Is the internet on? Press Reload, or pull the page down.")}</p>
 <a id=reload href="$RELOAD_LINK?k=$pageKey">⟳ ${L("फिर से खोलें", "Reload")}</a>$http<p class=m style="font-size:12px;margin-top:22px">${android.text.TextUtils.htmlEncode(why.take(80))}</p></main></body></html>"""
-        t.web.loadDataWithBaseURL("https://ronin.home/error", html, "text/html", "utf-8", null)
+        t.web.loadDataWithBaseURL(ERROR_PAGE, html, "text/html", "utf-8", null)
     }
 
     private fun askOutside(url: String, view: WebView) {
@@ -1223,6 +1224,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     fun suggestBoxForTest(): LinearLayout = suggestBox
     fun findBarForTest(): View = findBar
     fun crashPageForTest() { current?.web?.loadUrl("chrome://crash") }
+    fun httpErrorPageForTest(https: String) { current?.let { it.url = https; it.httpFallback = "http://" + https.removePrefix("https://"); showErrorPage(it, https, "test") } }
     fun safeRecreateForTest(change: () -> Unit) = safeRecreate(change)
     fun closeTabForTest(url: String) { tabs.firstOrNull { it.url == url }?.let { closeTab(it) } }
     fun typeForTest(text: String) { address.requestFocus(); address.setText(text) }
@@ -1962,6 +1964,7 @@ h1{margin:0 0 4px;font-size:24px}p.sub{margin:0 0 6px;opacity:.7}p.note{margin-t
         val dataKey: String = java.util.UUID.randomUUID().toString().replace("-", "")
         /** Ronin's own error page: Reload, and "Open anyway" without https (only with pageKey). */
         const val RELOAD_LINK = "https://ronin.home/reload"
+        const val ERROR_PAGE = "https://ronin.home/error"
         const val HTTP_LINK = "https://ronin.home/http"
     }
 }
