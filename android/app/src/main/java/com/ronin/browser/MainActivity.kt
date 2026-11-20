@@ -1141,6 +1141,7 @@ a{display:block;margin:20px auto 0;max-width:340px;padding:18px;border-radius:14
         t.url = app.store.claudeViewUrl
         t.web.loadDataWithBaseURL(app.store.claudeViewUrl, html, "text/html", "utf-8", null)
     }
+    fun historyForTest(): String = current?.web?.copyBackForwardList()?.let { l -> (0 until l.size).joinToString(" | ") { i -> (if (i == l.currentIndex) "*" else "") + (l.getItemAtIndex(i)?.url ?: "").take(60) } } ?: ""
     fun loadForTest(url: String) { current?.let { load(it, url) } }
 
     private fun askOutside(url: String, view: WebView) {

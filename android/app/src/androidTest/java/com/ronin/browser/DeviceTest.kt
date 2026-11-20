@@ -1093,12 +1093,14 @@ class DeviceTest {
     fun backFromADeadLinkShowsThePageBefore() {
         ActivityScenario.launch(MainActivity::class.java).use { sc ->
             Thread.sleep(1500)
-            sc.onActivity { a -> a.loadHtmlForTest("<html><body><h1>Page A for Back</h1><a id=d href='https://ronin-dead-link.invalid/x'>dead</a></body></html>", "https://page-a.example/") }
-            Thread.sleep(1500)
-            eval(sc, "document.getElementById('d').click(),1")
+            // a real page A (as in real use), then a link on it that leads nowhere
+            sc.onActivity { a -> a.go("https://example.com/") }
+            assertTrue("page A did not load", waitFor(30) { pageText(sc).contains("Example Domain") })
+            eval(sc, "location.href='https://ronin-dead-link.invalid/x',1")
             assertTrue("no error page", waitFor(25) { eval(sc, "document.getElementById('reload')?1:0") == "1" })
-            sc.onActivity { a -> a.onBackPressedDispatcher.onBackPressed() }
-            assertTrue("Back did not show page A: " + pageText(sc).take(120), waitFor(10) { pageText(sc).contains("Page A for Back") })
+            var hist = ""
+            sc.onActivity { a -> hist = a.historyForTest(); a.onBackPressedDispatcher.onBackPressed() }
+            assertTrue("Back did not show page A ($hist): " + pageText(sc).take(80), waitFor(15) { pageText(sc).contains("Example Domain") })
         }
     }
 }
