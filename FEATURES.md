@@ -280,3 +280,23 @@ Installed on laptop: 3.1.2 (C:\Ronin Ecosystem\Ronin Browser). Tested OK on lapt
       unchanged Ronin.exe path). Fix in setup: each version writes <install>\icons\ronin-<version>.ico (older ones
       removed), shortcuts point to it, then SHChangeNotify + ie4uinit -show. Checked on the laptop desktop: both
       shortcuts now show the green R shield.
+
+## 21 Nov — 3.14.0 Android (branch claude/v3.14.0, draft PR #1; built + emulator-tested, NOT published)
+- [b] Tabs come back after an update / swipe-away / crash (only the front tab loads); "Tab closed — Undo"
+- [b] A killed page engine reloads only that tab (Ronin no longer closes, forms elsewhere stay)
+- [b] Day/Night and Language ask first when typed form text, private tabs or a song would be lost
+- [b] Safe Money: bank pop-up questions + file upload work, PDF/Excel statements download, Back asks before logout,
+      redirects to non-bank sites leave the green frame
+- [b] Files made inside a page (blob: / data:) save to Downloads/Ronin
+- [b] Router / LAN pages open on http; a site without https gets "Reload" and "Open anyway (not secure)" (never banks)
+- [b] "This is my bank" asks; Remembered sites list (my banks, camera / mic) with ✕
+- [b] Other apps (UPI, phone, Play Store) open only after a tap, else Ronin asks
+- [b] Family Filter SafeSearch also for typed / spoken searches
+- [b] Address-bar suggestions (quick links, bookmarks, history); A− / A+ text size per site; Find in page; Share;
+      Desktop site; Forward; long-press link menu (new tab / copy / share / save picture); pull down to reload
+- [b] Camera / mic asked once per site (remembered), Back = no; links that open a new window open a new tab
+- [b] Battery: song in the background uses YouTube's smallest picture, page timers rest when nothing plays, ad layer
+      sleeps on quiet pages, slower media checks, lists not read on SMS / call starts, TV screen sleeps when paused
+- [b] Update continues by itself after "Allow from this source"
+- [-] Two APKs / removing call recorder / permission changes / silent self-update: owner's decision (questions in HANDOFF)
+
