@@ -68,6 +68,25 @@ object PageScripts {
 })();
 """
 
+    /**
+     * Claude's live view: its Paste button asks the clipboard; WebView itself never allows that, so Ronin answers
+     * (only on Claude's own host, only right after his tap - checked in the app).
+     */
+    const val CLAUDE_PASTE = """
+(function(){
+  try {
+    if (window.__roninClip || !navigator.clipboard) return; window.__roninClip = 1;
+    var waiting = [], hooked = false;
+    navigator.clipboard.readText = function(){
+      var b = window.roninClip;
+      if (!b) return Promise.reject(new Error('no bridge'));
+      if (!hooked) { hooked = true; b.onmessage = function(e){ var w = waiting.shift(); if (w) w(String(e.data || '')); }; }
+      return new Promise(function(ok, no){ waiting.push(function(s){ s ? ok(s) : no(new Error('no text')); }); b.postMessage('read'); });
+    };
+  } catch (e) {}
+})();
+"""
+
     /** true when a form on the page has text the user typed (it would be lost if the page loads again). */
     const val HAS_TYPED_TEXT = """
 (function(){

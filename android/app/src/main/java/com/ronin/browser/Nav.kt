@@ -95,6 +95,20 @@ object Nav {
     /** Text size steps for A− / A+ (per cent), kept between 50 % and 250 %. */
     fun nextZoom(current: Int, up: Boolean): Int = (if (up) current + 15 else current - 15).coerceIn(50, 250)
 
+    /** Claude's own browser on his server: the live view page Ronin's "🤖 Claude" button opens. */
+    const val CLAUDE_VIEW_DEFAULT = "https://16-4-152-212.sslip.io/view"
+
+    /**
+     * A one-time pairing link of Claude's browser (https://<host>/k/<48 hex>) -> that host, else null. Only free
+     * name services that point at his own server (sslip.io, nip.io, duckdns.org) are accepted, so a look-alike link
+     * from somewhere else can never become "Claude".
+     */
+    fun claudePairingHost(url: String): String? {
+        val m = Regex("^https://([a-z0-9.-]+)/k/[0-9a-f]{48}/?$").find(url.trim().lowercase()) ?: return null
+        val host = m.groupValues[1]
+        return if (Regex("\\.(sslip\\.io|nip\\.io|duckdns\\.org)$").containsMatchIn(host) && !host.startsWith(".")) host else null
+    }
+
     data class Hit(val title: String, val url: String)
 
     /**

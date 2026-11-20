@@ -86,6 +86,7 @@ class MainActivity : AppCompatActivity() {
         @Volatile var topHost = ""
         @Volatile var isTools = false // Ronin's own PDF / Photo tools page is open in this tab
         var isPrivate = false // adult / gambling site: own cookies, no history, wiped when closed
+        var claudeOrigin: String? = null // set = the "🤖 Claude" tab (his own server's live view; cookies kept, nothing injected)
     }
 
     private val app get() = application as RoninApp
@@ -179,9 +180,9 @@ class MainActivity : AppCompatActivity() {
             saved != null && saved.first.isNotEmpty() -> {
                 saved.first.forEach { newTab(it, select = false, lazy = true) }
                 select(tabs[saved.second.coerceIn(0, tabs.size - 1)])
-                if (start != null && start.startsWith("http")) newTab(start)
+                if (start != null && start.startsWith("http")) openFromOutside(start)
             }
-            start != null && start.startsWith("http") -> newTab(start)
+            start != null && start.startsWith("http") -> if (isClaudeLink(start)) { newTab(HOME); openFromOutside(start) } else newTab(start)
             else -> newTab(HOME)
         }
         handleSpecial(intent)
@@ -211,7 +212,7 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         val u = intent.dataString
-        if (u != null && u.startsWith("http")) newTab(u)
+        if (u != null && u.startsWith("http")) openFromOutside(u)
         handleSpecial(intent)
     }
 
@@ -232,13 +233,13 @@ class MainActivity : AppCompatActivity() {
     } catch (e: Exception) { null }
 
     private fun saveTabs() {
-        val list = browsingTabs().filter { !it.isPrivate }
+        val list = browsingTabs().filter { !it.isPrivate && it.claudeOrigin == null }
         app.store.savedTabs = JSONObject().put("u", JSONArray(list.map { it.url.ifEmpty { HOME } })).put("a", list.indexOf(current).coerceAtLeast(0)).toString()
     }
 
     override fun onSaveInstanceState(out: Bundle) {
         super.onSaveInstanceState(out)
-        val list = browsingTabs().filter { !it.isPrivate } // Ronin Tools and private tabs are not kept
+        val list = browsingTabs().filter { !it.isPrivate && it.claudeOrigin == null } // Ronin Tools, private and Claude tabs are not kept
         out.putStringArrayList("tabs", ArrayList(list.map { it.url.ifEmpty { HOME } }))
         out.putInt("active", list.indexOf(current).coerceAtLeast(0))
     }
@@ -359,6 +360,14 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(Color.parseColor("#0E1016"))
             addView(homeButton); addView(newTabButton); addView(stripScroll) // Tools: in the menu now
+            addView(Button(this@MainActivity).apply {
+                text = "🤖 Claude"; textSize = 15f; isAllCaps = false; tag = "claude-top"
+                contentDescription = L("Claude का browser", "Claude's browser")
+                setTextColor(Color.WHITE); minWidth = 0; minimumWidth = 0; setPadding(dp(16), 0, dp(16), 0)
+                background = android.graphics.drawable.GradientDrawable().apply { setColor(Color.parseColor("#C2410C")); cornerRadius = dp(22).toFloat() }
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)).apply { marginEnd = dp(8); marginStart = dp(6) }
+                setOnClickListener { openClaude() }
+            })
             // phone: no tab strip at the top (the tab count button at the bottom opens the tabs); a tablet keeps it
             visibility = if (resources.configuration.smallestScreenWidthDp >= 600) View.VISIBLE else View.GONE
         }
@@ -488,7 +497,7 @@ class MainActivity : AppCompatActivity() {
     // ---- tabs -----------------------------------------------------------------------
 
     @SuppressLint("SetJavaScriptEnabled")
-    private fun makeWebView(t: () -> Tab, private: Boolean = false): RoninWebView {
+    private fun makeWebView(t: () -> Tab, private: Boolean = false, claude: String? = null): RoninWebView {
         val w = RoninWebView(this)
         // a private tab keeps its cookies and storage apart from everything else
         if (private && WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
@@ -518,7 +527,18 @@ class MainActivity : AppCompatActivity() {
             WebSettingsCompat.setAlgorithmicDarkeningAllowed(w.settings, app.store.night)
         }
         CookieManager.getInstance().setAcceptThirdPartyCookies(w, false)
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+        if (claude != null) {
+            // Claude's live view: no ad layer, no song tricks; its Paste button may read the clipboard, only on its own
+            // host, only in the tab on screen and only within 3 s of his own tap
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                WebViewCompat.addWebMessageListener(w, "roninClip", setOf(claude)) { _, _, origin, main, reply ->
+                    val ok = main && origin.toString().trimEnd('/') == claude && w === current?.web && onScreen &&
+                        android.os.SystemClock.uptimeMillis() - w.lastTouchAt < 3000
+                    try { reply.postMessage(if (ok) clipText() else "") } catch (e: Exception) { }
+                }
+                WebViewCompat.addDocumentStartJavaScript(w, PageScripts.CLAUDE_PASTE, setOf(claude))
+            }
+        } else if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(w, PageScripts.BACKGROUND_PLAY, PageScripts.backgroundOrigins)
             WebViewCompat.addDocumentStartJavaScript(w, adblockJs, setOf("*"))
             WebViewCompat.addDocumentStartJavaScript(w, PageScripts.KEEP_BLOBS, setOf("*"))
@@ -538,11 +558,12 @@ class MainActivity : AppCompatActivity() {
 
     private val adblockJs: String by lazy { assets.open("ronin/inject_adblock.js").bufferedReader().readText() }
     /** url "" = an empty tab (a page fills it: new window); lazy = the page loads when the tab is first shown. */
-    fun newTab(url: String, select: Boolean = true, private: Boolean = false, lazy: Boolean = false): Tab {
+    fun newTab(url: String, select: Boolean = true, private: Boolean = false, lazy: Boolean = false, claude: String? = null): Tab {
         lateinit var tab: Tab
-        val w = makeWebView({ tab }, private)
+        val w = makeWebView({ tab }, private, claude)
         tab = Tab(w)
         tab.isPrivate = private
+        tab.claudeOrigin = claude
         tabs.add(tab)
         holder.addView(w, holder.indexOfChild(pullBadge).coerceAtLeast(0))
         w.visibility = View.GONE
@@ -555,6 +576,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun select(t: Tab) {
         if (::findBar.isInitialized && findBar.visibility == View.VISIBLE && current != t) closeFind()
+        // the Claude tab rests as soon as another tab is in front (its page then closes its live stream)
+        current?.let { if (it != t && it.claudeOrigin != null) it.web.onPause() }
+        if (t.claudeOrigin != null) t.web.onResume()
         current?.web?.visibility = View.GONE
         current = t
         t.web.visibility = View.VISIBLE
@@ -613,7 +637,7 @@ class MainActivity : AppCompatActivity() {
                 setOnClickListener { select(t) }
             }
             val name = TextView(this).apply {
-                text = (if (t.isPrivate) "🕶 " else "") + t.title.ifBlank { if (t.url == HOME || t.url.isEmpty()) "New tab" else display(t.url) }
+                text = (if (t.isPrivate) "🕶 " else if (t.claudeOrigin != null) "🤖 " else "") + t.title.ifBlank { if (t.url == HOME || t.url.isEmpty()) "New tab" else display(t.url) }
                 setTextColor(Color.parseColor(if (on) "#FFFFFF" else "#9AA3B2"))
                 textSize = 14f
                 setSingleLine(true)
@@ -683,6 +707,9 @@ class MainActivity : AppCompatActivity() {
         t.pending = null; t.httpFallback = null; t.failedUrl = null
         // Family Filter: SafeSearch also for searches typed or spoken in the address bar (not only for links)
         val url = (if (Family.adultBlocked(this)) Family.safeSearch(url0) else null) ?: url0
+        // Claude's browser: its pairing link and its pages always open in the Claude tab
+        Nav.claudePairingHost(url)?.let { h -> if (t.claudeOrigin != "https://$h") { pairClaude(h, url); return } }
+        if (t.claudeOrigin == null && url.startsWith(claudeOrigin() + "/")) { openClaude(url); return }
         if (Sensitive.site(url) && Family.adultBlocked(this)) { blockAdult(t, url); return }
         if (!t.isPrivate && Sensitive.site(url)) { openPrivate(url, t); return }
         if (url.startsWith(TOOLS)) {
@@ -745,6 +772,7 @@ class MainActivity : AppCompatActivity() {
             val url = req.url.toString()
             val t = tab()
             if (url.startsWith(TOOLS)) return toolsFile(t, req.url.path ?: "")
+            if (t.claudeOrigin != null) return null // his own server: no ad-block, no danger list in the Claude tab
             if (req.isForMainFrame) {
                 stopPage(url, t)?.let { html ->
                     return WebResourceResponse("text/html", "utf-8", 200, "OK", mapOf("Cache-Control" to "no-store"),
@@ -779,6 +807,13 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, L("⚠ यह साइट सुरक्षित (https) नहीं है: password, OTP या card नंबर न डालें", "⚠ This site is not secure (no https): never type a password, OTP or card number"), Toast.LENGTH_LONG).show()
                 } else load(t, t.failedUrl ?: t.url)
                 return true
+            }
+            if (req.isForMainFrame) {
+                val t = tab()
+                Nav.claudePairingHost(url)?.let { h -> if (t.claudeOrigin != "https://$h") { pairClaude(h, url); return true } }
+                if (t.claudeOrigin == null && url.startsWith(claudeOrigin() + "/")) { openClaude(url); return true }
+                // a link to another site from Claude's view opens in a normal tab (with all of Ronin's checks)
+                if (t.claudeOrigin != null && !url.startsWith(t.claudeOrigin + "/") && (scheme == "http" || scheme == "https")) { newTab(url); return true }
             }
             if (req.isForMainFrame && Sensitive.site(url) && Family.adultBlocked(this@MainActivity)) { blockAdult(tab(), url); return true }
             if (req.isForMainFrame && Family.adultBlocked(this@MainActivity) && Family.safeSearch(url) != null) { view.loadUrl(Family.safeSearch(url)!!); return true }
@@ -875,7 +910,7 @@ class MainActivity : AppCompatActivity() {
             t.title = view.title ?: ""
             updateTabsButton()
             showDataButton(t)
-            if (url.startsWith("http") && !url.startsWith("https://ronin.home") && !t.title.startsWith("⛔") && !t.isPrivate && !Sensitive.site(url)) app.store.addHistory(t.title, url)
+            if (url.startsWith("http") && !url.startsWith("https://ronin.home") && !t.title.startsWith("⛔") && !t.isPrivate && t.claudeOrigin == null && !Sensitive.site(url)) app.store.addHistory(t.title, url)
         }
 
         /** Android ended the page engine (low memory, many tabs): only the pages reload, Ronin itself stays. */
@@ -889,9 +924,17 @@ class MainActivity : AppCompatActivity() {
             if (!req.isForMainFrame) return
             val url = req.url.toString()
             if (!url.startsWith("http") || url.startsWith("https://ronin.")) return
+            if (tab().claudeOrigin != null) { showClaudeDown(tab(), url, notPaired = false); return }
             if (err.errorCode !in setOf(ERROR_HOST_LOOKUP, ERROR_CONNECT, ERROR_TIMEOUT, ERROR_FAILED_SSL_HANDSHAKE, ERROR_IO)) return
             // no such site (name not found): plain http would not help either, so no "Open anyway" then
             showErrorPage(tab(), url, err.description?.toString() ?: "", offerHttp = err.errorCode != ERROR_HOST_LOOKUP)
+        }
+
+        /** Claude's server answers but its browser part is off (5xx), or this tablet is not paired yet (404). */
+        override fun onReceivedHttpError(view: WebView, req: WebResourceRequest, res: WebResourceResponse) {
+            val t = tab()
+            if (!req.isForMainFrame || t.claudeOrigin == null) return
+            if (res.statusCode >= 500 || res.statusCode == 404) showClaudeDown(t, req.url.toString(), notPaired = res.statusCode == 404)
         }
 
         override fun onReceivedSslError(view: WebView, handler: android.webkit.SslErrorHandler, error: android.net.http.SslError) {
@@ -946,6 +989,77 @@ a{display:block;margin:16px auto 0;max-width:340px;padding:18px;border-radius:14
 <p class=m>${L("Internet चालू है? फिर Reload दबाएँ या page को ऊपर से नीचे खींचें।", "Is the internet on? Press Reload, or pull the page down.")}</p>
 <a id=reload href="$RELOAD_LINK?k=$pageKey">⟳ ${L("फिर से खोलें", "Reload")}</a>$http<p class=m style="font-size:12px;margin-top:22px">${android.text.TextUtils.htmlEncode(why.take(80))}</p></main></body></html>"""
         t.web.loadDataWithBaseURL(ERROR_PAGE, html, "text/html", "utf-8", null)
+    }
+
+    // ---- 🤖 Claude: Claude's own browser on his server, seen live in one tab ------------------------------
+
+    private fun claudeOrigin() = "https://" + Rules.hostOf(app.store.claudeViewUrl)
+
+    /** Opens (or shows) the one Claude tab; url = a page of Claude's host (pairing link), else the saved live view. */
+    fun openClaude(url: String? = null) {
+        val view = app.store.claudeViewUrl
+        val origin = claudeOrigin()
+        var t = tabs.firstOrNull { it.claudeOrigin != null }
+        if (t != null && t.claudeOrigin != origin) { closeTab(t, undo = false); t = null } // the server moved
+        if (t == null) {
+            t = newTab("", select = true, claude = origin)
+            t.title = "Claude"
+            load(t, url ?: view)
+        } else {
+            select(t)
+            if (url != null || !t.url.startsWith("$origin/")) load(t, url ?: view)
+        }
+        updateTabsButton()
+    }
+
+    /** A pairing link of Claude's browser: its host becomes "Claude" (a new host only after one question). */
+    private fun pairClaude(host: String, url: String) {
+        if ("https://$host" == claudeOrigin()) { openClaude(url); return }
+        showAsk(AlertDialog.Builder(this).setTitle(L("यह Claude का browser है?", "Is this Claude's browser?"))
+            .setMessage(L("$host\n\n🤖 Claude बटन अब यही खोलेगा। सिर्फ़ तभी हाँ कहें जब यह link आपके अपने Telegram से आया हो।", "$host\n\nThe 🤖 Claude button will open this from now on. Say yes only if this link came from your own Telegram."))
+            .setPositiveButton(L("हाँ", "Yes")) { _, _ -> app.store.claudeViewUrl = "https://$host/view"; openClaude(url) }
+            .setNegativeButton(L("नहीं", "No"), null))
+    }
+
+    private fun isClaudeLink(u: String) = Nav.claudePairingHost(u) != null || u.startsWith(claudeOrigin() + "/")
+
+    /** A link from another app (Telegram...): Claude's links go to the Claude tab, everything else to a new tab. */
+    private fun openFromOutside(u: String) {
+        val h = Nav.claudePairingHost(u)
+        when {
+            h != null -> pairClaude(h, u)
+            u.startsWith(claudeOrigin() + "/") -> openClaude(u)
+            else -> newTab(u)
+        }
+    }
+
+    private fun clipText(): String = try {
+        (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).primaryClip?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)?.coerceToText(this)?.toString()?.take(10000) ?: ""
+    } catch (e: Exception) { "" }
+
+    /** Claude's server is off / unreachable, or this device is not paired yet: one simple page with Reload. */
+    private fun showClaudeDown(t: Tab, url: String, notPaired: Boolean) {
+        t.failedUrl = if (url.contains("/k/")) app.store.claudeViewUrl else url // a pairing key works only once
+        val why = if (notPaired) L("यह tablet अभी जुड़ा नहीं है: Telegram में आया 📺 live-view link Ronin में एक बार खोलें।", "This device is not paired yet: open the 📺 live-view link from Telegram in Ronin once.")
+            else L("Server पर Claude का browser बंद है या पहुँच से बाहर है। Claude से काम कहने पर यह अपने-आप चालू होता है।", "Claude's browser on the server is off or cannot be reached. It starts by itself when you ask Claude for a task.")
+        val html = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Claude</title>
+<style>body{margin:0;background:#14171f;color:#e8eaf0;font:17px sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center}
+main{max-width:520px;padding:24px}.m{color:#9aa3b2;font-size:16px;line-height:1.5}
+a{display:block;margin:20px auto 0;max-width:340px;padding:18px;border-radius:14px;background:#c2410c;color:#fff;text-decoration:none;font-weight:bold;font-size:19px}</style></head>
+<body><main><div style="font-size:56px">🤖</div><h2>${L("Claude का browser अभी चालू नहीं", "Claude's browser is not on right now")}</h2>
+<p class=m>${android.text.TextUtils.htmlEncode(why)}</p><a id=reload href="$RELOAD_LINK?k=$pageKey">⟳ ${L("फिर से खोलें", "Reload")}</a></main></body></html>"""
+        t.web.loadDataWithBaseURL(ERROR_PAGE, html, "text/html", "utf-8", null)
+    }
+
+    fun claudeUrlForTest(): String? = tabs.firstOrNull { it.claudeOrigin != null }?.url
+    fun claudeIsCurrentForTest() = current?.claudeOrigin != null
+    fun timersPausedForTest() = timersPaused
+    fun mediaTabIsClaudeForTest() = mediaTab?.claudeOrigin != null
+    fun loadClaudeHtmlForTest(html: String) {
+        openClaude()
+        val t = current ?: return
+        t.web.loadDataWithBaseURL(app.store.claudeViewUrl, html, "text/html", "utf-8", null)
     }
 
     private fun askOutside(url: String, view: WebView) {
@@ -1584,7 +1698,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             // nothing played for 10 minutes: that tab may rest in the background again (battery)
             mediaTab?.let { if (!mediaPlaying && System.currentTimeMillis() - lastPlayingAt > 10 * 60_000) releaseMedia() }
             if (mediaTab == null && !onScreen) return // closed and nothing to play: stop checking
-            val candidates = listOfNotNull(mediaTab, current).distinct()
+            val candidates = listOfNotNull(mediaTab, current?.takeIf { it.claudeOrigin == null }).distinct() // never polls the Claude tab
             for (t in candidates) {
                 t.web.evaluateJavascript(PageScripts.MEDIA_STATE) { r -> onMediaState(t, r) }
             }
@@ -1595,6 +1709,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     }
 
     private fun onMediaState(t: Tab, raw: String?) {
+        if (t.claudeOrigin != null) return // Claude's live view is never the background player
         val o = try { JSONObject(JSONArray("[$raw]").getString(0)) } catch (e: Exception) { return }
         // background play is for songs / talks: short-video feeds (Instagram, Facebook...) and silent (muted)
         // videos never keep the phone awake when Ronin is closed - they ate the battery
@@ -1652,6 +1767,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     override fun onStop() {
         super.onStop()
         saveTabs()
+        CookieManager.getInstance().flush() // Claude's pairing cookie (and every login) is on disk before Android may end Ronin
         if (mediaTab == null) ui.removeCallbacks(mediaPoll) // nothing playing: no checks every second in the background
         // tabs that do not play are paused to save battery; the playing one goes on
         for (t in tabs) if (t != mediaTab) t.web.onPause()
@@ -1721,6 +1837,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         val bigs = ArrayList<Sheet.Big>()
         bigs.add(Sheet.Big("＋", L("नया tab", "New tab"), "m-newtab", "#1D4ED8") { newTab(HOME) })
         bigs.add(Sheet.Big("G", "Google", "m-home", "#334155") { if (t == null || t.isTools) newTab(GOOGLE) else load(t, GOOGLE) })
+        bigs.add(Sheet.Big("🤖", "Claude", "m-claude", "#C2410C") { openClaude() })
         if (web) {
             val marked = app.store.isBookmarked(t!!.url)
             bigs.add(Sheet.Big(if (marked) "★" else "☆", if (marked) L("Bookmark हटाएँ", "Unbookmark") else L("Bookmark", "Bookmark"), "m-bookmark", "#B45309") {

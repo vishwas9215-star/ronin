@@ -14,6 +14,8 @@ import android.webkit.WebView
 @SuppressLint("ViewConstructor")
 class RoninWebView(context: Context) : WebView(context) {
     @Volatile var keepPlaying = false
+    /** When his finger last touched this page (Claude's Paste button may read the clipboard only right after a tap). */
+    @Volatile var lastTouchAt = 0L
 
     override fun onWindowVisibilityChanged(visibility: Int) {
         if (keepPlaying && visibility != View.VISIBLE) {
@@ -58,6 +60,7 @@ class RoninWebView(context: Context) : WebView(context) {
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        if (e.actionMasked == MotionEvent.ACTION_DOWN || e.actionMasked == MotionEvent.ACTION_UP) lastTouchAt = android.os.SystemClock.uptimeMillis()
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> { downX = e.x; downY = e.y; lastX = e.x; lastY = e.y; fingerDown = true; startedAtTop = scrollY <= 0; overTop = false; setArmed(false) }
             MotionEvent.ACTION_POINTER_DOWN -> { startedAtTop = false; setArmed(false) } // two fingers = zoom, never reload

@@ -357,4 +357,16 @@ class LogicTest {
         assertTrue(Nav.suggest("zzz", first, hist).isEmpty())
         assertTrue(Nav.suggest("a", first, hist, limit = 2).size <= 2)
     }
+
+    @Test fun claudePairingLinks() {
+        val key = "0123456789abcdef".repeat(3)
+        assertEquals("16-4-152-212.sslip.io", Nav.claudePairingHost("https://16-4-152-212.sslip.io/k/$key"))
+        assertEquals("ronin-vps.duckdns.org", Nav.claudePairingHost("https://ronin-vps.duckdns.org/k/$key"))
+        assertNull(Nav.claudePairingHost("http://16-4-152-212.sslip.io/k/$key")) // never plain http
+        assertNull(Nav.claudePairingHost("https://evil.example/k/$key")) // only his own server's name services
+        assertNull(Nav.claudePairingHost("https://sslip.io.evil.example/k/$key"))
+        assertNull(Nav.claudePairingHost("https://16-4-152-212.sslip.io/k/abc"))
+        assertNull(Nav.claudePairingHost("https://16-4-152-212.sslip.io/view"))
+        assertEquals("https://16-4-152-212.sslip.io/view", Nav.CLAUDE_VIEW_DEFAULT)
+    }
 }
