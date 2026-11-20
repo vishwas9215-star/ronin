@@ -807,25 +807,28 @@ class DeviceTest {
 
     @Test
     fun updateCarriesOnByItselfAfterInstallPermission() {
+        // note: taking "install unknown apps" AWAY kills the app (and this test), so the test only ever allows it
         val f = java.io.File(java.io.File(app.cacheDir, "updates").apply { mkdirs() }, "Ronin.apk").apply { writeBytes(ByteArray(16)) }
         val filter = android.content.IntentFilter(Intent.ACTION_VIEW).apply { addDataType("application/vnd.android.package-archive") }
         val mon = inst.addMonitor(filter, null, true)
         try {
-            shell("appops set ${app.packageName} REQUEST_INSTALL_PACKAGES deny")
             ActivityScenario.launch(MainActivity::class.java).use { sc ->
                 Thread.sleep(1000)
                 Updater.waitingApk = f
-                sc.onActivity { a -> Updater.resume(a) }
-                assertEquals("installer opened without the permission", 0, mon.hits)
-                assertNotNull("the waiting update was forgotten", Updater.waitingApk)
-                shell("appops set ${app.packageName} REQUEST_INSTALL_PACKAGES allow")
-                sc.onActivity { a -> Updater.resume(a) }
+                var allowed = false
+                sc.onActivity { a -> allowed = a.packageManager.canRequestPackageInstalls(); Updater.resume(a) }
+                if (!allowed) {
+                    assertEquals("installer opened without the permission", 0, mon.hits)
+                    assertNotNull("the waiting update was forgotten", Updater.waitingApk)
+                    shell("appops set ${app.packageName} REQUEST_INSTALL_PACKAGES allow")
+                    assertTrue("permission not given", waitFor(5) { var ok = false; sc.onActivity { a -> ok = a.packageManager.canRequestPackageInstalls() }; ok })
+                    sc.onActivity { a -> Updater.resume(a) }
+                }
                 assertTrue("update did not carry on by itself", waitFor(5) { mon.hits == 1 })
                 assertTrue(Updater.waitingApk == null)
             }
         } finally {
             inst.removeMonitor(mon); Updater.waitingApk = null; f.delete()
-            shell("appops set ${app.packageName} REQUEST_INSTALL_PACKAGES default")
         }
     }
 
