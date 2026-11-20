@@ -1223,6 +1223,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
     fun suggestBoxForTest(): LinearLayout = suggestBox
     fun findBarForTest(): View = findBar
     fun crashPageForTest() { current?.web?.loadUrl("chrome://crash") }
+    fun safeRecreateForTest(change: () -> Unit) = safeRecreate(change)
     fun closeTabForTest(url: String) { tabs.firstOrNull { it.url == url }?.let { closeTab(it) } }
     fun typeForTest(text: String) { address.requestFocus(); address.setText(text) }
     fun currentIsPrivateForTest() = current?.isPrivate == true
@@ -1364,6 +1365,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
                 val p = saveToDownloads("$base.pdf", "application/pdf", te.pdf())
                 runOnUiThread {
                     exporting = false
+                    if (isFinishing || isDestroyed) return@runOnUiThread // he left meanwhile: the files are saved, no dialog
                     exportTab?.web?.evaluateJavascript("window.__roninTable&&window.__roninTable.badge('" + L("✔ Excel + PDF बन गई (Downloads → Ronin)", "✔ Excel + PDF ready (Downloads → Ronin)") + "',100,true)", null)
                     val c = te.counts
                     AlertDialog.Builder(this).setTitle(L("📊 Excel + PDF बन गई", "📊 Excel + PDF ready"))

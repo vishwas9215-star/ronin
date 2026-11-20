@@ -136,11 +136,14 @@ class SafeMoneyActivity : AppCompatActivity() {
     /** Closing Safe Money signs him out of the bank (nothing is kept): one question first. */
     private fun askClose() {
         if (webGone || isFinishing) { finish(); return }
-        android.app.AlertDialog.Builder(this).setTitle(L("Safe Money बंद करें?", "Close Safe Money?"))
+        closeAsk = android.app.AlertDialog.Builder(this).setTitle(L("Safe Money बंद करें?", "Close Safe Money?"))
             .setMessage(L("बंद करने पर bank से logout हो जाएगा।", "Closing it signs you out of the bank."))
             .setPositiveButton(L("हाँ, बंद करें", "Yes, close")) { _, _ -> finish() }
             .setNegativeButton(L("नहीं", "No"), null).show()
     }
+    private var closeAsk: android.app.AlertDialog? = null
+    fun closeAskForTest() = closeAsk
+    fun webForTest(): WebView = web
 
     /** Statements and receipts only (PDF / Excel / CSV), saved in Downloads. */
     private fun download(url: String, ua: String, cd: String?, mime: String?) {

@@ -41,6 +41,12 @@ class DeviceTest {
         InstrumentationRegistry.getInstrumentation().targetContext.getSharedPreferences("ronin", Context.MODE_PRIVATE).edit().remove("savedTabs").commit()
     }
 
+    /** The emulator's own "Pixel Launcher isn't responding" box can cover the screen and eat a real tap / swipe. */
+    private fun noSystemDialogs() {
+        val d = androidx.test.uiautomator.UiDevice.getInstance(inst)
+        repeat(3) { d.findObject(androidx.test.uiautomator.By.text("Wait"))?.let { it.click(); Thread.sleep(600) } }
+    }
+
     private fun findTag(v: android.view.View?, tag: String): android.view.View? {
         if (v == null) return null
         if (v.tag == tag) return v
@@ -842,9 +848,67 @@ class DeviceTest {
             eval(sc, "window.notReloaded=5,1") // a reload starts the page again: this mark is then gone
             val loc = IntArray(2); var w = 0; var h = 0
             sc.onActivity { a -> a.webForTest().getLocationOnScreen(loc); w = a.webForTest().width; h = a.webForTest().height }
+            noSystemDialogs()
             val d = androidx.test.uiautomator.UiDevice.getInstance(inst)
             d.swipe(loc[0] + w / 2, loc[1] + 40, loc[0] + w / 2, loc[1] + minOf(h - 20, 900), 60)
             assertTrue("pulling down at the top did not reload the page", waitFor(10) { eval(sc, "window.notReloaded===5?1:0") == "0" })
+        }
+    }
+
+    @Test
+    fun safeMoneyAnswersBankQuestionsAndSendsOtherSitesOut() {
+        val mon = inst.addMonitor(MainActivity::class.java.name, null, true)
+        try {
+            ActivityScenario.launch(SafeMoneyActivity::class.java).use { sc ->
+                Thread.sleep(1500)
+                sc.onActivity { a -> assertNotNull("bank pages cannot ask (alert / confirm) or upload", a.webForTest().webChromeClient) }
+                // a redirect by itself (no tap) to a normal site leaves the green frame
+                sc.onActivity { a -> a.webForTest().loadDataWithBaseURL("https://onlinesbi.sbi/", "<script>setTimeout(function(){location.href='https://example.com/after-bank'},300)</script>", "text/html", "utf-8", null) }
+                assertTrue("a non-bank redirect stayed inside Safe Money", waitFor(10) { mon.hits >= 1 })
+                // Back on the first page asks before logging out
+                sc.onActivity { a -> a.webForTest().clearHistory(); a.onBackPressedDispatcher.onBackPressed() }
+                Thread.sleep(500)
+                sc.onActivity { a -> assertTrue("Back closed Safe Money without asking", a.closeAskForTest()?.isShowing == true); a.closeAskForTest()?.dismiss() }
+                assertEquals(Lifecycle.State.RESUMED, sc.state)
+            }
+        } finally { inst.removeMonitor(mon) }
+    }
+
+    @Test
+    fun coloursOrLanguageAskBeforeLosingATypedForm() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            sc.onActivity { a -> a.loadHtmlForTest("<html><body><input id=n value=''></body></html>", "https://form.example.gov.in/") }
+            Thread.sleep(1200)
+            eval(sc, "document.getElementById('n').value='Asha Devi',1")
+            var changed = false
+            sc.onActivity { a -> a.safeRecreateForTest { changed = true } }
+            assertTrue("Ronin did not ask before redrawing over a typed form", waitFor(10) { var s = false; sc.onActivity { a -> s = a.lastAskForTest()?.isShowing == true }; s })
+            assertFalse("changed without asking", changed)
+            sc.onActivity { a -> a.lastAskForTest()?.dismiss() }
+            // battery: sound starts by itself only on the song sites
+            var news = false; var yt = true
+            sc.onActivity { a -> news = a.webForTest().settings.mediaPlaybackRequiresUserGesture }
+            sc.onActivity { a -> a.loadHtmlForTest("<html><body>song</body></html>", "https://m.youtube.com/ronin-gesture-test") }
+            sc.onActivity { a -> yt = a.webForTest().settings.mediaPlaybackRequiresUserGesture }
+            assertTrue("a normal site may start sound without a tap", news)
+            assertFalse("YouTube cannot start the next song by itself", yt)
+        }
+    }
+
+    @Test
+    fun aLinkThatOpensANewWindowOpensANewTab() {
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            sc.onActivity { a -> a.loadHtmlForTest("<html><body style='margin:0'><a id=x target=_blank href='https://example.com/receipt' style='display:block;height:400px;background:#2563eb;color:#fff;font:30px sans-serif'>Print receipt</a></body></html>", "https://portal.example.gov.in/form") }
+            Thread.sleep(1500)
+            var n = 0; val loc = IntArray(2); var w = 0
+            sc.onActivity { a -> n = a.tabUrlsForTest().size; a.webForTest().getLocationOnScreen(loc); w = a.webForTest().width }
+            noSystemDialogs()
+            androidx.test.uiautomator.UiDevice.getInstance(inst).click(loc[0] + w / 2, loc[1] + 150) // a real tap
+            var urls = emptyList<String>()
+            assertTrue("no new tab for a new-window link", waitFor(10) { sc.onActivity { a -> urls = a.tabUrlsForTest() }; urls.size == n + 1 })
+            assertTrue("the form page was replaced: $urls", urls.any { it.startsWith("https://portal.example.gov.in/form") })
         }
     }
 }
