@@ -302,6 +302,9 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
   Test: phone.js checks every circle is white-on-colour.
 - Owner 13:33: first real Chakshu report worked on his phone (form filled, picture attached, he typed the mobile, OTP,
   submitted).
+- Real Sanchar Saathi OTP seen (owner screenshot 13:36): header XX-ISATHI, "Thank you for visiting SancharSaathi Portal.
+  OTP for login is 289029 ... -Department of Telecom". The strict rule refused it ("login"): now an ISATHI header, or
+  that exact text, is accepted. LogicTest has the real text.
 
 ## 3.14.3 (branch `claude/v3.14.3`; NOT published) — owner 21 Nov 11:27–11:31 (calls chat)
 - **Play Protect called Ronin "harmful"** (tablet + phone) since the SMS / call log / accessibility permissions came back

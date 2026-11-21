@@ -386,6 +386,12 @@ class LogicTest {
     // owner 21 Nov 2026: "Report on Chakshu" fills the form; only the Sanchar Saathi OTP may go into it, never a bank's
     @Test
     fun chakshuTakesOnlyTheSancharSaathiOtp() {
+        val real = "Thank you for visiting SancharSaathi Portal. OTP for login is 289029. This is valid for 10 mins. Do not share it with anyone. -Department of Telecom"
+        assertTrue(Chakshu.isSancharOtp("VM-ISATHI-G", real)) // the real SMS on the owner's phone, 21 Nov 2026
+        assertTrue(Chakshu.isSancharOtp("JD-ISATHI", real))
+        assertTrue(Chakshu.isSancharOtp("AD-OTHERS-T", real)) // same text, another header
+        assertEquals("289029", Otp.find(real))
+        assertFalse(Chakshu.isSancharOtp("VM-ISATHI-G", "Thank you for your feedback. It will be processed. -Department of Telecom"))
         assertTrue(Chakshu.isSancharOtp("VM-SNCHRS-G", "123456 is your OTP for Sanchar Saathi complaint verification"))
         assertTrue(Chakshu.isSancharOtp("AD-DOTGOV-S", "OTP for Chakshu is 112233. Do not share."))
         assertTrue(Chakshu.isSancharOtp("JD-SSAATH-T", "Your Sanchar Saathi OTP is 4455"))

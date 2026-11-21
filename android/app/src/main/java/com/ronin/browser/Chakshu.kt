@@ -54,6 +54,10 @@ object Chakshu {
         val a = address.uppercase().trim()
         if (!Regex("^[A-Z]{2}-[A-Z0-9]{3,9}(-[A-Z])?$").matches(a)) return false // a plain number can send anything
         val b = body.lowercase()
+        // the real one (owner's phone, 21 Nov 2026 13:32): "XX-ISATHI": "Thank you for visiting SancharSaathi Portal. OTP for
+        // login is 289029. This is valid for 10 mins. Do not share it with anyone. -Department of Telecom"
+        if (Regex("^[A-Z]{2}-ISATHI(-[A-Z])?$").matches(a)) return Regex("\\b(otp|one.?time.?password|verification code)\\b").containsMatchIn(b)
+        if (Regex("sancharsaathi portal[^.]{0,20}\\.\\s*otp for login is \\d{4,8}").containsMatchIn(b) && b.contains("department of telecom")) return true
         if (!Regex("sanchar\\s*saathi|chakshu|संचार साथी|चक्षु").containsMatchIn(b)) return false
         if (Regex("\\b(txn|transaction|debit|debited|credit|credited|a/c|acct|account|upi|card|login|log in|net ?banking|bank|inr|aadhaar|aadhar|uidai|uan|epfo|e-?kyc|kyc|wallet|payment|pay)\\b|rs\\.?\\s?\\d|₹").containsMatchIn(b)) return false
         // the OTP is for the complaint / the mobile verification on Sanchar Saathi, not a footer under another OTP
