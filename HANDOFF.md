@@ -295,7 +295,7 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Notification ✕ Close sent "pause": the next 1 s media check showed a paused card again (the 'flaky' song test).
   Now Close sends "stop" (pause + let go). Owner said "हाँ, V3.12.0 publish करो" 16:26.
 
-## 3.14.2 (branch `claude/v3.14.2-calls`; NOT published) — owner 21 Nov 09:44 (calls chat; built on 3.14.1, the other chat's work untouched)
+## 3.14.2 (PUBLISHED 21 Nov 2026 10:21 IST on "हाँ, V3.14.2 publish करो"; run 44866848465; tag before-3.14.2 local) — owner 21 Nov 09:44 (calls chat; built on 3.14.1, the other chat's work untouched)
 - After a call there were two Recents cards (Ronin Calls + the call screen): InCallActivity is now
   excludeFromRecents + autoRemoveFromRecents and leaves with finishAndRemoveTask (back to it: the ongoing call notification).
   DeviceTest callScreenNeverLeavesASecondRecentsCard.
