@@ -50,16 +50,9 @@ object CallInfo {
     fun recentEmergency(ctx: Context) = System.currentTimeMillis() - prefs(ctx).getLong("lastEmergency", 0) < 60 * 60 * 1000L
     fun markEmergency(ctx: Context, n: String) { if (isEmergency(ctx, n)) prefs(ctx).edit().putLong("lastEmergency", System.currentTimeMillis()).apply() }
 
-    /** A short warning for a caller: TRAI telemarketing series, a foreign number, not saved, blocked. */
-    fun label(ctx: Context, number: String): String {
-        val d = digits(number)
-        if (d.isEmpty()) return L("छुपा हुआ नंबर (private): सावधान", "Hidden number (private): be careful")
-        if (isEmergency(d)) return ""
-        if (SmsStore.contactName(ctx, number) != null) return ""
-        if (d.removePrefix("+91").startsWith("140")) return L("📢 Telemarketing (140 वाला नंबर)", "📢 Telemarketing (a 140 number)")
-        if (d.startsWith("+") && !d.startsWith("+91")) return L("🌍 विदेश का नंबर: अनजान हो तो न उठाएँ, पैसे / OTP न दें", "🌍 Foreign number: if you do not know them, do not answer; never give money / OTP")
-        return L("👤 अनजान नंबर: पुलिस / CBI / बैंक / कूरियर बनकर पैसे माँगे तो call काटें", "👤 Unknown number: if they claim to be police / CBI / bank / courier and ask money, cut the call")
-    }
+    /** A short line for a caller not in contacts (3.14.3: smart, see CallerId; red only for a real risk). */
+    fun label(ctx: Context, number: String, cnap: String = cnapOf(ctx, number)): String =
+        CallerId.judge(number, SmsStore.contactName(ctx, number) != null, cnap, CallerId.known(ctx))?.text ?: ""
 
     fun prefs(ctx: Context) = ctx.getSharedPreferences("ronin_phone", Context.MODE_PRIVATE)
 
@@ -86,14 +79,15 @@ object CallInfo {
         val out = JSONArray()
         if (ctx.checkSelfPermission(Manifest.permission.READ_CALL_LOG) != android.content.pm.PackageManager.PERMISSION_GRANTED) return out
         try {
+            val k = CallerId.known(ctx)
             ctx.contentResolver.query(CallLog.Calls.CONTENT_URI, arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME, CallLog.Calls.DATE, CallLog.Calls.TYPE, CallLog.Calls.DURATION),
                 null, null, CallLog.Calls.DATE + " DESC LIMIT 300")?.use { c ->
                 while (c.moveToNext()) {
                     val num = c.getString(0) ?: ""
                     val name = c.getString(1) ?: SmsStore.contactName(ctx, num) ?: ""
-                    val sim = if (name.isEmpty()) cnapOf(ctx, num) else ""
+                    val w = if (name.isEmpty()) CallerId.judge(num, false, cnapOf(ctx, num), k, c.getLong(2)) else null
                     out.put(JSONObject().put("number", num).put("name", name).put("date", c.getLong(2)).put("type", c.getInt(3)).put("dur", c.getLong(4))
-                        .put("label", if (name.isEmpty()) (if (sim.isNotEmpty()) L("📛 SIM पर नाम: ", "📛 Name on the SIM: ") + sim + " · " else "") + label(ctx, num) else ""))
+                        .put("label", w?.text ?: "").put("level", w?.level ?: ""))
                 }
             }
         } catch (e: Exception) { }
@@ -158,7 +152,7 @@ class CallsActivity : PhonePage() {
                 else startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(n))))
             } catch (e: Exception) { }; done(true) }
             "block" -> bg { done(SmsStore.block(this, a.optString("number"))) }
-            "label" -> done(CallInfo.label(this, a.optString("number")))
+            "label" -> bg { done(CallInfo.label(this, a.optString("number"))) }
             "set" -> {
                 val k = a.optString("key")
                 if (k in setOf("silenceUnknown", "silenceForeign", "recAuto")) CallInfo.prefs(this).edit().putBoolean(k, a.optBoolean("on")).apply()
@@ -185,7 +179,8 @@ class RoninCallScreen : CallScreeningService() {
         // never silence without the contacts (everyone would look unknown), nor soon after an emergency call
         if (incoming && SmsStore.canReadContacts(this) && !CallInfo.recentEmergency(this) && !CallInfo.isEmergency(this, num) && SmsStore.contactName(this, num) == null) {
             val dg = CallInfo.digits(num)
-            if (p.getBoolean("silenceUnknown", false)) silence = true
+            // a number this phone has reason to trust (your call, your order's company SMS, a 1600 bank line) still rings
+            if (p.getBoolean("silenceUnknown", false) && !CallerId.trusted(CallerId.judge(num, false, "", CallerId.known(this)))) silence = true
             if (p.getBoolean("silenceForeign", false) && dg.startsWith("+") && !dg.startsWith("+91")) silence = true
         }
         val b = CallResponse.Builder()
@@ -278,8 +273,8 @@ object CallHub {
      * a receiver open a screen after a notification tap). Without Ronin Browser: the form in the phone's browser.
      */
     fun reportCall(ctx: Context, num: String, code: Int): PendingIntent {
-        val i = Intent(Intent.ACTION_VIEW, Uri.parse(Chakshu.FORM)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        if (Chakshu.hasBrowser(ctx)) i.setPackage("com.ronin.browser").putExtra(Chakshu.EXTRA, Chakshu.data("call", num, "", System.currentTimeMillis()))
+        val i = if (Chakshu.hasBrowser(ctx)) Chakshu.entry(Chakshu.data("call", num, "", System.currentTimeMillis()))
+            else Intent(Intent.ACTION_VIEW, Uri.parse(Chakshu.FORM)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return PendingIntent.getActivity(ctx, code, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
@@ -287,6 +282,8 @@ object CallHub {
     fun afterUnknown(ctx: Context, num: String) {
         if (num.isEmpty() || CallInfo.isEmergency(ctx, num) || SmsStore.contactName(ctx, num) != null) return
         if (!SmsStore.canReadContacts(ctx)) return // without contacts everyone looks unknown
+        // your own call, your order's company, a bank's 1600 line: no "spam?" question after it (owner 21 Nov)
+        if (CallerId.trusted(CallerId.judge(num, false, "", CallerId.known(ctx)))) return
         val nm = ctx.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("ronin_spam", L("स्पैम call के बाद", "After a spam call"), NotificationManager.IMPORTANCE_LOW))
         val id = 7200 + (num.hashCode() and 0xff)
@@ -339,7 +336,7 @@ object CallHub {
         // "Answer" opens the call screen itself (Android 12+ does not let a receiver open a screen)
         val answer = PendingIntent.getActivity(ctx, 3, Intent(ctx, InCallActivity::class.java).putExtra("answer", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n = NotificationCompat.Builder(ctx, "ronin_ring").setSmallIcon(android.R.drawable.sym_call_incoming)
-            .setContentTitle("📞 $who").setContentText((CallInfo.cnap(c).let { if (it.isNotEmpty() && SmsStore.contactName(ctx, num) == null) L("📛 SIM पर नाम: ", "📛 Name on the SIM: ") + it + " · " else "" }) + CallInfo.label(ctx, num).ifEmpty { "Incoming call" })
+            .setContentTitle("📞 $who").setContentText(CallInfo.label(ctx, num, CallInfo.cnap(c).ifEmpty { CallInfo.cnapOf(ctx, num) }).ifEmpty { "Incoming call" })
             .setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_MAX).setOngoing(true)
             .setFullScreenIntent(screen, true).setContentIntent(screen)
             .addAction(0, L("❌ काटें", "❌ Decline"), act("decline", 2)).addAction(0, L("✅ उठाएँ", "✅ Answer"), answer).build()

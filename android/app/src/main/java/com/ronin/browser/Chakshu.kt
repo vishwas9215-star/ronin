@@ -22,6 +22,11 @@ object Chakshu {
 
     fun isForm(url: String?): Boolean = url != null && url.startsWith(FORM)
 
+    /** Ronin Browser's Chakshu door: only Ronin's own apps (signature permission) can hand it a message (QA 21 Nov). */
+    const val ENTRY = "com.ronin.browser.ChakshuEntry"
+    fun entry(data: String): Intent = Intent(Intent.ACTION_VIEW, Uri.parse(FORM)).setClassName("com.ronin.browser", ENTRY)
+        .putExtra(EXTRA, data).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
     fun hasBrowser(ctx: Context): Boolean = try { ctx.packageManager.getPackageInfo("com.ronin.browser", 0); true } catch (e: Exception) { false }
 
     /** The message for chakshu.js: medium "sms" / "call", sender, text, time. */
@@ -33,20 +38,26 @@ object Chakshu {
     fun open(ctx: Context, data: String) {
         val u = Uri.parse(FORM)
         try {
-            ctx.startActivity(Intent(Intent.ACTION_VIEW, u).setPackage("com.ronin.browser").putExtra(EXTRA, data).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            ctx.startActivity(entry(data))
         } catch (e: Exception) {
             try { ctx.startActivity(Intent(Intent.ACTION_VIEW, u).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e2: Exception) { }
         }
     }
 
     /**
-     * Only the Sanchar Saathi OTP may go into the form, never a bank's: the SMS names Sanchar Saathi / Chakshu / DoT,
-     * or its sender is a government header (DLT "-G" ending, or DoT / Sanchar / NIC in the name).
+     * Only the Sanchar Saathi OTP may go into the form, never a bank's (QA 21 Nov: bank OTP SMS now end with "report
+     * fraud at sancharsaathi.gov.in" / "as per DoT"): the SMS must name Sanchar Saathi / Chakshu as what the OTP is for,
+     * from a company header, and carry nothing of a bank, payment, login, Aadhaar or EPFO OTP. When unsure: no OTP, the
+     * owner types it (the real Sanchar Saathi OTP wording is not seen yet).
      */
     fun isSancharOtp(address: String, body: String): Boolean {
         val a = address.uppercase().trim()
-        if (Regex("sanchar|saathi|chakshu|department of telecom|\\bdot\\b|दूरसंचार|संचार साथी", RegexOption.IGNORE_CASE).containsMatchIn(body)) return true
-        return Regex("^[A-Z]{2}-[A-Z0-9]{3,9}-G$").matches(a) || Regex("^[A-Z]{2}-[A-Z0-9]*(DOT|SNCHR|SANCHR|SSAATH|SNSAAT|NIC|CEIR|GOV)[A-Z0-9]*(-[A-Z])?$").matches(a)
+        if (!Regex("^[A-Z]{2}-[A-Z0-9]{3,9}(-[A-Z])?$").matches(a)) return false // a plain number can send anything
+        val b = body.lowercase()
+        if (!Regex("sanchar\\s*saathi|chakshu|संचार साथी|चक्षु").containsMatchIn(b)) return false
+        if (Regex("\\b(txn|transaction|debit|debited|credit|credited|a/c|acct|account|upi|card|login|log in|net ?banking|bank|inr|aadhaar|aadhar|uidai|uan|epfo|e-?kyc|kyc|wallet|payment|pay)\\b|rs\\.?\\s?\\d|₹").containsMatchIn(b)) return false
+        // the OTP is for the complaint / the mobile verification on Sanchar Saathi, not a footer under another OTP
+        return Regex("(otp|one.?time.?password|verification code)[^.]{0,80}(sanchar\\s*saathi|chakshu|complaint|report|verif)|(sanchar\\s*saathi|chakshu)[^.]{0,80}(otp|one.?time.?password|verification code)").containsMatchIn(b)
     }
 
     /** Ronin Browser asks Ronin Phone for the Sanchar Saathi OTP that came after [since] (signature permission only). */

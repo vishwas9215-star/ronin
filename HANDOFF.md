@@ -332,6 +332,17 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
   ticks the declaration, opens Preview. Ronin never types the CAPTCHA, never presses Submit. Checked on the live site
   (laptop built-in browser, no submit): all fields valid, OCR ran. Tests: tools/uitest/chakshu/t.js, phone.js,
   LogicTest.chakshuTakesOnlyTheSancharSaathiOtp.
+- Chakshu QA fixes (independent QA, 1 blocker): OTP only when the SMS says it is FOR Sanchar Saathi / Chakshu, from a
+  DLT header, with no bank / txn / login / Aadhaar / EPFO words (bank OTPs with a "report at sancharsaathi" footer are
+  refused); browser takes the message only through activity-alias ChakshuEntry (signature permission); senders the form
+  refuses are left empty with a note; one URL / one number; Preview only after the site marks the OTP valid; wrong OTP
+  told; banner on top; old (>30 d) date left empty; t.chakshu cleared after Preview / 15 min; picture says "Made by Ronin".
+- Smart caller labels (owner 21 Nov 12:37 "सबको red कर रहा है... Airtel broadband, Swiggy... स्मार्ट बनाओ"; chose
+  "हाँ, ऐसे ही बनाओ", on-phone only, no Truecaller-style upload): CallerId.kt. Red only: hidden, foreign, number in a
+  scam SMS. Green: 1600 bank line, number inside a -S/-T/-G company SMS (14 d). Blue: you called / talked >=30 s, call
+  within 6 h of an order / technician SMS. Grey: 140, SIM (CNAP) name, plain unknown. "Silence unknown" and the
+  after-call "spam?" notice skip trusted numbers. Research (Fable agent): CNAP default from 1 Nov 2026 on 4G/5G; TRAI
+  says apps must not tag 1600 as spam; delivery apps use rotating masked numbers (no prefix list possible).
 - Also on this branch: PR #3 (CI quiet: no e-mails for draft PRs / notes-only commits / publish cross-cancels).
 
 ## 3.14.2 (PUBLISHED 21 Nov 2026 10:21 IST on "हाँ, V3.14.2 publish करो"; run 44866848465; tag before-3.14.2 local) — owner 21 Nov 09:44 (calls chat; built on 3.14.1, the other chat's work untouched)

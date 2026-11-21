@@ -244,7 +244,10 @@ class MainActivity : AppCompatActivity() {
     private fun handleSpecial(i: Intent?) {
         i ?: return
         // Ronin Phone's "Report on Chakshu": the form opening now gets the message (taken once, fresh only)
-        i.getStringExtra(Chakshu.EXTRA)?.let { if (Chakshu.isForm(i.dataString)) pendingChakshu = it to System.currentTimeMillis(); i.removeExtra(Chakshu.EXTRA) }
+        // only through the ChakshuEntry door (Ronin's signature permission), never from any other app
+        if (i.component?.className == Chakshu.ENTRY) try {
+            i.getStringExtra(Chakshu.EXTRA)?.let { if (Chakshu.isForm(i.dataString)) pendingChakshu = it to System.currentTimeMillis(); i.removeExtra(Chakshu.EXTRA) }
+        } catch (e: Exception) { }
         if (i.action == Intent.ACTION_SEND && i.type?.startsWith("text/") == true) {
             val text = (i.getStringExtra(Intent.EXTRA_TEXT) ?: "").take(4000)
             if (text.isNotBlank()) ui.post { openTools("scamcheck:" + Uri.encode(text)) }
@@ -647,7 +650,7 @@ class MainActivity : AppCompatActivity() {
         val started = System.currentTimeMillis()
         var asking = false
         fun tick() {
-            if (t !in tabs || !Chakshu.isForm(t.url) || System.currentTimeMillis() - started > 15 * 60_000) { t.chakshuLoop = false; return }
+            if (isDestroyed || t !in tabs || !Chakshu.isForm(t.url) || System.currentTimeMillis() - started > 15 * 60_000) { t.chakshuLoop = false; t.chakshu = null; return }
             t.web.evaluateJavascript("window.__roninChakshu?window.__roninChakshu.state():''") { raw ->
                 val s = try { JSONObject(jsString(raw)) } catch (e: Exception) { null }
                 if (s != null) {
@@ -661,7 +664,7 @@ class MainActivity : AppCompatActivity() {
                             ui.post { asking = false; if (code != null) t.web.evaluateJavascript("window.__roninChakshu&&window.__roninChakshu.otp(" + JSONObject.quote(code) + ")", null) }
                         }.start()
                     }
-                    if (s.optString("phase") == "preview") { t.chakshuLoop = false; return@evaluateJavascript }
+                    if (s.optString("phase") == "preview") { t.chakshuLoop = false; t.chakshu = null; return@evaluateJavascript } // done: a later visit is a fresh form
                 }
                 ui.postDelayed({ tick() }, 2000)
             }

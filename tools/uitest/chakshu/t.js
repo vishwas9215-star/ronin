@@ -54,6 +54,24 @@ let fail = 0; const bad = (m) => { console.log('FAIL', m); fail++; };
     if (v.mobile !== '') bad('mobile invented');
     if (!v.banner.includes('mobile number')) bad('banner does not ask for the mobile number');
   });
+  // sender values the form would refuse are left for the owner (QA 21 Nov): foreign number, short code, bare brand name
+  for (const [addr, want] of [['+923001234567', ''], ['57575', ''], ['HDFCBK', ''], ['VM-ABCDEFGHIJKL-S', ''], ['09876543210', '9876543210'], ['+91 98765 43210', '9876543210']]) {
+    await run({ medium: 'sms', address: addr, body: 'Your account is blocked, update KYC now at http://x-kyc.in', date: now, mobile: '' }, async (v) => {
+      if ((v.num || v.hdr) !== want) bad('sender ' + addr + ' -> ' + JSON.stringify([v.num, v.hdr]));
+      if (!want && !v.banner.includes('खुद लिखें')) bad('owner not told to write the sender for ' + addr);
+    });
+  }
+  // a wrong OTP: no preview, the owner is told
+  await run({ medium: 'sms', address: 'VM-LENPTE-S', body: 'Get a personal loan now https://bit.ly/x and https://bit.ly/y call 9876501234 or 9876501235', date: now, mobile: '9876543210' }, async (v, p) => {
+    if (v.url !== 'https://bit.ly/x' || v.cta !== '9876501234') bad('one URL / one number only ' + JSON.stringify([v.url, v.cta]));
+    await p.click('#send-otp'); await p.evaluate(() => window.__roninChakshu.otp('111111'));
+    await p.waitForTimeout(2500);
+    const e = await p.evaluate(() => ({ prev: !!window.previewed, b: document.getElementById('ronin-chakshu').textContent }));
+    if (e.prev) bad('preview opened after a wrong OTP');
+    if (!e.b.includes('OTP सही नहीं')) bad('wrong OTP not told');
+  });
+  // Hindi police threat
+  await run({ medium: 'sms', address: 'AD-POLICE-S', body: 'पुलिस आपको गिरफ्तार करेगी, तुरंत 5000 भेजें', date: now, mobile: '' }, async (v) => { if (v.cat !== '2') bad('Hindi police threat category ' + v.cat); });
   // a spam call from the call notification
   await run({ medium: 'call', address: '9812300011', body: '', date: now, mobile: '9876543210' }, async (v) => {
     if (v.medium !== '1' || v.num !== '9812300011') bad('call ' + JSON.stringify([v.medium, v.num]));
@@ -64,6 +82,7 @@ let fail = 0; const bad = (m) => { console.log('FAIL', m); fail++; };
   await run({ medium: 'sms', address: 'AD-KYCUPD-S', body: 'Your SBI KYC is pending, account will be blocked today, update at http://sbi-kyc.in', date: Date.now() - 40 * 864e5, mobile: '' }, async (v) => {
     if (v.cat !== '1') bad('KYC category ' + v.cat);
     if (!v.banner.includes('30 दिन')) bad('old message not told');
+    if (v.date !== '') bad('a date the form refuses was filled');
   });
   await b.close();
   console.log(fail ? fail + ' problem(s)' : 'chakshu form fill OK');

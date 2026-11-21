@@ -67,6 +67,12 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+        <!-- 3.14.3: Ronin Phone's "Report on Chakshu" (Ronin's signature only: no other app can fill the form) -->
+        <activity-alias
+            android:name=".ChakshuEntry"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:permission="com.ronin.permission.SAVED_SMS" />
 
         <activity
             android:name=".SafeMoneyActivity"

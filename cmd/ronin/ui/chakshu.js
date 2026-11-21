@@ -16,7 +16,7 @@
   function category(medium, body) {
     const b = String(body || '').toLowerCase();
     if (/sextort|nude|video call record|अश्लील/.test(b)) return '5';
-    if (/\b(cbi|police|customs|narcotics|aadhaar|aadhar|rbi|ed officer|arrest|warrant|पुलिस|गिरफ्तार)\b/.test(b)) return '2';
+    if (/\b(cbi|police|customs|narcotics|aadhaar|aadhar|rbi|ed officer|arrest|warrant)\b|पुलिस|गिरफ्तार/.test(b)) return '2';
     if (/\b(trai|dot|department of telecom)\b|sim (will be )?(block|deactivat)|number (will be )?(block|deactivat)/.test(b)) return '10';
     if (/\b(kyc|pan card|account (will be )?(block|suspend|freez)|electricity|bijli|gas connection|insurance|policy|refund)\b|बिजली/.test(b)) return '1';
     if (/\b(invest|stock|share market|trading|ipo|crypto|forex|returns? of|profit daily)\b/.test(b)) return '9';
@@ -27,11 +27,16 @@
     return '30';
   }
 
+  // only values the form accepts: an Indian mobile number, or a DLT header like "VM-LENPTE-S"; else the owner writes it
   function sender(address) {
     const a = String(address || '').trim();
-    const digits = a.replace(/[^\d]/g, '');
-    if (/^[+\d\s()-]+$/.test(a) && digits.length >= 10) return { number: digits.slice(-10) };
-    return { header: a.replace(/[^A-Za-z0-9-]/g, '').toUpperCase().slice(0, 14) };
+    const d = a.replace(/[^\d]/g, '');
+    if (/^[+\d\s()-]+$/.test(a)) {
+      const m = /^(?:91|0)?([6-9]\d{9})$/.exec(d);
+      return m && !(a.startsWith('+') && !a.startsWith('+91')) ? { number: m[1] } : {};
+    }
+    const h = a.toUpperCase().replace(/\s/g, '');
+    return /^[A-Z][A-Z]-[A-Z0-9]{5,9}(-[A-Z])?$/.test(h) ? { header: h } : {};
   }
 
   function numbersIn(body) {
@@ -40,21 +45,21 @@
       const d = m.replace(/[^\d]/g, ''); const n = d.length > 10 && !d.startsWith('1800') ? d.slice(-10) : d;
       if (out.indexOf(n) < 0) out.push(n);
     });
-    return out.slice(0, 5).join(', ');
+    return out[0] || ''; // one number: the full text is in the complaint anyway
   }
 
   function urlsIn(body) {
     const out = [];
     (String(body || '').match(/https?:\/\/[^\s,]+|\b(?:www\.|bit\.ly\/|tinyurl\.com\/)[^\s,]+/g) || []).forEach((u) => {
-      u = u.replace(/[.)\]]+$/, ''); if (out.indexOf(u) < 0) out.push(u);
+      u = u.replace(/[.)\]]+$/, ''); if (/^[\x21-\x7e]+$/.test(u) && out.indexOf(u) < 0) out.push(u);
     });
-    return out.slice(0, 5).join(', ');
+    return out[0] || '';
   }
 
   function when(ms) {
     const d = new Date(ms || Date.now());
     const h = d.getHours(), h12 = h % 12 || 12;
-    return { date: d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()), time: pad(h12) + ':' + pad(d.getMinutes()) + ' ' + (h < 12 ? 'AM' : 'PM'), old: Date.now() - d.getTime() > 29 * 864e5 };
+    return { date: d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()), time: pad(h12) + ':' + pad(d.getMinutes()) + ' ' + (h < 12 ? 'AM' : 'PM'), old: Date.now() - d.getTime() > 30 * 864e5 };
   }
 
   function remarks(data, w) {
@@ -62,7 +67,8 @@
     if (data.medium === 'call') return clean('Suspected fraud call received from ' + who + ' on ' + w.date + ' at ' + w.time + '. The caller seemed to be a fraudster. Please take action against this number.').slice(0, 500);
     let text = clean(data.body);
     const head = 'Suspected fraud SMS from ' + who + ' on ' + w.date + ' at ' + w.time + '. SMS text: ';
-    if (text.replace(/\s/g, '').length < 10) text = '(message is not in English) ' + text;
+    if (!String(data.body || '').trim()) text = '(SMS text not available)';
+    else if (text.replace(/\s/g, '').length < 10) text = '(message is not in English) ' + text;
     return (head + text).slice(0, 500);
   }
 
@@ -92,7 +98,9 @@
     x.fillStyle = '#6b7280'; x.font = font(32); x.fillText((data.medium === 'call' ? 'Call' : 'SMS') + ' • ' + w.date + ' ' + w.time, 60, 150);
     x.fillStyle = '#ffffff'; x.fillRect(40, 190, W - 80, H - 230);
     x.fillStyle = '#111827'; x.font = font(40);
-    lines.forEach((l, i) => { if (250 + i * 56 < H - 50) x.fillText(l, 80, 260 + i * 56); });
+    lines.forEach((l, i) => { if (250 + i * 56 < H - 90) x.fillText(l, 80, 260 + i * 56); });
+    // honest: a picture Ronin drew from the phone's own SMS / call log, not a camera screenshot
+    x.fillStyle = '#6b7280'; x.font = font(26); x.fillText('Made by Ronin from the ' + (data.medium === 'call' ? 'call log' : 'SMS') + ' on this phone', 60, H - 60);
     return new Promise((res) => c.toBlob((b) => res(b), 'image/png'));
   }
 
@@ -129,22 +137,21 @@
     let b = $id('ronin-chakshu');
     if (!b) {
       b = document.createElement('div'); b.id = 'ronin-chakshu';
-      b.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:2147483647;background:#14532d;color:#fff;font:600 17px/1.4 sans-serif;padding:12px 14px;border-radius:14px;box-shadow:0 4px 18px rgba(0,0,0,.35)';
+      b.style.cssText = 'position:fixed;left:8px;right:8px;top:8px;z-index:2147483647;background:#14532d;color:#fff;font:600 17px/1.4 sans-serif;padding:12px 14px;border-radius:14px;box-shadow:0 4px 18px rgba(0,0,0,.35)';
       b.onclick = () => b.remove();
       document.body.appendChild(b);
     }
     b.textContent = text;
   }
 
-  function fillFields(data, w) {
-    set('sfc-medium', data.medium === 'call' ? '1' : '2');
+  function fillFields(data, w, again) {
+    if (!again) set('sfc-medium', data.medium === 'call' ? '1' : '2'); // a second change would reset the form's lists
     set('sfc-category', category(data.medium, data.body));
     const s = sender(data.address);
     if (data.medium === 'call') set('suspected-number', s.number || '');
     else if (s.number) { pick('sms-without-shortcode'); set('suspected-number', s.number); }
-    else { pick('sms-with-shortcode'); set('suspected-shortcode', s.header); }
-    set('sfc-date-input', w.date);
-    set('sfc-time-input', w.time);
+    else if (s.header) { pick('sms-with-shortcode'); set('suspected-shortcode', s.header); }
+    if (!w.old) { set('sfc-date-input', w.date); set('sfc-time-input', w.time); }
     set('sfc-remarks', remarks(data, w));
     if (data.medium !== 'call') { set('sms-cta', numbersIn(data.body)); set('sms-cta-url', urlsIn(data.body)); }
     if (/^[1-9]\d{9}$/.test(data.mobile || '')) set('mobile', data.mobile);
@@ -161,12 +168,14 @@
     if (attached) await afterReading(9000);
     fillFields(data, w);
     hideModals();
-    setTimeout(() => { fillFields(data, w); hideModals(); }, 1500); // a late answer of the form's reader must not win
+    setTimeout(() => { fillFields(data, w, true); hideModals(); }, 1500); // a late answer of the form's reader must not win
     const sendOtp = $id('send-otp');
     if (sendOtp) sendOtp.addEventListener('click', () => { st.otpSince = Date.now() - 5000; st.needOtp = true; }, true);
     st.phase = 'filled';
     const noMobile = !/^[1-9]\d{9}$/.test(data.mobile || '');
-    st.note = (w.old ? '⚠ यह संदेश 30 दिन से पुराना है, चक्षु तारीख़ नहीं लेगा। ' : '') + (attached ? '' : '⚠ Screenshot खुद जोड़ें। ');
+    const s = sender(data.address);
+    st.note = (w.old ? '⚠ यह संदेश 30 दिन से पुराना है, चक्षु तारीख़ नहीं लेगा। ' : '') + (attached ? '' : '⚠ Screenshot खुद जोड़ें। ') +
+      (s.number || s.header ? '' : '⚠ भेजने वाला नंबर / header खुद लिखें। ');
     banner('🛡️ Ronin ने शिकायत भर दी। ' + st.note + (noMobile ? 'अपना mobile number और ' : '') + 'CAPTCHA लिखें → "Verify Mobile via OTP" दबाएँ। OTP अपने-आप भरेगा, फिर Submit दबाएँ।');
     const cap = $id('captcha');
     if (cap) { cap.scrollIntoView({ block: 'center' }); setTimeout(() => cap.focus(), 300); }
@@ -179,9 +188,14 @@
     const t = setInterval(() => {
       if (++n > 600) return clearInterval(t);
       st.mobile = ($id('mobile') || {}).value || '';
-      if (st.phase === 'otp' && shown('declaration')) {
+      if (st.phase !== 'otp') return;
+      const o = $id('mobile-otp');
+      if (o && o.classList.contains('is-invalid')) { st.phase = 'filled'; banner('⚠ OTP सही नहीं निकला। SMS से OTP खुद डालें और "Verify OTP" दबाएँ।'); return; }
+      // only after the site said the OTP is right (it hides the OTP box / marks it valid)
+      const ok = (o && o.classList.contains('is-valid')) || !shown('verify-otp');
+      if (ok && shown('declaration')) {
         pick('declaration');
-        if (shown('preview-button')) { $id('preview-button').click(); st.phase = 'preview'; banner('✅ सब भर गया। एक बार देख लें, फिर नीचे "Submit" दबाएँ।'); clearInterval(t); }
+        if (shown('preview-button')) { $id('preview-button').click(); st.phase = 'preview'; banner('✅ सब भर गया। एक बार देख लें, फिर "Submit" दबाएँ।'); clearInterval(t); }
       }
     }, 1000);
   }

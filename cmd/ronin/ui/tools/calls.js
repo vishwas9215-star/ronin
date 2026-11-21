@@ -64,10 +64,12 @@
     const fill = () => {
       const q = search.value.trim().toLowerCase();
       const mine = rows.filter(r => !q || (r.name || '').toLowerCase().includes(q) || (r.number || '').includes(q)).slice(0, 300);
-      list.replaceChildren(...(mine.length ? mine.map(r => h('div', { cls: 'th' + (r.label ? ' flag' : ''), 'data-number': r.number },
-        h('div', { cls: 'avw' }, h('div', { cls: 'av', style: r.label ? 'background:#7f1d1d' : '' }, ((r.name || r.number || '?')[0] || '?').toUpperCase()), dirChip(r.type)),
+      // 3.14.3 (owner 21 Nov): red only for a real risk; your order's company / your own call / a 1600 bank line stay calm
+      const risk = (r) => (r.level ? r.level === 'risk' : !!r.label);
+      list.replaceChildren(...(mine.length ? mine.map(r => h('div', { cls: 'th' + (risk(r) ? ' flag' : ''), 'data-number': r.number, 'data-level': r.level || '' },
+        h('div', { cls: 'avw' }, h('div', { cls: 'av', style: risk(r) ? 'background:#7f1d1d' : '' }, ((r.name || r.number || '?')[0] || '?').toUpperCase()), dirChip(r.type)),
         h('div', { cls: 'mid', on: { click: () => window.__roninDial(r.number) } }, // a tap on the name only puts the number on the keypad: only the green 📞 calls (a stray tap once called someone at night)
-         h('b', { cls: r.type === 3 ? 'miss' : '' }, r.name || r.number), h('small', {}, dirWord(r.type), (r.type ? ' • ' : '') + (r.name ? r.number : '') + (r.date ? (r.name ? ' • ' : '') + when(r.date) : '')), r.label ? h('span', { cls: 'lbl' }, r.label) : ''),
+         h('b', { cls: r.type === 3 ? 'miss' : '' }, r.name || r.number), h('small', {}, dirWord(r.type), (r.type ? ' • ' : '') + (r.name ? r.number : '') + (r.date ? (r.name ? ' • ' : '') + when(r.date) : '')), r.label ? h('span', { cls: 'lbl' + (r.level && r.level !== 'risk' ? ' ' + r.level : '') }, r.label) : ''),
         h('button', { cls: 'pill', on: { click: () => ask('sms', { number: r.number }) } }, '💬'),
         r.label ? h('button', { cls: 'pill', on: { click: async () => { if (confirm(L(r.number + ' block करें? इनकी calls और SMS नहीं आएँगे।', 'Block ' + r.number + '? Their calls and SMS will stop.'))) alert((await ask('block', { number: r.number })) ? L('🚫 Block कर दिया', '🚫 Blocked') : L('Block नहीं हुआ', 'Could not block')); } } }, '🚫') : '',
         h('button', { cls: 'pill green', on: { click: () => call(r.number) } }, '📞')))

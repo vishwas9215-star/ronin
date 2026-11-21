@@ -386,17 +386,53 @@ class LogicTest {
     // owner 21 Nov 2026: "Report on Chakshu" fills the form; only the Sanchar Saathi OTP may go into it, never a bank's
     @Test
     fun chakshuTakesOnlyTheSancharSaathiOtp() {
-        assertTrue(Chakshu.isSancharOtp("VM-DOTGOV-G", "123456 is your OTP for verification"))
-        assertTrue(Chakshu.isSancharOtp("JD-ABCDEF-G", "Your OTP is 654321"))
-        assertTrue(Chakshu.isSancharOtp("AD-XYZPQR-S", "OTP for Sanchar Saathi portal is 112233"))
-        assertTrue(Chakshu.isSancharOtp("AD-XYZPQR-T", "Your Chakshu complaint OTP: 4455"))
-        assertFalse(Chakshu.isSancharOtp("JM-SBIINB-S", "482913 is your OTP for login. Never share it with anyone."))
+        assertTrue(Chakshu.isSancharOtp("VM-SNCHRS-G", "123456 is your OTP for Sanchar Saathi complaint verification"))
+        assertTrue(Chakshu.isSancharOtp("AD-DOTGOV-S", "OTP for Chakshu is 112233. Do not share."))
+        assertTrue(Chakshu.isSancharOtp("JD-SSAATH-T", "Your Sanchar Saathi OTP is 4455"))
+        // QA 21 Nov: bank / Aadhaar OTPs with a Sanchar Saathi footer, any "-G" header, a plain number: never
+        assertFalse(Chakshu.isSancharOtp("VM-HDFCBK-S", "OTP 123456 for txn of Rs 500. Report fraud at sancharsaathi.gov.in"))
+        assertFalse(Chakshu.isSancharOtp("JM-SBIINB-S", "482913 is your OTP for login. As per DoT guidelines report spam on Sanchar Saathi Chakshu"))
+        assertFalse(Chakshu.isSancharOtp("VM-UIDAI-G", "Your Aadhaar OTP is 654321. Report misuse on Sanchar Saathi"))
+        assertFalse(Chakshu.isSancharOtp("JD-ABCDEF-G", "Your OTP is 654321"))
+        assertFalse(Chakshu.isSancharOtp("VM-DOTPE-S", "Your OTP is 654321"))
+        assertFalse(Chakshu.isSancharOtp("+919812300011", "Your Sanchar Saathi OTP is 123456"))
         assertFalse(Chakshu.isSancharOtp("VM-HDFCBK-T", "OTP 998877 for txn of Rs 5000 at Amazon"))
-        assertFalse(Chakshu.isSancharOtp("+919812300011", "Your OTP is 123456"))
         assertTrue(Chakshu.isForm("https://sancharsaathi.gov.in/sfc/Home/sfc-complaint.jsp"))
         assertFalse(Chakshu.isForm("https://sancharsaathi.gov.in.evil.in/sfc/Home/sfc-complaint.jsp"))
         val d = org.json.JSONObject(Chakshu.data("sms", "VM-LENPTE-S", "Get a personal loan", 1763700000000))
         assertEquals("sms", d.getString("medium")); assertEquals("VM-LENPTE-S", d.getString("address")); assertEquals(1763700000000, d.getLong("date"))
         assertEquals("call", org.json.JSONObject(Chakshu.data("call", "9812300011", "", 0)).getString("medium"))
+    }
+
+    // owner 21 Nov 2026: not every unknown caller is red. Airtel technician, Swiggy order, a number you called: calm.
+    @Test
+    fun unknownCallersAreJudgedFromWhatThePhoneKnows() {
+        val now = 1_763_700_000_000L
+        val k = CallerId.Known(
+            called = setOf("9984923355"),
+            service = mapOf("9876501234" to "Airtel"),
+            scam = setOf("9812300011"),
+            orders = listOf(now - 3600_000L to "Swiggy"))
+        assertEquals("risk", CallerId.judge("", false, "", k, now)!!.level) // hidden
+        assertEquals("risk", CallerId.judge("+923001234567", false, "", k, now)!!.level) // foreign
+        assertEquals("risk", CallerId.judge("+919812300011", false, "", k, now)!!.level) // number from a scam SMS
+        assertEquals("ok", CallerId.judge("+919876501234", false, "", k, now)!!.level) // in the Airtel SMS
+        assertTrue(CallerId.judge("+919876501234", false, "", k, now)!!.text.contains("Airtel"))
+        assertEquals("ok", CallerId.judge("1600123456", false, "", k, now)!!.level) // bank 1600 line
+        assertEquals("known", CallerId.judge("9984923355", false, "Atal Mishra", k, now)!!.level) // you called them
+        assertTrue(CallerId.judge("9984923355", false, "Atal Mishra", k, now)!!.text.contains("Atal Mishra"))
+        assertEquals("known", CallerId.judge("+918045671234", false, "", k, now)!!.level) // during the Swiggy order
+        assertEquals("info", CallerId.judge("+918045671234", false, "", k, now + 8 * 3600_000L)!!.level) // long after it
+        assertEquals("info", CallerId.judge("1401234567", false, "", k, now + 8 * 3600_000L)!!.level) // telemarketing: grey
+        assertNull(CallerId.judge("9415012345", true, "", k, now)) // a contact
+        assertNull(CallerId.judge("112", false, "", k, now)) // emergency
+        assertTrue(CallerId.trusted(CallerId.judge("9984923355", false, "", k, now)))
+        assertFalse(CallerId.trusted(CallerId.judge("+918045671234", false, "", k, now + 8 * 3600_000L)))
+        // numbers inside SMS, only company headers vouch, order words
+        assertEquals(listOf("9876501234", "8045671234"), CallerId.numbersIn("Technician Ramesh 98765 01234 will visit, or call 080-45671234"))
+        assertTrue(CallerId.companyHeader("VM-AIRTEL-S")); assertFalse(CallerId.companyHeader("+919812300011")); assertFalse(CallerId.companyHeader("AIRTEL"))
+        assertTrue(CallerId.promo("VM-OFFERS-P"))
+        assertTrue(CallerId.orderLike("Your Swiggy order is out for delivery")); assertFalse(CallerId.orderLike("Your bill of Rs 499 is due"))
+        assertEquals("Airtel", CallerId.brand("VM-AIRTEL-S"))
     }
 }

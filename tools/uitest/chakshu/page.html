@@ -10,6 +10,6 @@
 <input id="sms-cta"><input id="sms-cta-url">
 <input id="mobile"><input id="captcha">
 <button id="send-otp" onclick="document.getElementById('otpbox').style.display='block'">Verify Mobile via OTP</button>
-<div id="otpbox" style="display:none"><input id="mobile-otp"><button id="verify-otp" onclick="window.verified=this.previousElementSibling.value;document.getElementById('sub').style.display='block'">Verify OTP</button></div>
+<div id="otpbox" style="display:none"><input id="mobile-otp"><button id="verify-otp" onclick="window.verified=this.previousElementSibling.value;var ok=window.verified==='482913';this.previousElementSibling.classList.add(ok?'is-valid':'is-invalid');if(ok){document.getElementById('otpbox').style.display='none';document.getElementById('sub').style.display='block'}">Verify OTP</button></div>
 <div id="sub" style="display:none"><input type="checkbox" id="declaration"><button id="preview-button" onclick="window.previewed=true">Preview</button><button id="submit-form" onclick="window.submitted=true">Submit</button></div>
 <script>window.changes=[];document.getElementById('user-sfc-file').addEventListener('change',e=>window.changes.push(e.target.files.length+':'+(e.target.files[0]||{}).name+':'+(e.target.files[0]||{}).size))</script>

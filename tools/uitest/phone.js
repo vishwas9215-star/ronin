@@ -22,7 +22,7 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
       switch(m.op){case 'state':d=Object.assign({},ST,window.__sos||{});break;case 'save':window.__sos=Object.assign(window.__sos||{},{contacts:m.contacts,name:m.name});d=true;break;
       case 'start':d=!!(window.__sos&&window.__sos.contacts&&window.__sos.contacts.length);if(d)window.__sos.running=true;break;case 'stop':window.__sos.running=false;d=true;break;case 'threads':d=T;break;case 'messages':d=M[m.thread]||[];break;case 'makeDefault':d={ok:ST.grant};if(ST.grant)ST.isDefault=true;break;
       case 'savedSms':d=window.__saved||[];break;case 'saveSms':window.__saved=(window.__saved||[]).concat([m.msg]);d=window.__saved;break;case 'unsaveSms':window.__saved=(window.__saved||[]).filter(x=>x.key!==m.key);d=window.__saved;break;case 'send':d=true;break;case 'block':d=true;break;case 'blocked':d=['+91999'];break;case 'watcher':d=false;break;case 'thread':d=9;break;
-      case 'recent':d=[{number:'+923001234567',name:'',date:Date.now(),type:3,label:ST.lang==='en'?'🌍 Foreign number':'🌍 विदेश का नंबर'},{number:'+919800000000',name:ST.lang==='en'?'Mom':'माँ',date:Date.now(),type:1,label:''},{number:'+919811111112',name:'Ravi',date:Date.now(),type:2,label:''}];break;
+      case 'recent':d=[{number:'+923001234567',name:'',date:Date.now(),type:3,label:ST.lang==='en'?'🌍 Foreign number':'🌍 विदेश का नंबर',level:'risk'},{number:'+919876501234',name:'',date:Date.now(),type:1,label:'🛠 This number was in your Airtel SMS',level:'ok'},{number:'+918045671234',name:'',date:Date.now(),type:1,label:'👤 Not in contacts',level:'info'},{number:'+919800000000',name:ST.lang==='en'?'Mom':'माँ',date:Date.now(),type:1,label:''},{number:'+919811111112',name:'Ravi',date:Date.now(),type:2,label:''}];break;
       case 'contacts':d=[{name:'माँ',number:'+919800000000'},{name:'Ramesh',number:'+919811111111'}];break;case 'label':d='👤 अनजान नंबर';break;
       case 'rec':d={auto:false,access:false,skip:window.__skip||[],mic:true};break;case 'skip':window.__skip=(window.__skip||[]).filter(x=>x!==m.number);if(m.on)window.__skip.push(m.number);d=window.__skip;break;
       case 'list':d=[{app:'WhatsApp',chat:'Family',who:'Mama',text:'Kal aa rahe ho?',t:Date.now()-9000},{app:'WhatsApp',chat:'Rahul',who:'Rahul',text:'Sorry, galat message',t:Date.now()-5000,gone:true}];break;
@@ -99,6 +99,7 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   await serve(p3); await p3.addInitScript(phone({ isDefault: true, log: true, contacts: true }));
   await p3.goto('https://ronin.home/tools/calls.html'); await p3.waitForSelector('.th');
   if (!await p3.$('[data-tab=recent].on')) bad('Recent is not the first page');
+  // owner 21 Nov 2026: only a real risk is red; the Airtel-SMS number and a plain unknown stay calm
   { const fl = await p3.$$eval('.th.flag', a => a.map(x => x.dataset.number)); if (fl.join() !== '+923001234567') bad('flagged caller not tinted: ' + fl); }
   await p3.click('[data-tab=pad]'); await p3.waitForSelector('.pad button');
   if ((await p3.$$('.pad button')).length !== 12) bad('keypad');
