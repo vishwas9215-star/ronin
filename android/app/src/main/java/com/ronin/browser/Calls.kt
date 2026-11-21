@@ -58,15 +58,16 @@ object CallInfo {
         return L("📛 SIM पर नाम: ", "📛 Name on the SIM: ") + cnap + if (w.text.startsWith("📛")) L(" · contact में नहीं", " · not in contacts") else " · " + w.text
     }
 
-    /** The owner's own name for a number (spoken once, kept on the phone; not a contact). */
-    fun tag(ctx: Context, number: String): String = prefs(ctx).getString("tag_" + digits(number).takeLast(10), "") ?: ""
-    fun setTag(ctx: Context, number: String, name: String) {
+    /** The name "🔍 कौन?" found on the web for a number (kept on the phone; "-" = searched, nothing found). */
+    fun tag(ctx: Context, number: String): String = (prefs(ctx).getString("web_" + digits(number).takeLast(10), "") ?: "").takeIf { it != "-" } ?: ""
+    fun searched(ctx: Context, number: String): Boolean = prefs(ctx).contains("web_" + digits(number).takeLast(10))
+    fun complained(ctx: Context, number: String): Boolean = prefs(ctx).getBoolean("webbad_" + digits(number).takeLast(10), false)
+    fun setTag(ctx: Context, number: String, name: String?, complaints: Boolean) {
         val k = digits(number).takeLast(10); if (k.length < 6) return
-        val n = name.trim().take(40)
-        prefs(ctx).edit().apply { if (n.isEmpty()) remove("tag_$k") else putString("tag_$k", n) }.apply()
+        prefs(ctx).edit().putString("web_$k", name?.trim()?.take(40)?.ifEmpty { null } ?: "-").putBoolean("webbad_$k", complaints).apply()
     }
 
-    /** Who to show for a number: contact, then the owner's own name, then the SIM (CNAP) name, then a name from an SMS. */
+    /** Who to show for a number: contact, then the name 🔍 found on the web, then the SIM (CNAP) name, then a name from an SMS. */
     fun display(ctx: Context, number: String, cnap: String = ""): String? =
         SmsStore.contactName(ctx, number) ?: tag(ctx, number).ifEmpty { null } ?: cnap.ifEmpty { cnapOf(ctx, number) }.ifEmpty { null }
             ?: CallerId.known(ctx).people[CallerId.key(number)]
@@ -106,9 +107,10 @@ object CallInfo {
                     val w = if (name.isEmpty()) CallerId.judge(num, false, sim, k, c.getLong(2)) else null
                     // a name for a number not in contacts: your own name for it, the SIM name, a name from a company SMS
                     val tag = if (name.isEmpty()) tag(ctx, num) else ""
+                    val searched = name.isEmpty() && searched(ctx, num); val bad = name.isEmpty() && complained(ctx, num)
                     val guess = if (name.isEmpty()) k.people[CallerId.key(num)] ?: "" else ""
                     out.put(JSONObject().put("number", num).put("name", name).put("date", c.getLong(2)).put("type", c.getInt(3)).put("dur", c.getLong(4))
-                        .put("label", w?.text ?: "").put("level", w?.level ?: "").put("tag", tag).put("sim", sim).put("guess", guess))
+                        .put("label", w?.text ?: "").put("level", w?.level ?: "").put("tag", tag).put("sim", sim).put("guess", guess).put("searched", searched).put("complaints", bad))
                 }
             }
         } catch (e: Exception) { }
@@ -175,11 +177,13 @@ class CallsActivity : PhonePage() {
             "block" -> bg { done(SmsStore.block(this, a.optString("number"))) }
             "label" -> bg { done(CallInfo.label(this, a.optString("number"))) }
             // owner 21 Nov 2026 (both hands hurt): say a name for an unknown number once; kept on the phone, not a contact
-            "nameVoice" -> listen(L("इस नंबर का नाम बोलें", "Say a name for this number")) { text ->
-                if (text != null && text != PhonePage.NO_VOICE) CallInfo.setTag(this, a.optString("number"), text)
-                done(if (text == null || text == PhonePage.NO_VOICE) text else CallInfo.tag(this, a.optString("number")))
+            // owner 21 Nov 2026: one tap and Ronin itself finds the name on the web (only this number is searched)
+            "whoIs" -> bg {
+                val n = a.optString("number")
+                val ans = WhoIs.lookUp(n)
+                if (ans != null) CallInfo.setTag(this, n, ans.name, ans.complaints)
+                done(if (ans == null) JSONObject().put("ok", false) else JSONObject().put("ok", true).put("name", ans.name ?: "").put("complaints", ans.complaints).put("source", ans.source))
             }
-            "setTag" -> { CallInfo.setTag(this, a.optString("number"), a.optString("name")); done(true) }
             "set" -> {
                 val k = a.optString("key")
                 if (k in setOf("silenceUnknown", "silenceForeign", "recAuto")) CallInfo.prefs(this).edit().putBoolean(k, a.optBoolean("on")).apply()

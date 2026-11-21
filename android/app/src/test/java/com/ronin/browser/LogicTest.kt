@@ -460,4 +460,18 @@ class LogicTest {
         assertEquals("info", CallerId.judge("9000000001", false, "", k3, now)!!.level) // you called, no answer: a hint, not trust
         assertEquals("Airtel", CallerId.brand("VM-AIRTEL-S"))
     }
+
+    // owner 21 Nov 2026: "एक टैप करूँ कौन वाले पे और वो अपने आप रिसर्च करके नाम रख दे". Real DuckDuckGo results (21 Nov):
+    // Airtel's broadband line, Swiggy's care line, an Airtel toll-free line people complain about, a private mobile
+    @Test
+    fun whoIsNamesTheNumberFromTheWeb() {
+        fun ask(n: String) = WhoIs.decide(n, WhoIs.parse(File("../../tools/uitest/fixtures/whois/$n.html").readText()))
+        assertEquals("Airtel", ask("9560911911").name)
+        assertEquals("Swiggy", ask("08067466729").name)
+        val tf = ask("18001034444"); assertEquals("Airtel", tf.name); assertTrue(tf.complaints)
+        val p = ask("9198689099"); assertNull(p.name); assertFalse(p.complaints) // a private mobile: no guess
+        assertTrue(WhoIs.numberRe("+919560911911").containsMatchIn("call 95609 11911 now"))
+        assertEquals(6, WhoIs.parse(File("../../tools/uitest/fixtures/whois/9560911911.html").readText()).size)
+        assertEquals("https://www.linkedin.com/posts/ankit-goel_airtel", WhoIs.parse(File("../../tools/uitest/fixtures/whois/9560911911.html").readText())[0].url)
+    }
 }

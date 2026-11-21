@@ -70,18 +70,20 @@
     const list = h('div', { id: 'list' });
     const fill = () => {
       const q = search.value.trim().toLowerCase();
-      // a name for a number not in contacts (owner 21 Nov: "Truecaller जैसी पहचान"): your own name for it ✏️, the SIM
-      // (CNAP) name 📛, a name from a company SMS 🛠; only then the bare number
-      const title = r => r.name || (r.tag ? '✏️ ' + r.tag : r.sim ? '📛 ' + r.sim : r.guess ? '🛠 ' + r.guess : r.number);
+      // a name for a number not in contacts (owner 21 Nov: "Truecaller जैसी पहचान"): the name 🔍 found on the web, the
+      // SIM (CNAP) name 📛, a name from a company SMS 🛠; only then the bare number
+      const title = r => r.name || (r.tag ? '🔍 ' + r.tag : r.sim ? '📛 ' + r.sim : r.guess ? '🛠 ' + r.guess : r.number);
       const named = r => !!(r.name || r.tag || r.sim || r.guess);
       const mine = rows.filter(r => !q || [r.name, r.tag, r.sim, r.guess].some(x => (x || '').toLowerCase().includes(q)) || (r.number || '').includes(q)).slice(0, 300);
       const chip = (txt, id, f) => h('button', { cls: 'chip', 'data-act': id, on: { click: (e) => { e.stopPropagation(); f(); } } }, txt);
-      const whoIs = r => { const d = r.number.replace(/\D/g, ''); ask('open', { url: 'https://www.google.com/search?q=' + encodeURIComponent('"' + (d.length > 10 ? d.slice(-10) : d) + '"') }); };
-      const nameIt = async r => {
-        let n = await ask('nameVoice', { number: r.number });
-        if (n == null) return; // the owner said nothing / closed it: no typing box (hands hurt)
-        if (n === '__no_voice__') { n = prompt(L('इस नंबर का नाम (जैसे: Airtel वाले भैया)', 'A name for this number (e.g. Airtel technician)'), r.tag || ''); if (n == null) return; await ask('setTag', { number: r.number, name: n }); }
-        r.tag = String(n).trim(); fill();
+      // one tap: Ronin searches only this number on the web and writes the name it finds here (no typing, no speaking)
+      const whoIs = async (r, btn) => {
+        btn.disabled = true; btn.textContent = L('⏳ खोज रहा हूँ…', '⏳ Looking…');
+        const a = (await ask('whoIs', { number: r.number })) || {};
+        if (!a.ok) { btn.disabled = false; btn.textContent = L('🔍 फिर कोशिश (internet?)', '🔍 Try again (internet?)'); return; }
+        // the same number may be on several rows: all of them get the name
+        rows.forEach(x => { if (x.number === r.number) { x.tag = a.name || ''; x.searched = true; x.complaints = !!a.complaints; } });
+        fill();
       };
       // 3.14.3 (owner 21 Nov): red only for a real risk; your order's company / your own call / a 1600 bank line stay calm
       const risk = (r) => (r.level ? r.level === 'risk' : !!r.label);
@@ -90,7 +92,10 @@
         h('div', { cls: 'mid', on: { click: () => window.__roninDial(r.number) } }, // a tap on the name only puts the number on the keypad: only the green 📞 calls (a stray tap once called someone at night)
          h('b', { cls: r.type === 3 ? 'miss' : '' }, title(r)), h('small', {}, dirWord(r.type), (r.type ? ' • ' : '') + (named(r) ? r.number : '') + (r.date ? (named(r) ? ' • ' : '') + when(r.date) : '')), r.label ? h('span', { cls: 'lbl' + (r.level && r.level !== 'risk' ? ' ' + r.level : '') }, r.label) : '',
          // not a contact: who is it? (one tap: the number searched in Ronin Browser) / say a name once
-         !r.name && r.number && tab === 'recent' ? h('div', { cls: 'chips' }, chip(L('🔍 कौन?', '🔍 Who?'), 'who', () => whoIs(r)), chip(L('🎤 नाम', '🎤 Name'), 'name', () => nameIt(r))) : ''),
+         r.complaints ? h('span', { cls: 'lbl' }, L('⚠ web पर लोगों ने इस नंबर की शिकायत की है', '⚠ People complained about this number on the web')) : '',
+         !r.name && r.number && tab === 'recent' && !r.tag ? h('div', { cls: 'chips' }, r.searched
+           ? h('span', { cls: 'chip off' }, L('🔍 web पर नाम नहीं मिला', '🔍 No name on the web'))
+           : (() => { const b = chip(L('🔍 कौन है?', '🔍 Who is it?'), 'who', () => whoIs(r, b)); return b; })()) : ''),
         h('button', { cls: 'pill', on: { click: () => ask('sms', { number: r.number }) } }, '💬'),
         r.label ? h('button', { cls: 'pill', on: { click: async () => { if (confirm(L(r.number + ' block करें? इनकी calls और SMS नहीं आएँगे।', 'Block ' + r.number + '? Their calls and SMS will stop.'))) alert((await ask('block', { number: r.number })) ? L('🚫 Block कर दिया', '🚫 Blocked') : L('Block नहीं हुआ', 'Could not block')); } } }, '🚫') : '',
         h('button', { cls: 'pill green', on: { click: () => call(r.number) } }, '📞')))

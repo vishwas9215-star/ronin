@@ -316,6 +316,12 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
   longer trusted); names must be Capitalised (no "WILL CALL"); SMS read without LIMIT (break at 1500); CallerId.known()
   never reads on the main thread (cached / empty + background warm), call screening runs in a thread, after-call
   notice in a thread, warm 4 s after each SMS; SIM name said once in the ring notice; voice cancel = no typing box.
+- Owner 14:27: no speaking, no browser: ONE tap "🔍 कौन है?" must find and set the name. Now: WhoIs.kt posts only
+  that number to html.duckduckgo.com/html (kl=in-en, no key, free), parses results on the phone, skips phone-lookup
+  sites, scores words (page with the number 1, other page ½; name must be on a page with the number, total ≥ 2;
+  Capitalised; stop-words / cities / site names out). Live check 21 Nov: 9560911911 → Airtel, 08067466729 → Swiggy,
+  18001034444 → Airtel + "people complained" (shouldianswer / callfilter negative), private mobiles → "नाम नहीं मिला".
+  Saved in prefs ronin_phone web_<last10> ("-" = nothing found) + webbad_. Voice naming removed.
 
 ## 3.14.3 (branch `claude/v3.14.3`; NOT published) — owner 21 Nov 11:27–11:31 (calls chat)
 - **Play Protect called Ronin "harmful"** (tablet + phone) since the SMS / call log / accessibility permissions came back

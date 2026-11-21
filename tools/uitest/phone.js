@@ -23,7 +23,7 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
       case 'start':d=!!(window.__sos&&window.__sos.contacts&&window.__sos.contacts.length);if(d)window.__sos.running=true;break;case 'stop':window.__sos.running=false;d=true;break;case 'threads':d=T;break;case 'messages':d=M[m.thread]||[];break;case 'makeDefault':d={ok:ST.grant};if(ST.grant)ST.isDefault=true;break;
       case 'savedSms':d=window.__saved||[];break;case 'saveSms':window.__saved=(window.__saved||[]).concat([m.msg]);d=window.__saved;break;case 'unsaveSms':window.__saved=(window.__saved||[]).filter(x=>x.key!==m.key);d=window.__saved;break;case 'send':d=true;break;case 'block':d=true;break;case 'blocked':d=['+91999'];break;case 'watcher':d=false;break;case 'thread':d=9;break;
       case 'recent':d=[{number:'+923001234567',name:'',date:Date.now(),type:3,label:ST.lang==='en'?'🌍 Foreign number':'🌍 विदेश का नंबर',level:'risk'},{number:'+919876501234',name:'',date:Date.now(),type:1,label:'🛠 This number was in your Airtel SMS',level:'ok'},{number:'+918045671234',name:'',date:Date.now(),type:1,label:'👤 Not in contacts',level:'info'},{number:'+919984923355',name:'',sim:'Atal Mishra',date:Date.now(),type:2,label:'📞 You called them before',level:'known'},{number:'+919800000000',name:ST.lang==='en'?'Mom':'माँ',date:Date.now(),type:1,label:''},{number:'+919811111112',name:'Ravi',date:Date.now(),type:2,label:''}];break;
-      case 'contacts':d=[{name:'माँ',number:'+919800000000'},{name:'Ramesh',number:'+919811111111'}];break;case 'label':d='👤 अनजान नंबर';break;case 'nameVoice':d='Airtel wale bhaiya';break;
+      case 'contacts':d=[{name:'माँ',number:'+919800000000'},{name:'Ramesh',number:'+919811111111'}];break;case 'label':d='👤 अनजान नंबर';break;case 'whoIs':d=m.number==='+918045671234'?{ok:true,name:'Airtel',complaints:false,source:'airtel.in'}:{ok:true,name:'',complaints:true};break;
       case 'rec':d={auto:false,access:false,skip:window.__skip||[],mic:true};break;case 'skip':window.__skip=(window.__skip||[]).filter(x=>x!==m.number);if(m.on)window.__skip.push(m.number);d=window.__skip;break;
       case 'list':d=[{app:'WhatsApp',chat:'Family',who:'Mama',text:'Kal aa rahe ho?',t:Date.now()-9000},{app:'WhatsApp',chat:'Rahul',who:'Rahul',text:'Sorry, galat message',t:Date.now()-5000,gone:true}];break;
       case 'recordings':d=[{id:1,name:'Call_Ramesh_919811111111_20261114_2110.m4a',date:Date.now(),size:204800}];break;
@@ -101,15 +101,18 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   await serve(p3); await p3.addInitScript(phone({ isDefault: true, log: true, contacts: true }));
   await p3.goto('https://ronin.home/tools/calls.html'); await p3.waitForSelector('.th');
   if (!await p3.$('[data-tab=recent].on')) bad('Recent is not the first page');
-  // owner 21 Nov 2026 "Truecaller जैसी पहचान": the SIM name is the title; 🔍 searches the number; 🎤 names it once
+  // owner 21 Nov 2026 "Truecaller जैसी पहचान... एक टैप करूँ और अपने आप नाम रख दे": SIM name is the title; one tap on 🔍 finds the name
   { const t = await p3.$eval('.th[data-number="+919984923355"] b', x => x.textContent); if (t !== '📛 Atal Mishra') bad('SIM name not the title: ' + t);
-    if (await p3.$('.th[data-number="+919800000000"] .chips')) bad('Who-is chips on a contact');
-    await p3.click('.th[data-number="+918045671234"] [data-act=who]'); await p3.waitForTimeout(100);
-    const o = await p3.evaluate(() => window.__log.filter(m => m.op === 'open').pop());
-    if (!o || o.url !== 'https://www.google.com/search?q=' + encodeURIComponent('"8045671234"')) bad('Who-is search ' + JSON.stringify(o));
+    if (await p3.$('.th[data-number="+919800000000"] .chips')) bad('Who-is chip on a contact');
+    if (await p3.$('[data-act=name]')) bad('the speak-a-name chip is back (owner: no speaking)');
+    await p3.click('.th[data-number="+918045671234"] [data-act=who]'); await p3.waitForTimeout(200);
     if (await p3.evaluate(() => window.__log.some(m => m.op === 'call'))) bad('Who-is chip placed a call');
-    await p3.click('.th[data-number="+918045671234"] [data-act=name]'); await p3.waitForTimeout(150);
-    const t2 = await p3.$eval('.th[data-number="+918045671234"] b', x => x.textContent); if (t2 !== '✏️ Airtel wale bhaiya') bad('spoken name not shown: ' + t2); }
+    if (await p3.evaluate(() => window.__log.some(m => m.op === 'open'))) bad('Who-is opened a browser instead of finding the name');
+    const t2 = await p3.$eval('.th[data-number="+918045671234"] b', x => x.textContent); if (t2 !== '🔍 Airtel') bad('found name not shown: ' + t2);
+    if (await p3.$('.th[data-number="+918045671234"] [data-act=who]')) bad('Who-is chip still there after the name was found');
+    await p3.click('.th[data-number="+919876501234"] [data-act=who]'); await p3.waitForTimeout(200);
+    const nf = await p3.$eval('.th[data-number="+919876501234"]', x => x.textContent);
+    if (!/नाम नहीं मिला|No name on the web/.test(nf) || !/शिकायत|complained/.test(nf)) bad('nothing-found / complaints not told: ' + nf); }
   // owner 21 Nov 2026: photo circles were near-black (dark letter on slate): white letter on a bright colour, no "+"
   { const av = await p3.$$eval('.av', a => a.map(x => [getComputedStyle(x).color, getComputedStyle(x).backgroundColor, x.textContent]));
     if (av.some(([c, bg, t]) => c !== 'rgb(255, 255, 255)' || bg === 'rgb(51, 65, 85)' || t === '+')) bad('dark photo circle ' + JSON.stringify(av)); }
