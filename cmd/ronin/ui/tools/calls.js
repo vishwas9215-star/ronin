@@ -11,9 +11,17 @@
   const ask = (op, a) => new Promise(r => { if (!P) return r(null); const id = ++seq; waits[id] = r; P.postMessage(JSON.stringify(Object.assign({ op, id }, a || {}))); });
   // back from a call (owner 21 Nov 2026: "रिफ्रेश किया तब जाके रिसेंट वाला सबसे ऊपर आया"): Recent and the favourites redraw by
   // themselves; again after 2 s (Android writes the call into the log a moment after it ends). Never while searching.
-  const fresh = () => { const s = document.getElementById('search'); if (inSettings || (tab !== 'recent' && tab !== 'contacts') || (s && (s.value || document.activeElement === s))) return; draw(); };
+  // QA 21 Nov: never under a moving thumb (a row must not slide away as he taps 📞), only when the list really changed
+  let lastTouch = 0, lastSig = '';
+  document.addEventListener('touchstart', () => { lastTouch = Date.now(); }, { passive: true, capture: true });
+  const fresh = async () => {
+    const s = document.getElementById('search');
+    if (inSettings || tab !== 'recent' || (s && (s.value || document.activeElement === s))) return;
+    if (Date.now() - lastTouch < 1500) { setTimeout(fresh, 1600); return; }
+    const sig = JSON.stringify(((await ask('recent')) || []).slice(0, 3).map(x => [x.number, x.date]));
+    if (sig !== lastSig && tab === 'recent' && !inSettings) draw();
+  };
   const freshSoon = () => { fresh(); setTimeout(fresh, 2000); };
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') freshSoon(); });
   if (P) P.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (m.event === 'changed') { freshSoon(); return; } if (waits[m.id]) { waits[m.id](m.data); delete waits[m.id]; } };
   const h = (tag, attrs, ...kids) => {
     const e = document.createElement(tag);
@@ -76,24 +84,31 @@
   // the people called most; one tap calls (this row is only for calling)
   const favRow = () => {
     const box = h('div', { cls: 'favs', id: 'favs' });
-    ask('favorites').then(list => {
-      list = list || [];
+    const show = list => {
       if (!list.length) { box.replaceChildren(h('div', { cls: 'favhint' }, L('⭐ Contacts में किसी के आगे ⭐ दबाएँ: वे यहाँ ऊपर आ जाएँगे', '⭐ Tap ⭐ next to someone in Contacts to keep them up here'))); return; }
       box.replaceChildren(...list.map(f => h('button', { cls: 'fav', 'data-number': f.number, 'aria-label': f.name, on: { click: () => call(f.number) } },
         withPhoto(h('span', { cls: 'av fa', style: 'background:' + avColor(f.number || f.name) }, avText(f.name, false)), f.photo, 120),
         h('small', {}, String(f.name).split(/\s+/)[0].slice(0, 9)))));
-    });
+    };
+    // the last row at once (the list below never jumps), then the fresh one only if it differs
+    if (favCache) show(favCache);
+    ask('favorites').then(list => { list = list || []; if (JSON.stringify(list) !== JSON.stringify(favCache)) { favCache = list; show(list); } });
     return box;
   };
 
+  let drawSeq = 0, curFill = null, favCache = null;
   async function draw() {
     inSettings = false;
+    const g = ++drawSeq; // a newer draw (a tab tap, ⚙) wins over this one
     st = (await ask('state')) || {};
+    if (g !== drawSeq) return;
     if (tab === 'pad') return pad();
     const rows = tab === 'recent' ? ((await ask('recent')) || []) : ((await ask('contacts')) || []);
+    if (g !== drawSeq) return;
+    if (tab === 'recent') lastSig = JSON.stringify(rows.slice(0, 3).map(x => [x.number, x.date]));
     const search = h('input', { cls: 'txt', placeholder: L('🔍 नाम या नंबर', '🔍 Name or number'), id: 'search' });
     const list = h('div', { id: 'list' });
-    const fill = () => {
+    const fill = curFill = () => {
       const q = search.value.trim().toLowerCase();
       // a name for a number not in contacts (owner 21 Nov: "Truecaller जैसी पहचान"): the name 🔍 found on the web, the
       // SIM (CNAP) name 📛, a name from a company SMS 🛠; only then the bare number
@@ -112,7 +127,7 @@
         // the same number may be on several rows (in any format): all of them get the answer
         if (a.ok) rows.forEach(x => { if (last10(x.number) === k) { x.tag = a.name || ''; x.searched = true; x.complaints = !!a.complaints;
           if (a.fraud) { x.level = 'risk'; x.label = a.label || x.label; x.tag = ''; } } });
-        fill();
+        (curFill || fill)();
       };
       // 3.14.3 (owner 21 Nov): red only for a real risk; your order's company / your own call / a 1600 bank line stay calm
       const risk = (r) => (r.level ? r.level === 'risk' : !!r.label);
@@ -155,6 +170,7 @@
   }
 
   async function settings() {
+    ++drawSeq; // a Recent redraw still waiting must not cover the settings
     inSettings = true;
     st = (await ask('state')) || {};
     const sw = (key, title, sub) => h('div', { cls: 'row' }, h('div', {}, title, h('small', { cls: 'note', style: 'display:block' }, sub)),

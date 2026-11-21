@@ -126,7 +126,7 @@ object CallInfo {
     fun contacts(ctx: Context): JSONArray {
         val out = JSONArray()
         if (ctx.checkSelfPermission(Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return out
-        val pins = pins(ctx)
+        val pins = pins(ctx); val off = prefs(ctx).getStringSet("unpinned", emptySet()) ?: emptySet()
         try {
             ctx.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                 arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER,
@@ -136,7 +136,7 @@ object CallInfo {
                 while (c.moveToNext()) {
                     val name = c.getString(0) ?: continue; val num = c.getString(1) ?: continue
                     if (seen.add(name + digits(num).takeLast(10))) out.put(JSONObject().put("name", name).put("number", num).put("photo", c.getString(2) ?: "")
-                        .put("fav", c.getInt(3) == 1 || digits(num).takeLast(10) in pins))
+                        .put("fav", digits(num).takeLast(10).let { k -> k in pins || (c.getInt(3) == 1 && k !in off) }))
                 }
             }
         } catch (e: Exception) { }
@@ -145,7 +145,7 @@ object CallInfo {
 
     // ---- favourites (owner 21 Nov 2026: "फेवरेट / फैमिली वाले कॉन्टैक्ट ऊपर, छोटे-छोटे, तुरंत फ़ोन") ----
     fun pins(ctx: Context): Set<String> = prefs(ctx).getStringSet("pins", emptySet()) ?: emptySet()
-    fun pin(ctx: Context, number: String, on: Boolean) {
+    @Synchronized fun pin(ctx: Context, number: String, on: Boolean) {
         val k = digits(number).takeLast(10); if (k.length < 6) return
         val s = HashSet(pins(ctx)); if (on) s.add(k) else s.remove(k)
         prefs(ctx).edit().putStringSet("pins", s).putStringSet("unpinned", HashSet(prefs(ctx).getStringSet("unpinned", emptySet()) ?: emptySet()).apply { if (on) remove(k) else add(k) }).apply()
@@ -183,7 +183,7 @@ object CallInfo {
             ctx.contentResolver.query(CallLog.Calls.CONTENT_URI, arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME, CallLog.Calls.CACHED_PHOTO_URI, CallLog.Calls.DURATION),
                 CallLog.Calls.DATE + " > ?", arrayOf((System.currentTimeMillis() - 30 * 86_400_000L).toString()), CallLog.Calls.DATE + " DESC")?.use { c ->
                 while (c.moveToNext()) {
-                    val num = c.getString(0) ?: continue; val name = c.getString(1) ?: continue
+                    val num = c.getString(0) ?: continue; val name = c.getString(1)?.takeIf { it.isNotBlank() } ?: continue
                     if (c.getLong(3) <= 0) continue
                     val k = digits(num).takeLast(10)
                     count[k] = (count[k] ?: 0) + 1; info.putIfAbsent(k, Triple(name, num, c.getString(2) ?: ""))
@@ -198,17 +198,28 @@ object CallInfo {
     private val photoCache = object : android.util.LruCache<String, String>(80) {}
 
     /** A contact photo as a small picture for the page (data: URL), made on the phone; "" when there is none. */
+    // one at a time (QA: 300 Recent rows must not decode dozens of full photos at once)
+    private val photoLock = Any()
+
+    /** A photo decoded small: first its size, then 1/2, 1/4 … so that the side is about [side] pixels. */
+    fun decodeSmall(ctx: Context, u: Uri, side: Int): android.graphics.Bitmap? {
+        val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        ctx.contentResolver.openInputStream(u)?.use { android.graphics.BitmapFactory.decodeStream(it, null, o) }
+        var n = 1; while (o.outWidth / (n * 2) >= side && o.outHeight / (n * 2) >= side) n *= 2
+        return ctx.contentResolver.openInputStream(u)?.use { android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = n }) }
+    }
+
     fun photoData(ctx: Context, uri: String, px: Int = 144): String {
-        if (!uri.startsWith("content://")) return ""
+        // only contact photos (never an MMS picture or any other file)
+        if (!uri.startsWith("content://com.android.contacts/")) return ""
         photoCache.get("$px|$uri")?.let { return it }
-        val out = try {
-            ctx.contentResolver.openInputStream(Uri.parse(uri))?.use { s ->
-                val bmp = android.graphics.BitmapFactory.decodeStream(s) ?: return ""
+        val out = synchronized(photoLock) { photoCache.get("$px|$uri") ?: try {
+            decodeSmall(ctx, Uri.parse(uri), px * 2)?.let { bmp ->
                 val scaled = android.graphics.Bitmap.createScaledBitmap(bmp, px, px * bmp.height / maxOf(1, bmp.width), true)
                 val bo = java.io.ByteArrayOutputStream(); scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, bo)
                 "data:image/jpeg;base64," + android.util.Base64.encodeToString(bo.toByteArray(), android.util.Base64.NO_WRAP)
             } ?: ""
-        } catch (e: Exception) { "" }
+        } catch (t: Throwable) { "" } }
         photoCache.put("$px|$uri", out)
         return out
     }
@@ -222,8 +233,15 @@ object CallInfo {
                 ?.use { c -> if (c.moveToFirst()) id = c.getLong(0) }
             if (id < 0) return null
             val u = android.content.ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI, id)
-            ContactsContract.Contacts.openContactPhotoInputStream(ctx.contentResolver, u, true)?.use { android.graphics.BitmapFactory.decodeStream(it) }
-        } catch (e: Exception) { null }
+            // the big photo, sampled down to about the screen's width (never a 4000 px original in memory)
+            val side = ctx.resources.displayMetrics.widthPixels.coerceIn(480, 1440)
+            val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            // (with inJustDecodeBounds decodeStream always answers null: only the size is read)
+            ContactsContract.Contacts.openContactPhotoInputStream(ctx.contentResolver, u, true)?.use { android.graphics.BitmapFactory.decodeStream(it, null, o) }
+            if (o.outWidth <= 0) return null
+            var n = 1; while (o.outWidth / (n * 2) >= side) n *= 2
+            ContactsContract.Contacts.openContactPhotoInputStream(ctx.contentResolver, u, true)?.use { android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = n }) }
+        } catch (t: Throwable) { null }
     }
 
     /** Places a call through Android (works for 112 at any time). */

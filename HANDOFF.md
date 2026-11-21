@@ -304,6 +304,11 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
   the call screen behind a dark shade (owner: "वाइफ की पूरी फ़ोटो रहती थी").
 - Recent redraws by itself when the Calls screen comes back (onResume → event "changed", again after 2 s; never while
   searching) (owner: "रिफ्रेश किया तब जाके रिसेंट वाला सबसे ऊपर आया").
+- QA (independent, no blockers) fixes: list never jumps under the thumb (last favourites drawn at once, fixed row
+  height, no redraw within 1.5 s of a touch, redraw only when the top calls changed, one trigger: onResume), draw
+  sequence (a tab tap / ⚙ wins over a late redraw), "looking…" chip follows the current list, photos decoded sampled
+  (inSampleSize) one at a time and only from com.android.contacts, big photo sampled to the screen width, blank
+  cached names skipped, ⭐ off sticks for Google-starred contacts, pin() synchronized.
 
 ## 3.14.4 (branch `claude/v3.14.3`; publish run 44891133069 (tablet re-run)) — 3.14.3 test build was put on the owner's phone by adb (21 Nov 13:26)
 - Bumped because the phone already runs 3.14.3 (versionCode comes from VERSION: same code = no update).
