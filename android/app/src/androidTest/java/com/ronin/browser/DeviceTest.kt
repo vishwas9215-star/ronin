@@ -1170,6 +1170,7 @@ class DeviceTest {
         sc.onActivity { a -> w = a.webForTest(); a.finishAndRemoveTask() } // = swiped away from Recents
         assertTrue("the song page was not kept", waitFor(10) { KeptPlayer.holding })
         assertTrue("another page was kept", KeptPlayer.webForTest() === w)
+        assertTrue("the kept page is not on Ronin's private screen", KeptPlayer.onStageForTest())
         val t1 = evalKept("document.getElementById('v').currentTime").toDouble()
         Thread.sleep(5000)
         val t2 = evalKept("document.getElementById('v').currentTime").toDouble()

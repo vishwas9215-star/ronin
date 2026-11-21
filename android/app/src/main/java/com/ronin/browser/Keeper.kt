@@ -31,6 +31,36 @@ object KeptPlayer {
     private var playing = false
     private var title = ""
     private var lastPlayingAt = 0L
+    // A page that is not on any screen stops its video (and its sound). The kept page sits on a tiny private screen of
+    // Ronin's own (a virtual display nobody sees; its pictures are thrown away at once), so it keeps playing.
+    private var stage: android.app.Presentation? = null
+    private var display: android.hardware.display.VirtualDisplay? = null
+    private var reader: android.media.ImageReader? = null
+
+    private fun putOnStage(a: Context, w: RoninWebView) {
+        try {
+            val r = android.media.ImageReader.newInstance(64, 64, android.graphics.PixelFormat.RGBA_8888, 2)
+            r.setOnImageAvailableListener({ ir -> try { ir.acquireLatestImage()?.close() } catch (e: Exception) { } }, ui)
+            val dm = a.getSystemService(android.hardware.display.DisplayManager::class.java)
+            val vd = dm.createVirtualDisplay("ronin-song", 64, 64, 160, r.surface, android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY)
+            val p = android.app.Presentation(a, vd.display)
+            p.setContentView(android.widget.FrameLayout(p.context).apply { addView(w, android.widget.FrameLayout.LayoutParams(64, 64)) })
+            p.show()
+            reader = r; display = vd; stage = p
+        } catch (e: Throwable) {
+            android.util.Log.w("Ronin", "kept song: no private screen ($e)")
+            (w.parent as? ViewGroup)?.removeView(w)
+            offStage()
+        }
+    }
+
+    private fun offStage() {
+        try { stage?.dismiss() } catch (e: Throwable) { }
+        try { display?.release() } catch (e: Throwable) { }
+        try { reader?.close() } catch (e: Throwable) { }
+        stage = null; display = null; reader = null
+    }
+    fun onStageForTest() = stage?.isShowing == true
 
     val holding get() = kept != null
     fun webForTest(): WebView? = kept?.web
@@ -46,6 +76,7 @@ object KeptPlayer {
         w.webChromeClient = WebChromeClient()
         w.setDownloadListener(null); w.setOnLongClickListener(null); w.setFindListener(null); w.onPull = null
         w.keepPlaying = true
+        putOnStage(a, w)
         w.onResume(); w.resumeTimers()
         w.evaluateJavascript(PageScripts.lowQuality(true), null) // nobody looks: the smallest picture (battery)
         playing = playing0; title = title0; lastPlayingAt = if (playing0) System.currentTimeMillis() else lastPlayed
@@ -59,6 +90,8 @@ object KeptPlayer {
         ui.removeCallbacks(poll)
         val k = kept ?: return null
         kept = null
+        (k.web.parent as? ViewGroup)?.removeView(k.web)
+        offStage()
         return Kept(k.web, k.url, title, playing, lastPlayingAt)
     }
 
@@ -68,6 +101,7 @@ object KeptPlayer {
         val k = kept
         kept = null; wantKeep = false
         k?.web?.let { w -> w.keepPlaying = false; try { w.evaluateJavascript(PageScripts.mediaCommand("pause"), null) } catch (e: Exception) { }; (w.parent as? ViewGroup)?.removeView(w); w.destroy() }
+        offStage()
         if (k != null) PlayerBridge.control = null
         app?.let { MediaPlaybackService.stop(it) }
     }
