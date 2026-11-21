@@ -42,7 +42,7 @@ object Updater {
             app.store.updateChecked = System.currentTimeMillis()
             val current = BuildConfigCompat.versionCode(a)
             a.runOnUiThread {
-                if (a.isFinishing) return@runOnUiThread
+                if (a.isFinishing || a.isDestroyed) return@runOnUiThread // he left meanwhile: no dialog on a closed screen
                 if (info == null) {
                     if (!quiet) Toast.makeText(a, "Could not check for updates now.", Toast.LENGTH_SHORT).show()
                 } else if (info.code <= current) {
@@ -71,6 +71,7 @@ object Updater {
                 sha256(f) == info.sha256
             } catch (e: Exception) { false }
             a.runOnUiThread {
+                if (a.isFinishing || a.isDestroyed) { if (ok) waitingApk = f; return@runOnUiThread } // installs when Ronin is opened again
                 if (!ok) {
                     f.delete()
                     Toast.makeText(a, "Update download failed. Ronin will try again later.", Toast.LENGTH_LONG).show()
@@ -81,9 +82,21 @@ object Updater {
         }
     }
 
+    /** A downloaded update that waits for "Allow from this source" (Android's own screen). */
+    @Volatile var waitingApk: File? = null
+
+    /** Back from Android's "install unknown apps" screen: carry on by itself (no second Update tap). */
+    fun resume(a: Activity) {
+        val f = waitingApk ?: return
+        if (Build.VERSION.SDK_INT >= 26 && !a.packageManager.canRequestPackageInstalls()) return
+        waitingApk = null
+        if (f.exists()) install(a, f)
+    }
+
     private fun install(a: Activity, f: File) {
         if (Build.VERSION.SDK_INT >= 26 && !a.packageManager.canRequestPackageInstalls()) {
-            Toast.makeText(a, "Allow Ronin to install updates, then press Update again.", Toast.LENGTH_LONG).show()
+            waitingApk = f
+            Toast.makeText(a, L("Ronin को updates install करने दें (Allow), फिर Back दबाएँ: update अपने-आप आगे बढ़ेगा।", "Allow Ronin to install updates, then press Back: the update carries on by itself."), Toast.LENGTH_LONG).show()
             // some TVs have no such screen: then the general security settings
             try { a.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + a.packageName))) }
             catch (e: Exception) { try { a.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) } catch (e2: Exception) {} }

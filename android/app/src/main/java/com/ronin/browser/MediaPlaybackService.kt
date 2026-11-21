@@ -154,7 +154,7 @@ class MediaPlaybackService : Service() {
     /** Keeps the phone awake while playing, and for 90 s after a pause (the next song starts in that gap). */
     private fun holdWake(on: Boolean) {
         wakeHandler.removeCallbacks(releaseWake)
-        if (on && wake == null) {
+        if (on && wake?.isHeld != true) { // after the 6 h limit the old lock is no longer held: take a new one
             wake = (getSystemService(Context.POWER_SERVICE) as PowerManager)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Ronin:media").apply { acquire(6 * 60 * 60 * 1000L) }
         } else if (!on) {
@@ -170,6 +170,13 @@ class MediaPlaybackService : Service() {
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         foreground = false
         stopSelf()
+    }
+
+    /** Ronin was swiped away from Recents: the page that played is gone, so the card and the wake lock go too. */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        val c = rootIntent?.component?.className
+        if (c == null || c == MainActivity::class.java.name) stopEverything()
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {

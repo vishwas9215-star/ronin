@@ -295,6 +295,114 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Notification ✕ Close sent "pause": the next 1 s media check showed a paused card again (the 'flaky' song test).
   Now Close sends "stop" (pause + let go). Owner said "हाँ, V3.12.0 publish करो" 16:26.
 
+## 3.14.0 (BUILT 21 Nov 2026 on branch `claude/v3.14.0`, draft PR #1; NOT merged, NOT published) — owner approved the review fixes 21 Nov 00:35, battery low (00:36)
+Source: independent review /tmp/ronin-browser-REVIEW.md (sections 1-4). Publish only on his words ("हाँ, V3.14.0 publish करो"):
+merge PR #1 into main first, then `gh workflow run build.yml --ref main -f publish=true`.
+- Keep tabs / forms: renderer killed (low memory) -> `onRenderProcessGone` gives the tab a new WebView on the same address
+  (other tabs load when shown); Safe Money / TV / Messages-Calls pages close or reopen instead of crashing Ronin.
+  Tabs list saved in Store.savedTabs on every onStop and restored at start (after updates, swipe-away, crash); only the front
+  tab loads (Tab.pending = lazy). Day/Night + Language: `safeRecreate` asks first only if a form has typed text, a private
+  tab is open or a song plays. "Tab closed - ↶ Undo" bar for 6 s.
+- Safe Money: WebChromeClient (alert / confirm / file upload), downloads only PDF / CSV / Excel (own profile cookies),
+  Back = page back, then "Close Safe Money?"; every non-bank / payment / sign-in main-frame target (tap OR redirect) goes
+  to the normal window (danger + fake-bank checks there); user bank names HTML-escaped.
+- Downloads: `blob:` (page reads it, hands it over in 512 KB pieces) and `data:` (Nav.decodeDataUrl) into Downloads/Ronin;
+  name from Content-Disposition or the page's `<a download>`; PageScripts.KEEP_BLOBS delays revokeObjectURL 60 s.
+- http: res/xml/network_security_config.xml allows cleartext; Ronin still goes https first. If https fails (DNS / connect /
+  SSL), Ronin's own error page: big Reload + "Open anyway (not secure)" (never for BANK / PAYMENT; per session
+  httpAllowed). Router / LAN (192.168, 10.x, 172.16-31, .local, localhost) typed -> plain http (Nav.isLocalHost).
+- "This is my bank" asks first; Menu -> Safety -> "Remembered sites" lists my banks + camera / mic sites with ✕.
+- Other apps (upi:, tel:, market:, intent:): main frame + tap = open; page by itself = asked; ad frame without tap = ignored
+  (Nav.outsideAction). SafeSearch also in load() (typed / spoken searches), inserted before '#'.
+- Song card: MainActivity.onDestroy (not a config change) and MediaPlaybackService.onTaskRemoved (main task only) stop
+  the service + wake lock; closing the media tab too. History: in-memory list, written on one background thread.
+- Battery: YouTube smallest picture 20 s after leaving Ronin while a song plays, back to auto on return; rAF fallback 1 s;
+  gesture-free autoplay only on PageScripts.backgroundOrigins (siteSettings per navigation); pauseTimers in onStop when
+  nothing plays, no export and no other Ronin screen is visible (RoninApp.visibleScreens; Safe Money / phone pages / TV
+  resumeTimers in onStart); inject_adblock.js: TradingView + "AD" badge walker = throttled MutationObserver (no work while
+  hidden), YouTube ad check 500 ms, generic player check only while a video plays; lists load on the first browser /
+  Safe Money / TV screen (RoninApp.startLists), not on SMS / call starts; mediaPoll 3 s on screen / 2 s playing / 5 s
+  paused, paused tab released after 10 min (was 30); wake lock re-taken after the 6 h limit; Data export reset only by
+  its own tab; TV screen on only while a video plays (RoninTv.playing); recording accessibility eventTypes = 0; SMS
+  receiver finishes before cleanAds.
+- Updater: download waits in Updater.waitingApk when "install unknown apps" is off; onResume continues by itself.
+  BadToken guards on update / export / saved dialogs.
+- Small: target=_blank / window.open with a tap -> new tab (onCreateWindow; not in private tabs), window.close closes it;
+  camera / mic dialog: only what is asked, Back = deny, remembered per site; delete history asks; tablet strip
+  recomputed in onConfigurationChanged; .apk without warning only from github.com/vishwas9215-star/ronin/ (and the GitHub
+  file server when the page was that path) or F-Droid (Nav.trustedApk).
+- Injured hands: address-bar suggestions (quick links, bookmarks, history; 2 letters; Nav.suggest); menu A− / A+ (per
+  site textZoom, sheet stays open: Sheet.Big keepOpen), Forward, Share, Find in page (bar with ▲ ▼ ✕), Desktop site
+  (per tab); long press on a link / picture: open in new tab, copy, share, save picture; pull down at the top to reload
+  (RoninWebView overscroll, "⟳ Release to reload" sign); error page Reload.
+- Tests: LogicTest routerAndHomeServersStayPlainHttp, otherAppsOpenOnlyAfterATap, filesMadeByThePageAreSaved,
+  onlyRoninsOwnAppFileNeedsNoWarning, textSizeSteps, addressSuggestions, safeSearchForced (+#). DeviceTest
+  aCrashedPageEngineReloadsTheTabInsteadOfClosingRonin, openTabsComeBackAfterRoninIsClosed, aClosedTabComesBackWithUndo,
+  noInternetOrNoHttpsShowsReloadAndOpenAnyway, aPageCannotOpenAnotherAppByItself, filesMadeInsideThePageAreSaved,
+  longPressMenuOpensALinkInANewTab, menuHasTextSizeFindShareAndDesktopSite, addressBarSuggestsBookmarksAndHistory,
+  myBankAsksFirstAndSafeSearchCoversTypedSearches, closingRoninEndsTheSongCard, historyIsWrittenWithoutStoppingTheScreen,
+  updateCarriesOnByItselfAfterInstallPermission, pullingThePageDownReloadsIt, safeMoneyAnswersBankQuestionsAndSendsOtherSitesOut,
+  coloursOrLanguageAskBeforeLosingATypedForm (+ autoplay rule), aLinkThatOpensANewWindowOpensANewTab; TvTest
+  tvScreenStaysOnOnlyWhileAVideoPlays. Never take REQUEST_INSTALL_PACKAGES away in a test (Android kills the app).
+  The emulator's "Pixel Launcher isn't responding" box can eat real taps / swipes: noSystemDialogs() presses Wait. JS: tools/uitest/abbattery.js (a quiet
+  page is woken <= 1 time in 4 s; was 13) + playerads/t.js now in build.sh. DeviceTest init clears savedTabs.
+- CI: on pull requests the screenshots are printed base64 in the device job log between `QAPNG-BEGIN name` /
+  `QAPNG-END` (artifact downloads are blocked by this session's proxy; the "qa" release stays main / dispatch only).
+  Read: `gh api repos/vishwas9215-star/ronin/actions/jobs/<job id>/logs > j.log`, then decode the blocks (python base64).
+  SiteTourTest fails on phone + tablet emulators as on main 3.13.3 (report only, real heavy sites) - not new.
+- Error page: no "Open anyway" when the name does not exist (DNS); address bar keeps the failed address.
+- 🤖 Claude tab (coordinator request 21 Nov, for the server-side "Ronin Claude Browser" in /home/claude/claude-browser,
+  NOT deployed yet): menu big button "🤖 Claude" (m-claude) + tablet top-bar button (claude-top) open / show ONE Claude
+  tab on Store.claudeViewUrl (no default since the QA round: "not paired" until the first pairing). A pairing link https://<host>/k/<48 hex>
+  opened in Ronin (Telegram, typed, clicked) goes to the Claude tab; a NEW host is remembered after one question and
+  only for *.sslip.io / *.nip.io / *.duckdns.org (Nav.claudePairingHost). Claude tab: normal profile (cookies kept,
+  CookieManager.flush in onStop), no ad layer / danger list / song scripts, not in history / saved tabs / undo, never
+  the media tab, never polled; onPause when another tab is in front, and with Ronin in the background (onStop pauses
+  every non-media tab + pauseTimers) so its page sees document.hidden and closes its stream. Paste: page's
+  navigator.clipboard.readText -> WebMessageListener "roninClip" (that origin only, main frame, tab on screen, within
+  3 s of his touch). Links to other sites open in a normal tab. Unreachable / 5xx: "Claude का browser अभी चालू नहीं"
+  + Reload; 404 = not paired yet (open the Telegram link once). Tests: LogicTest claudePairingLinks; DeviceTest
+  claudeButtonOpensTheClaudeTab, claudePairingLinkHostIsRemembered, claudeTabRestsWhenRoninIsInTheBackground,
+  claudePasteReadsTheClipboardOnlyAfterATap.
+- TvTest youtubeTvScreenWithoutAdsAndRemoteKeys flaked 2 of 5 runs (YouTube's page replaced the document between the
+  guard call and the check): now one script. TV job stays continue-on-error.
+- Independent QA on d829d76 (21 Nov) found and I fixed: H1 a web page could re-point the Claude tab (anyone can make
+  a *.sslip.io name) -> a NEW Claude server only from a link of another app (Telegram) or his own typing, after one
+  question; a /k/ link inside a page is a normal link; showAsk never stacks a second question (no dialog loops);
+  L2 no default Claude server any more ("not paired" page until the first pairing). M1 anything not under Claude's
+  host loads in a normal tab, never inside the Claude tab. M2 https first in load() for every address (bookmarks,
+  history, links), router / LAN stay http. M3 an .apk made inside a page (blob: / data:) is never saved. M4 pull to
+  reload asks when a form has typed text; never in Tools / Claude tabs. M5 Back on Ronin's error page goes past the
+  failed address (or closes the tab); menu Reload reloads the failed address. M6 Day/Night/Language release the song
+  card before redrawing. Low: recovered Claude tab keeps its kind; a second renderer crash within 30 s shows a page
+  (MainActivity) or closes (Messages/Calls, TV) instead of looping; Safe Money keeps 3-D Secure / gateways / UPI /
+  e-KYC / DigiLocker steps inside (Nav.paymentStep) and blocks plain http; "Open anyway" never for sign-in pages,
+  own wording for a bad certificate; camera / mic remembered per site AND device (host|camera, host|microphone; older
+  entries ask once more); media check every 1 s on screen until a song is found; window.close keeps Undo; blob limit
+  30 MB + OutOfMemoryError caught; tabs saved on every open / close too; typed-text check includes same-site frames,
+  writing boxes and the Tools tab; Claude tab menu has no Share / Bookmark / page tools; ad layer schedules nothing
+  while hidden. L15: left as it is, to be checked on his device.
+  Tests: LogicTest appFilesAndPaymentSteps (+ claudePairingLinks), DeviceTest pullToReloadAsksBeforeLosingATypedForm,
+  backLeavesRoninsErrorPageAndLinksGoHttpsFirst, claude* tests rewritten (not paired page, page link cannot re-point,
+  other-app link asks, Claude tab never loads another site), filesMadeInsideThePageAreSaved (+ .apk refused).
+- Re-QA on 570cb99 (PASS-WITH-NOTES) fixed: N1 Safe Money card-check pages (acs* / 3ds*) stay inside only when the
+  rest of the name is a BANK / PAYMENT site (acs.evil-phish.in, 3ds-verify.attacker.xyz are sent out); N2 Reload on the
+  "Claude not on" page tries the server again, the 🤖 button too; N3 Back from an error page goes to the last page that
+  is neither the failed address nor the error page (error pages carry history URL ERROR_PAGE). Low: "Open anyway" is
+  remembered in Store.httpSites (never BANK / PAYMENT / AUTH; https still first, see below), removable in Menu ->
+  Safety -> Remembered sites.
+  Tests: LogicTest appFilesAndPaymentSteps (look-alike ACS hosts), DeviceTest backFromADeadLinkShowsThePageBefore,
+  claudeButtonOpensTheClaudeTab (+ Reload), noInternetOrNoHttpsShowsReloadAndOpenAnyway (+ remembered).
+- QA on 7d3fb72 note fixed: a remembered "Open anyway" site (Store.httpSites) no longer skips https: https is tried
+  first every time; only when https cannot connect (connect / timeout / TLS handshake) does Ronin open the http address
+  by itself, no tap (session-only httpAllowed). After a certificate error (onReceivedSslError -> Tab.sslBad): only the
+  warning, never "Open anyway", never a fallback, nothing remembered. DeviceTest
+  rememberedHttpSitesStillTryHttpsFirstAndNeverAfterABadCertificate.
+- NOT done (owner decides): two APKs (review C1), removing call recorder / SMS (C2), any permission change,
+  UPDATE_PACKAGES_WITHOUT_USER_ACTION / PackageInstaller session (C4), discarding idle tabs after 15 min, page-reported
+  media state instead of polling (B7 rest), third-party cookies per site, Sensitive.kt substring false matches
+  (Escorts), voice language following the app language, downloads list.
+
 ## 3.13.3 (PUBLISHED 19 Nov 2026 ~23:55 IST; owner 23:02: "आपको पूरी अनुमति है... ऐप से अपडेट करके" while going to sleep; run 44582876479; tag before-3.13.3) — owner 19 Nov 22:58 (screenshot of a call to 1909)
 - Call screen (InCallActivity): Mute / Speaker / Keypad and Hang up / Answer sit at the BOTTOM (a weight-1 gap);
   the yellow "Unknown number ... Digital arrest" text is gone (owner: "ये सब मत लिखो"). Recent still marks numbers.

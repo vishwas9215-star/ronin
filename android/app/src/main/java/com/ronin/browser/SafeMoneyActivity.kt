@@ -34,12 +34,19 @@ class SafeMoneyActivity : AppCompatActivity() {
     private lateinit var web: WebView
     private lateinit var addressView: TextView
     var usesOwnProfile = false; private set
+    private var fileCallback: android.webkit.ValueCallback<Array<android.net.Uri>>? = null
+    private val chooser = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { r ->
+        fileCallback?.onReceiveValue(android.webkit.WebChromeClient.FileChooserParams.parseResult(r.resultCode, r.data))
+        fileCallback = null
+    }
+    private var webGone = false
 
     private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
 
     @SuppressLint("SetJavaScriptEnabled", "SetTextI18n")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        app.startLists()
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         val green = Color.parseColor("#16A34A")
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.parseColor("#0F1A14")) }
@@ -55,7 +62,7 @@ class SafeMoneyActivity : AppCompatActivity() {
             setPadding(dp(10), 0, dp(6), 0)
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
-        val close = Button(this).apply { text = "Close"; setOnClickListener { finish() } }
+        val close = Button(this).apply { text = L("बंद करें", "Close"); setOnClickListener { askClose() } }
         bar.addView(badge); bar.addView(addressView); bar.addView(close)
         web = WebView(this).apply { layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f) }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
@@ -73,6 +80,8 @@ class SafeMoneyActivity : AppCompatActivity() {
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? {
                 val url = req.url.toString()
+                // never plain http inside Safe Money (a bank page is https only)
+                if (req.url.scheme == "http") return WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), ByteArrayInputStream(ByteArray(0)))
                 val k = app.rules.classify(url, app.store.userBanks)
                 if (k == Kind.BANK || k == Kind.PAYMENT || k == Kind.AUTH) return null
                 return if (app.blocker.blocked(url))
@@ -85,9 +94,19 @@ class SafeMoneyActivity : AppCompatActivity() {
                 if (req.url.scheme != "https") return true // banks are always https; nothing else here
                 if (!req.isForMainFrame) return false
                 val k = app.rules.classify(url, app.store.userBanks)
-                if (k == Kind.BANK || k == Kind.PAYMENT || k == Kind.AUTH || !req.hasGesture()) return false
-                // a link the user clicked to a normal site: back to the normal window
+                if (k == Kind.BANK || k == Kind.PAYMENT || k == Kind.AUTH || Nav.paymentStep(req.url.host ?: "") { u -> app.rules.classify(u, app.store.userBanks).let { it == Kind.BANK || it == Kind.PAYMENT } }) return false
+                // any other site (a tap OR a redirect by itself) never sits under the green "protected" badge:
+                // it goes to the normal window, which also runs the danger / fake-bank checks
                 startActivity(Intent(this@SafeMoneyActivity, MainActivity::class.java).setData(req.url))
+                return true
+            }
+
+            /** Android ended the page engine (low memory): Safe Money closes cleanly instead of Ronin crashing. */
+            override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                (view.parent as? ViewGroup)?.removeView(view)
+                view.destroy(); webGone = true
+                android.widget.Toast.makeText(this@SafeMoneyActivity, L("Memory कम थी: Safe Money फिर से खोलें", "Memory was low: please open Safe Money again"), android.widget.Toast.LENGTH_LONG).show()
+                finish()
                 return true
             }
 
@@ -95,6 +114,18 @@ class SafeMoneyActivity : AppCompatActivity() {
                 addressView.text = url
             }
         }
+        // the bank's own questions (alert / confirm) and file upload (KYC documents); statements can be downloaded
+        web.webChromeClient = object : android.webkit.WebChromeClient() {
+            override fun onShowFileChooser(w: WebView, cb: android.webkit.ValueCallback<Array<android.net.Uri>>, p: FileChooserParams): Boolean {
+                fileCallback?.onReceiveValue(null)
+                fileCallback = cb
+                return try { chooser.launch(p.createIntent()); true } catch (e: Exception) { fileCallback = null; false }
+            }
+        }
+        web.setDownloadListener { url, ua, cd, mime, _ -> download(url, ua, cd, mime) }
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() { if (!webGone && web.canGoBack()) web.goBack() else askClose() }
+        })
         root.addView(bar); root.addView(web)
         keepClearOfSystemBars(root)
         setContentView(root)
@@ -104,6 +135,41 @@ class SafeMoneyActivity : AppCompatActivity() {
         )
     }
 
+    /** Closing Safe Money signs him out of the bank (nothing is kept): one question first. */
+    private fun askClose() {
+        if (webGone || isFinishing) { finish(); return }
+        closeAsk = android.app.AlertDialog.Builder(this).setTitle(L("Safe Money बंद करें?", "Close Safe Money?"))
+            .setMessage(L("बंद करने पर bank से logout हो जाएगा।", "Closing it signs you out of the bank."))
+            .setPositiveButton(L("हाँ, बंद करें", "Yes, close")) { _, _ -> finish() }
+            .setNegativeButton(L("नहीं", "No"), null).show()
+    }
+    private var closeAsk: android.app.AlertDialog? = null
+    fun closeAskForTest() = closeAsk
+    fun webForTest(): WebView = web
+
+    /** Statements and receipts only (PDF / Excel / CSV), saved in Downloads. */
+    private fun download(url: String, ua: String, cd: String?, mime: String?) {
+        val name = android.webkit.URLUtil.guessFileName(url, cd, mime)
+        val ok = Regex("(?i).*\\.(pdf|csv|xlsx?)$").matches(name) || (mime ?: "") in setOf("application/pdf", "text/csv", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        if (!ok || !url.startsWith("https://")) {
+            android.widget.Toast.makeText(this, L("Safe Money में सिर्फ़ PDF / Excel statement save होते हैं", "Safe Money saves only PDF / Excel statements"), android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        try {
+            val cookies = (if (usesOwnProfile) ProfileStore.getInstance().getProfile(PROFILE)?.cookieManager else CookieManager.getInstance())?.getCookie(url) ?: ""
+            val req = android.app.DownloadManager.Request(android.net.Uri.parse(url)).setMimeType(mime)
+                .addRequestHeader("User-Agent", ua).addRequestHeader("Cookie", cookies)
+                .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, name)
+            (getSystemService(DOWNLOAD_SERVICE) as android.app.DownloadManager).enqueue(req)
+            android.widget.Toast.makeText(this, L("Download हो रहा है: $name", "Downloading $name"), android.widget.Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(this, L("Download शुरू नहीं हुआ", "Download could not start"), android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onStart() { super.onStart(); if (!webGone) web.resumeTimers() } // the browser may have rested all page timers
+
     private fun home(): String {
         val links = listOf(
             "SBI" to "https://onlinesbi.sbi/", "HDFC Bank" to "https://netbanking.hdfcbank.com/",
@@ -111,7 +177,7 @@ class SafeMoneyActivity : AppCompatActivity() {
             "Bank of Baroda" to "https://www.bankofbaroda.in/", "Punjab National Bank" to "https://www.pnbindia.in/",
             "Kotak" to "https://www.kotak.com/", "India Post Payments Bank" to "https://www.ippbonline.com/"
         ) + app.store.userBanks.map { it to "https://$it/" }
-        val a = links.joinToString("") { "<a href=\"${it.second}\">${it.first}</a>" }
+        val a = links.joinToString("") { "<a href=\"${android.text.TextUtils.htmlEncode(it.second)}\">${android.text.TextUtils.htmlEncode(it.first)}</a>" }
         return """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>body{margin:0;padding:24px 16px;background:#0f1a14;color:#e8eaf0;font-family:sans-serif}
 h1{color:#22c55e;font-size:24px;margin:0 0 6px}p{opacity:.8}.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
@@ -125,8 +191,7 @@ a{display:block;padding:14px;border-radius:12px;background:#13231a;color:#e8eaf0
         if (usesOwnProfile) {
             try { ProfileStore.getInstance().getProfile(PROFILE)?.cookieManager?.removeAllCookies(null) } catch (e: Exception) {}
         }
-        web.clearCache(true)
-        web.destroy()
+        if (!webGone) { web.clearCache(true); web.destroy() }
         super.onDestroy()
     }
 

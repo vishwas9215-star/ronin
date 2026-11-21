@@ -29,7 +29,8 @@ class TvActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        (application as RoninApp).startLists()
+        // the screen stays on only while a video plays (Bridge.playing); paused, the TV may sleep again
         web = WebView(this).apply {
             setBackgroundColor(0xFF000000.toInt())
             isFocusable = true; isFocusableInTouchMode = true
@@ -58,6 +59,14 @@ class TvActivity : AppCompatActivity() {
             override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean {
                 // YouTube and Google sign-in stay here; anything else (an advert page) is not opened on the TV
                 return !YT_HOST.containsMatchIn(req.url.host ?: "")
+            }
+            /** Android ended the page engine (low memory on the TV): Ronin TV starts again instead of crashing. */
+            override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                (view.parent as? android.view.ViewGroup)?.removeView(view)
+                view.destroy(); webGone = true
+                finish()
+                if (System.currentTimeMillis() - lastCrash > 30_000) { lastCrash = System.currentTimeMillis(); startActivity(android.content.Intent(this@TvActivity, TvActivity::class.java)) }
+                return true
             }
             override fun onPageFinished(view: WebView, url: String?) {
                 // without document-start scripts (old WebView): the same guard, a little later
@@ -90,20 +99,27 @@ class TvActivity : AppCompatActivity() {
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) { super.onWindowFocusChanged(hasFocus); if (hasFocus) hideBars() }
-    override fun onSaveInstanceState(outState: Bundle) { super.onSaveInstanceState(outState); web.saveState(outState) }
-    override fun onPause() { super.onPause(); web.onPause() }
-    override fun onResume() { super.onResume(); web.onResume() }
-    override fun onDestroy() { web.destroy(); super.onDestroy() }
+    override fun onSaveInstanceState(outState: Bundle) { super.onSaveInstanceState(outState); if (!webGone) web.saveState(outState) }
+    override fun onPause() { super.onPause(); if (!webGone) web.onPause() }
+    override fun onResume() { super.onResume(); if (!webGone) { web.resumeTimers(); web.onResume() }; Updater.resume(this) }
+    override fun onDestroy() { if (!webGone) web.destroy(); super.onDestroy() }
+    private var webGone = false
 
     private var lastUrl: String? = null
 
     inner class Bridge {
         /** YouTube's "Exit" on its home screen. */
         @JavascriptInterface fun exit() { runOnUiThread { finish() } }
+        /** A video plays / stopped: the TV screen stays on only while one plays (battery, screen saver). */
+        @JavascriptInterface fun playing(on: Boolean) {
+            runOnUiThread { if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+        }
     }
 
     companion object {
         const val START = "https://www.youtube.com/tv"
+        /** A second page-engine crash within 30 s closes Ronin TV instead of restarting it again and again. */
+        @Volatile private var lastCrash = 0L
         /** A living-room device name: YouTube then serves its TV screen (remote-control layout) instead of the phone site. */
         const val TV_UA = "Mozilla/5.0 (Linux; Android 12; Ronin TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Cobalt/24.lts.30-gold v8/8.8.278.17-jit gles Starboard/15, Ronin_TV/3.11 (Google, TV, Wired)"
         val YT_HOST = Regex("(^|\\.)(youtube\\.com|youtu\\.be|ytimg\\.com|googlevideo\\.com|google\\.com|gstatic\\.com|googleapis\\.com|googleusercontent\\.com|ggpht\\.com|accounts\\.google\\.[a-z.]+)$")
@@ -125,6 +141,10 @@ class TvActivity : AppCompatActivity() {
   JSON.parse = function () { var r = P.apply(this, arguments); try { prune(r, 0); } catch (e) {} return r; };
   if (window.Response) { var RJ = Response.prototype.json; Response.prototype.json = function () { return RJ.apply(this, arguments).then(function (r) { try { prune(r, 0); } catch (e) {} return r; }); }; }
   window.close = function () { try { RoninTv.exit(); } catch (e) {} };
+  var tell = function (on) { return function () { try { RoninTv.playing(on); } catch (e) {} }; };
+  document.addEventListener('playing', tell(true), true);
+  document.addEventListener('pause', tell(false), true);
+  document.addEventListener('ended', tell(false), true);
   window.__roninTvPrune = function (o) { return prune(o, 0); };
 })();
 """

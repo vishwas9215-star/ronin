@@ -24,7 +24,8 @@ import android.widget.TextView
  * (Owner, 18 Nov 2026: the right-side panels "do not look good"; three AIs on AI Fiesta agreed on this shape.)
  */
 class Sheet(private val ctx: Context, title: String? = null) {
-    class Big(val icon: String, val label: String, val tag: String = "", val tint: String = "#2A3142", val click: () -> Unit)
+    /** keepOpen: the sheet stays open after a tap (A− / A+ can be pressed again and again). */
+    class Big(val icon: String, val label: String, val tag: String = "", val tint: String = "#2A3142", val keepOpen: Boolean = false, val click: () -> Unit)
     class Row(val icon: String, val label: String, val value: String = "", val tint: String = "#2A3142", val tag: String = "", val click: () -> Unit)
 
     private val dialog = Dialog(ctx)
@@ -58,7 +59,7 @@ class Sheet(private val ctx: Context, title: String? = null) {
                 isClickable = true; isFocusable = true
                 contentDescription = b.label
                 if (b.tag.isNotEmpty()) tag = b.tag
-                setOnClickListener { dialog.dismiss(); b.click() }
+                setOnClickListener { if (!b.keepOpen) dialog.dismiss(); b.click() }
                 layoutParams = GridLayout.LayoutParams(GridLayout.spec(GridLayout.UNDEFINED, 1f), GridLayout.spec(GridLayout.UNDEFINED, 1f)).apply {
                     width = 0; height = dp(84); setMargins(dp(4), dp(4), dp(4), dp(4))
                 }

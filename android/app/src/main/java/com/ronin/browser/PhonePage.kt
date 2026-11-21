@@ -99,6 +99,15 @@ abstract class PhonePage : AppCompatActivity() {
                 val mime = if (name.endsWith(".js")) "text/javascript" else "text/html"
                 return try { WebResourceResponse(mime, "utf-8", assets.open("ronin/tools/$name")) } catch (e: Exception) { null }
             }
+            /** Android ended the page engine (low memory): this screen opens again instead of Ronin crashing. */
+            override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                (view.parent as? android.view.ViewGroup)?.removeView(view)
+                view.destroy(); webGone = true
+                finish()
+                // once: a second crash within 30 s only closes the screen (no endless restart)
+                if (System.currentTimeMillis() - lastCrash > 30_000) { lastCrash = System.currentTimeMillis(); startActivity(intent) }
+                return true
+            }
             override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean {
                 // links in messages open in Ronin itself (the browser checks them), never in this window
                 val u = req.url.toString()
@@ -126,7 +135,10 @@ abstract class PhonePage : AppCompatActivity() {
     }
 
     open fun startQuery(i: Intent?): String = ""
-    override fun onDestroy() { try { web.destroy() } catch (e: Exception) { }; super.onDestroy() }
+    override fun onDestroy() { if (!webGone) try { web.destroy() } catch (e: Exception) { }; super.onDestroy() }
+    override fun onStart() { super.onStart(); if (::web.isInitialized && !webGone) web.resumeTimers() } // the browser may have rested all page timers
+    private var webGone = false
+    companion object { @Volatile private var lastCrash = 0L }
     fun webForTest(): WebView = web
 
     /** The page is told something happened (a new SMS, a call ended). */

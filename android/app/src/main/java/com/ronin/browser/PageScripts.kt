@@ -36,7 +36,7 @@ object PageScripts {
       var id = ++seq, done = false, r = 0, tm = 0;
       var run = function(ts){ if (done) return; done = true; delete live[id]; caf(r); clearTimeout(tm); cb(ts); };
       r = raf(run);
-      tm = setTimeout(function(){ run(performance.now()); }, 250);
+      tm = setTimeout(function(){ run(performance.now()); }, 1000); // 1 s: enough for the next song, kinder to the battery
       live[id] = [r, tm]; return id;
     };
     window.cancelAnimationFrame = function(id){
@@ -52,6 +52,63 @@ object PageScripts {
     }
   } catch (e) {}
 })();
+"""
+
+    /**
+     * Pages often throw away a file they made (blob:) right after the click, before Ronin can save it:
+     * Ronin lets them go a minute later instead.
+     */
+    const val KEEP_BLOBS = """
+(function(){
+  try {
+    if (window.__roninBlobs || !window.URL || !URL.revokeObjectURL) return; window.__roninBlobs = 1;
+    var r = URL.revokeObjectURL.bind(URL);
+    URL.revokeObjectURL = function(u){ setTimeout(function(){ r(u); }, 60000); };
+  } catch (e) {}
+})();
+"""
+
+    /**
+     * Claude's live view: its Paste button asks the clipboard; WebView itself never allows that, so Ronin answers
+     * (only on Claude's own host, only right after his tap - checked in the app).
+     */
+    const val CLAUDE_PASTE = """
+(function(){
+  try {
+    if (window.__roninClip || !navigator.clipboard) return; window.__roninClip = 1;
+    var waiting = [], hooked = false;
+    navigator.clipboard.readText = function(){
+      var b = window.roninClip;
+      if (!b) return Promise.reject(new Error('no bridge'));
+      if (!hooked) { hooked = true; b.onmessage = function(e){ var w = waiting.shift(); if (w) w(String(e.data || '')); }; }
+      return new Promise(function(ok, no){ waiting.push(function(s){ s ? ok(s) : no(new Error('no text')); }); b.postMessage('read'); });
+    };
+  } catch (e) {}
+})();
+"""
+
+    /** true when a form on the page has text the user typed (it would be lost if the page loads again). */
+    const val HAS_TYPED_TEXT = """
+(function(){
+  function typed(doc) {
+    var f = doc.querySelectorAll('input,textarea,select');
+    for (var i = 0; i < f.length; i++) {
+      var e = f[i], t = (e.type || '').toLowerCase();
+      if (/^(hidden|submit|button|reset|image|search|file)$/.test(t)) continue;
+      if (e.tagName === 'SELECT') { for (var j = 0; j < e.options.length; j++) if (e.options[j].selected !== e.options[j].defaultSelected) return true; continue; }
+      if (t === 'checkbox' || t === 'radio') { if (e.checked !== e.defaultChecked) return true; continue; }
+      if (e.value && e.value !== e.defaultValue) return true;
+    }
+    // a writing box (mail, comment, letter): text in it counts too
+    var ed = doc.querySelectorAll('[contenteditable=""],[contenteditable="true"]');
+    for (var k = 0; k < ed.length; k++) if ((ed[k].innerText || '').trim().length > 0 && ed[k] !== doc.body) return true;
+    // frames of the same site (portals put their forms there)
+    var fr = doc.querySelectorAll('iframe,frame');
+    for (var m = 0; m < fr.length; m++) { try { var d = fr[m].contentDocument; if (d && typed(d)) return true; } catch (e) {} }
+    return false;
+  }
+  try { return typed(document); } catch (e) { return false; }
+})()
 """
 
     /** What is playing: {"v":hasVideo,"p":playing,"t":title,"a":artist}. */
@@ -88,6 +145,21 @@ object PageScripts {
   }
   return 'no';
 })(${org.json.JSONObject.quote(action)})
+"""
+
+    /**
+     * Battery: with the screen off nobody sees the picture, so YouTube is asked for its smallest picture
+     * (the sound stays the same); back on screen it chooses by itself again.
+     */
+    fun lowQuality(on: Boolean): String = """
+(function(){
+  try {
+    var p = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+    if (!p || !p.setPlaybackQualityRange) return 'no';
+    if ($on) p.setPlaybackQualityRange('tiny', 'tiny'); else p.setPlaybackQualityRange('auto', 'auto');
+    return 'ok';
+  } catch (e) { return 'no'; }
+})()
 """
 
     /** The article's paragraphs (for reading aloud), as a JSON array of text. */

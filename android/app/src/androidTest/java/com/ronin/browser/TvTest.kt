@@ -44,8 +44,8 @@ class TvTest {
     fun youtubeTvScreenWithoutAdsAndRemoteKeys() {
         ActivityScenario.launch(TvActivity::class.java).use { sc ->
             // the advert part of a player answer is removed, the video part stays
-            js(sc, TvActivity.NO_ADS_JS)
-            val pruned = js(sc, "JSON.stringify(JSON.parse('{\"adPlacements\":[1],\"playerAds\":[2],\"adSlots\":[3],\"videoDetails\":{\"title\":\"x\"},\"playerResponse\":{\"adPlacements\":[4],\"streamingData\":{}}}'))")
+            // one script (guard + check together): YouTube's own page may replace the document between two calls
+            val pruned = js(sc, TvActivity.NO_ADS_JS + ";JSON.stringify(JSON.parse('{\"adPlacements\":[1],\"playerAds\":[2],\"adSlots\":[3],\"videoDetails\":{\"title\":\"x\"},\"playerResponse\":{\"adPlacements\":[4],\"streamingData\":{}}}'))")
             assertTrue("ads left in the player answer: $pruned", !pruned.contains("adPlacements") && !pruned.contains("playerAds") && !pruned.contains("adSlots"))
             assertTrue("video part removed: $pruned", pruned.contains("videoDetails") && pruned.contains("streamingData"))
 
@@ -84,6 +84,20 @@ class TvTest {
             }
             android.util.Log.i("RoninTV", "video: $state")
             shot("tv-05-video")
+        }
+    }
+
+    @Test
+    fun tvScreenStaysOnOnlyWhileAVideoPlays() {
+        // 3.14 battery: the TV may sleep / show its screen saver when nothing plays
+        ActivityScenario.launch(TvActivity::class.java).use { sc ->
+            Thread.sleep(3000)
+            js(sc, TvActivity.NO_ADS_JS)
+            fun on(): Boolean { var f = 0; sc.onActivity { a -> f = a.window.attributes.flags }; return f and android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON != 0 }
+            js(sc, "document.dispatchEvent(new Event('playing')),1"); Thread.sleep(800)
+            assertTrue("screen not kept on while a video plays", on())
+            js(sc, "document.dispatchEvent(new Event('pause')),1"); Thread.sleep(800)
+            assertTrue("screen still kept on after pause", !on())
         }
     }
 }

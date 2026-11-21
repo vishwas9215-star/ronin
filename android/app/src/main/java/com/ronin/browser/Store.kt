@@ -37,17 +37,28 @@ class Store(ctx: Context) {
 
     fun removeBookmark(url: String) = write("bookmarks", read("bookmarks").filter { it.url != url })
 
-    val history: List<Page> get() = read("history")
+    // History lives in memory; the file is written on a background thread (a page load never waits for it).
+    private val io = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "ronin-history").apply { isDaemon = true } }
+    @Volatile private var hist: List<Page>? = null
+
+    val history: List<Page> get() = hist ?: synchronized(this) { hist ?: read("history").also { hist = it } }
 
     fun addHistory(title: String, url: String) {
         if (!url.startsWith("http") || !keepHistory) return
-        val cut = System.currentTimeMillis() - 90L * 24 * 3600 * 1000
-        val list = read("history").filter { it.url != url && it.time > cut }.toMutableList()
-        list.add(0, Page(title.take(150), url, System.currentTimeMillis()))
-        write("history", list.take(3000))
+        val now = System.currentTimeMillis()
+        io.execute {
+            synchronized(this) {
+                val cut = now - 90L * 24 * 3600 * 1000
+                val list = history.filter { it.url != url && it.time > cut }.toMutableList()
+                list.add(0, Page(title.take(150), url, now))
+                val keep = list.take(3000)
+                hist = keep
+                write("history", keep)
+            }
+        }
     }
 
-    fun clearHistory() = write("history", emptyList())
+    fun clearHistory() { synchronized(this) { hist = emptyList(); write("history", emptyList()) } }
 
     /** Safe Social settings (JSON from the launcher page: apps, family, reels, ytRestrict). */
     var social: String
@@ -56,10 +67,42 @@ class Store(ctx: Context) {
 
     /** Deletes every visit whose address matches (adult / gambling sites). */
     fun removeHistory(match: (String) -> Boolean) {
-        val all = read("history")
-        val keep = all.filter { !match(it.url) }
-        if (keep.size != all.size) write("history", keep)
+        synchronized(this) {
+            val all = history
+            val keep = all.filter { !match(it.url) }
+            if (keep.size != all.size) { hist = keep; write("history", keep) }
+        }
     }
+
+    /** Open tabs (addresses + which one was in front), kept for the next start (after an update, a swipe-away...). */
+    var savedTabs: String
+        get() = p.getString("savedTabs", "") ?: ""
+        set(v) { p.edit().putString("savedTabs", v).apply() }
+
+    /** Text size (A− / A+) per site, in per cent; 100 = the site's own size. */
+    fun textZoom(host: String): Int = try { JSONObject(p.getString("textZoom", "{}") ?: "{}").optInt(host.removePrefix("www."), 100) } catch (e: Exception) { 100 }
+    fun setTextZoom(host: String, pct: Int) {
+        val h = host.removePrefix("www.")
+        if (h.isEmpty()) return
+        val o = try { JSONObject(p.getString("textZoom", "{}") ?: "{}") } catch (e: Exception) { JSONObject() }
+        if (pct == 100) o.remove(h) else o.put(h, pct)
+        p.edit().putString("textZoom", o.toString()).apply()
+    }
+
+    /** Claude's live view (his own server); a pairing link he opens in Ronin sets its host. */
+    var claudeViewUrl: String
+        get() = p.getString("claudeView", "")?.takeIf { it.startsWith("https://") } ?: "" // "" = not paired yet
+        set(v) { p.edit().putString("claudeView", v).apply() }
+
+    /** Sites he opened with "Open anyway (not secure)": no https question again (never banks / payment / sign-in). */
+    var httpSites: Set<String>
+        get() = p.getStringSet("httpSites", emptySet()) ?: emptySet()
+        set(v) = p.edit().putStringSet("httpSites", v).apply()
+
+    /** Sites he allowed to use the camera / microphone once: they are not asked again. */
+    var mediaSites: Set<String>
+        get() = p.getStringSet("mediaSites", emptySet()) ?: emptySet()
+        set(v) = p.edit().putStringSet("mediaSites", v).apply()
 
     var keepHistory: Boolean
         get() = p.getBoolean("keepHistory", true)

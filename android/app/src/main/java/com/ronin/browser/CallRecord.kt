@@ -143,6 +143,11 @@ class RecordService : Service() {
 
 /** Does nothing with the screen: Android lets an "accessibility" app keep the microphone during a call. */
 class RecordAccess : AccessibilityService() {
+    // battery: Ronin reads nothing on the screen, so Android need not wake it on every window change in every app
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        try { serviceInfo = serviceInfo?.apply { eventTypes = 0 } } catch (e: Exception) { }
+    }
     override fun onAccessibilityEvent(e: AccessibilityEvent?) {}
     override fun onInterrupt() {}
 }

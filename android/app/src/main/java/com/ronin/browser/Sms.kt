@@ -417,8 +417,9 @@ class SmsDeliverReceiver : BroadcastReceiver() {
                         (r?.reasons?.firstOrNull() ?: L("ठगी के संकेत", "Signs of a scam")) + L("\nRonin ने इसे ⛔ ठगी में रखा है। पैसे, OTP, PIN न दें।", "\nRonin put it in ⛔ Scam. Never give money, OTP or PIN."), open)
                     else -> { } // ads: hidden, no sound
                 }
-                SmsStore.cleanAds(ctx)
             } finally { pending.finish() }
+            // the old-ad clean-up (at most every 3 h) runs after Android was told the SMS is handled (battery, no ANR)
+            try { SmsStore.cleanAds(ctx) } catch (e: Exception) { }
         }.start()
     }
 }
