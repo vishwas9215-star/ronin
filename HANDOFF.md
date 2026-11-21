@@ -295,6 +295,14 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Notification ✕ Close sent "pause": the next 1 s media check showed a paused card again (the 'flaky' song test).
   Now Close sends "stop" (pause + let go). Owner said "हाँ, V3.12.0 publish करो" 16:26.
 
+## 3.14.4 (branch `claude/v3.14.3`; NOT published) — 3.14.3 test build was put on the owner's phone by adb (21 Nov 13:26)
+- Bumped because the phone already runs 3.14.3 (versionCode comes from VERSION: same code = no update).
+- Photo circles (owner 13:32, screenshots): dark letter on slate looked black in day mode → bright colour per name
+  (hash), white letter, a bare number shows its first digit (no "+"), scam / risk = bright red; Calls + Messages.
+  Test: phone.js checks every circle is white-on-colour.
+- Owner 13:33: first real Chakshu report worked on his phone (form filled, picture attached, he typed the mobile, OTP,
+  submitted).
+
 ## 3.14.3 (branch `claude/v3.14.3`; NOT published) — owner 21 Nov 11:27–11:31 (calls chat)
 - **Play Protect called Ronin "harmful"** (tablet + phone) since the SMS / call log / accessibility permissions came back
   in 3.13. Owner chose: TWO apps from one code (gradle flavors `browser` / `phone`):

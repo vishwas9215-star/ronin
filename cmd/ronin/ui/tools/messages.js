@@ -62,15 +62,22 @@
   // the company's own website icon (fetched once by the phone from that site, then kept)
   const icons = {};
   const icon = site => icons[site] || (icons[site] = ask('icon', { domain: site }).then(x => (typeof x === 'string' && x.indexOf('data:image/') === 0) ? x : null));
+  // photo circles: a bright colour of its own per name with a white letter; a bare number its first digit, never a dark "+" / "9"
+  // on slate (owner 21 Nov 2026: "गोल में... पूरा ब्लैक कलर में कर रखा है, ये गलत है")
+  const AV = ['#2563eb', '#7c3aed', '#db2777', '#ea580c', '#0891b2', '#16a34a', '#b45309', '#4f46e5', '#0d9488', '#c026d3'];
+  const avColor = k => { let x = 0; for (const c of String(k || '')) x = (x * 31 + c.codePointAt(0)) >>> 0; return AV[x % AV.length]; };
+  const avText = (name, company) => { const n = String(name || '').trim(); if (!n) return '#';
+    if (/^[+\d\s()-]+$/.test(n)) return (n.replace(/\D/g, '').slice(-10)[0] || '#'); // a number: its first digit, in white
+    return company ? n.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() : [...n][0].toUpperCase(); };
   const badge = t => {
     const b = !t.name && brand(t.address);
-    if (t.cat === 'scam') return h('div', { cls: 'av', style: 'background:#7f1d1d' }, (who(t)[0] || '?').toUpperCase());
+    if (t.cat === 'scam') return h('div', { cls: 'av', style: 'background:#dc2626' }, '⛔');
     if (b) {
       const el = h('div', { cls: 'av brand', style: 'background:' + b.color + (b.short.length > 2 ? ';font-size:' + (b.short.length > 3 ? 12 : 14) + 'px' : '') }, b.short);
       if (b.site) icon(b.site).then(src => { if (src) { el.classList.add('pic'); el.style.background = '#fff'; el.replaceChildren(h('img', { src, alt: '' })); } });
       return el;
     }
-    return h('div', { cls: 'av' }, (who(t)[0] || '?').toUpperCase());
+    return h('div', { cls: 'av', style: 'background:' + avColor(t.address || who(t)) }, avText(who(t), !t.name && isName(t.address)));
   };
   // the OTP / code in a message (same rule as Otp.kt): shown big and blue, one tap copies only the digits
   // an OTP only when the SMS says OTP (smsfacts.js; same rule as Otp.kt)

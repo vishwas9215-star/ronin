@@ -22,6 +22,13 @@
   const when = ms => { const d = new Date(ms), n = new Date(); return d.toDateString() === n.toDateString() ? d.toTimeString().slice(0, 5) : d.getDate() + '/' + (d.getMonth() + 1); };
   const TYPE = { 1: L('आई', 'incoming'), 2: L('की', 'outgoing'), 3: L('छूटी', 'missed'), 5: L('काटी', 'rejected'), 6: L('रोकी', 'blocked') };
   const ARROW = { 1: '↙', 2: '↗', 3: '✖', 5: '⛔', 6: '🚫' };
+  // photo circles: a bright colour of its own per name with a white letter; a bare number its first digit, never a dark "+" / "9"
+  // on slate (owner 21 Nov 2026: "गोल में... पूरा ब्लैक कलर में कर रखा है, ये गलत है")
+  const AV = ['#2563eb', '#7c3aed', '#db2777', '#ea580c', '#0891b2', '#16a34a', '#b45309', '#4f46e5', '#0d9488', '#c026d3'];
+  const avColor = k => { let x = 0; for (const c of String(k || '')) x = (x * 31 + c.codePointAt(0)) >>> 0; return AV[x % AV.length]; };
+  const avText = (name, company) => { const n = String(name || '').trim(); if (!n) return '#';
+    if (/^[+\d\s()-]+$/.test(n)) return (n.replace(/\D/g, '').slice(-10)[0] || '#'); // a number: its first digit, in white
+    return company ? n.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() : [...n][0].toUpperCase(); };
   // came in or went out, at a glance: outgoing blue ↗, incoming green ↙, missed red
   const DIR = { 1: 'in', 2: 'out', 3: 'miss', 5: 'rej', 6: 'blk' };
   // a coloured arrow on the photo circle + the word in the same colour (no grey chips)
@@ -67,7 +74,7 @@
       // 3.14.3 (owner 21 Nov): red only for a real risk; your order's company / your own call / a 1600 bank line stay calm
       const risk = (r) => (r.level ? r.level === 'risk' : !!r.label);
       list.replaceChildren(...(mine.length ? mine.map(r => h('div', { cls: 'th' + (risk(r) ? ' flag' : ''), 'data-number': r.number, 'data-level': r.level || '' },
-        h('div', { cls: 'avw' }, h('div', { cls: 'av', style: risk(r) ? 'background:#7f1d1d' : '' }, ((r.name || r.number || '?')[0] || '?').toUpperCase()), dirChip(r.type)),
+        h('div', { cls: 'avw' }, h('div', { cls: 'av', style: 'background:' + (risk(r) ? '#dc2626' : avColor(r.number || r.name)) }, avText(r.name || r.number, false)), dirChip(r.type)),
         h('div', { cls: 'mid', on: { click: () => window.__roninDial(r.number) } }, // a tap on the name only puts the number on the keypad: only the green 📞 calls (a stray tap once called someone at night)
          h('b', { cls: r.type === 3 ? 'miss' : '' }, r.name || r.number), h('small', {}, dirWord(r.type), (r.type ? ' • ' : '') + (r.name ? r.number : '') + (r.date ? (r.name ? ' • ' : '') + when(r.date) : '')), r.label ? h('span', { cls: 'lbl' + (r.level && r.level !== 'risk' ? ' ' + r.level : '') }, r.label) : ''),
         h('button', { cls: 'pill', on: { click: () => ask('sms', { number: r.number }) } }, '💬'),

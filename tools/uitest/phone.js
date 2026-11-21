@@ -52,6 +52,8 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   else { await p2.click('#otpCopy'); await p2.waitForTimeout(100); if (!(await p2.evaluate(() => window.__log.some(m => m.op === 'copy' && m.text === '482913')))) bad('pinned OTP copy'); }
   { const hgt = await p2.$eval('.th', e => e.getBoundingClientRect().height); if (hgt < 72) bad('message rows too small: ' + hgt); }
   await p2.screenshot({ path: path.join(out, 'messages-work.png') });
+  { const av = await p2.$$eval('.av:not(.brand)', a => a.map(x => [getComputedStyle(x).color, getComputedStyle(x).backgroundColor, x.textContent]));
+    if (av.some(([c, bg, t]) => c !== 'rgb(255, 255, 255)' || bg === 'rgb(51, 65, 85)' || t === '+')) bad('dark photo circle in Messages ' + JSON.stringify(av)); }
   await p2.click('[data-tab=scam]'); await p2.waitForTimeout(100);
   if ((await p2.$$eval('.th', a => a.map(x => x.dataset.thread))).join() !== '1') bad('ठगी tab');
   await p2.click('.th[data-thread="1"]'); await p2.waitForSelector('.warn');
@@ -99,6 +101,9 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   await serve(p3); await p3.addInitScript(phone({ isDefault: true, log: true, contacts: true }));
   await p3.goto('https://ronin.home/tools/calls.html'); await p3.waitForSelector('.th');
   if (!await p3.$('[data-tab=recent].on')) bad('Recent is not the first page');
+  // owner 21 Nov 2026: photo circles were near-black (dark letter on slate): white letter on a bright colour, no "+"
+  { const av = await p3.$$eval('.av', a => a.map(x => [getComputedStyle(x).color, getComputedStyle(x).backgroundColor, x.textContent]));
+    if (av.some(([c, bg, t]) => c !== 'rgb(255, 255, 255)' || bg === 'rgb(51, 65, 85)' || t === '+')) bad('dark photo circle ' + JSON.stringify(av)); }
   // owner 21 Nov 2026: only a real risk is red; the Airtel-SMS number and a plain unknown stay calm
   { const fl = await p3.$$eval('.th.flag', a => a.map(x => x.dataset.number)); if (fl.join() !== '+923001234567') bad('flagged caller not tinted: ' + fl); }
   await p3.click('[data-tab=pad]'); await p3.waitForSelector('.pad button');
