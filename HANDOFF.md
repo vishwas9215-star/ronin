@@ -320,6 +320,7 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
   spam-call "Report" opens Ronin Browser by package. Known risk: Google's India sideload rule may block installing an
   SMS + accessibility app from a browser (Ronin Phone) - fallback: install from the laptop by adb (owner's bat).
   Old call recordings stay on the phone but are not listed in Ronin Phone (they belong to the browser package).
+- CI run 44875517945 all green (windows, android, phone, tablet, tv). RoninPhone.apk + 3-install-ronin-phone.bat (adb) copied to C:\Ronin Ecosystem\scrcpy. Waiting for "हाँ, V3.14.3 publish करो".
 - Also on this branch: PR #3 (CI quiet: no e-mails for draft PRs / notes-only commits / publish cross-cancels).
 
 ## 3.14.2 (PUBLISHED 21 Nov 2026 10:21 IST on "हाँ, V3.14.2 publish करो"; run 44866848465; tag before-3.14.2 local) — owner 21 Nov 09:44 (calls chat; built on 3.14.1, the other chat's work untouched)
