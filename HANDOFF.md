@@ -295,6 +295,30 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Notification ✕ Close sent "pause": the next 1 s media check showed a paused card again (the 'flaky' song test).
   Now Close sends "stop" (pause + let go). Owner said "हाँ, V3.12.0 publish करो" 16:26.
 
+## 3.14.1 (BUILT on branch `claude/v3.14.1`, draft PR #2; NOT merged, NOT published) — owner 21 Nov 06:46
+Asked: a YouTube / YouTube Music song keeps playing after a swipe to Home AND after swiping Ronin away from Recents
+(3.14.0 stopped it on a Recents swipe).
+- KeptPlayer (Keeper.kt): when the browser screen is destroyed (not a rotation) while its media tab plays on a
+  PageScripts.backgroundOrigins page (or played < 15 s ago = between songs), MainActivity.onDestroy hands that ONE
+  WebView to KeptPlayer.hold (removed from the screen, its MutableContextWrapper re-pointed to the application, own
+  KeepClient: YouTube pages only, ad lists still block, renderer gone = release); all other tabs are destroyed.
+  The media foreground service keeps the process alive; MediaPlaybackService.onTaskRemoved stops only when
+  KeptPlayer.wantKeep / holding are false. KeptPlayer polls MEDIA_STATE (2 s playing / 5 s paused) for the card,
+  takes PlayerBridge.control (play / pause / next / prev; stop = release), asks YouTube for its smallest picture,
+  and releases page + service + wake lock on Stop or after 10 min paused.
+- Opening Ronin again: MainActivity.onCreate takes the kept page (KeptPlayer.take), puts it back as the front tab
+  (adoptKept: wireWebView with this screen's clients), mediaTab restored, normal picture again in onStart; the same
+  address is removed once from the saved tabs (no second copy).
+- All WebViews are now made with a MutableContextWrapper(activity) so a kept page never holds a closed screen.
+- Not playing (paused > 15 s, or no song): as before, the card and wake lock go on the swipe.
+- Tests (DeviceTest): aSongKeepsPlayingAfterRoninIsSwipedAwayAndComesBack (finishAndRemoveTask = Recents swipe;
+  page kept, time advances, session PLAYING, reopen -> same WebView is the front tab and plays, ✕ ends it),
+  stopFromTheCardEndsAKeptSong (card play / pause reach the kept page, Stop -> page, card and service gone),
+  aPausedSongIsNotKeptAfterASwipe. 3.14.0's closingRoninEndsTheSongCard removed (the behaviour changed on purpose).
+  DeviceTest init releases anything kept by an earlier test.
+- Device check: some phones (OxygenOS battery optimisation) kill apps on a Recents swipe even with a foreground
+  service; if the song stops on his tablet, Settings -> Battery -> Ronin -> "Allow background activity".
+
 ## 3.14.0 (BUILT 21 Nov 2026 on branch `claude/v3.14.0`, draft PR #1; NOT merged, NOT published) — owner approved the review fixes 21 Nov 00:35, battery low (00:36)
 Source: independent review /tmp/ronin-browser-REVIEW.md (sections 1-4). Publish only on his words ("हाँ, V3.14.0 publish करो"):
 merge PR #1 into main first, then `gh workflow run build.yml --ref main -f publish=true`.
