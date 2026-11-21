@@ -17,8 +17,9 @@ data class Title(
     val popularity: Double,
     val date: String,
     val service: Service,
+    val horror: Boolean = false,
 ) {
-    fun toJson(): JSONObject = JSONObject().put("id", id).put("tv", isTv).put("name", name)
+    fun toJson(): JSONObject = JSONObject().put("id", id).put("tv", isTv).put("name", name).put("horror", horror)
         .put("poster", poster ?: "").put("backdrop", backdrop ?: "").put("pop", popularity)
         .put("date", date).put("svc", service.name)
 
@@ -26,7 +27,7 @@ data class Title(
         fun fromJson(o: JSONObject) = Title(
             o.getInt("id"), o.getBoolean("tv"), o.getString("name"),
             o.optString("poster").ifEmpty { null }, o.optString("backdrop").ifEmpty { null },
-            o.optDouble("pop", 0.0), o.optString("date"), Service.valueOf(o.getString("svc")),
+            o.optDouble("pop", 0.0), o.optString("date"), Service.valueOf(o.getString("svc")), o.optBoolean("horror"),
         )
     }
 }
@@ -43,20 +44,22 @@ data class Shelf(
     val newReleases: List<Title>,
     val comingSoon: List<Title>,
     val byLang: Map<Lang, List<Title>> = emptyMap(),
+    val horror: List<Title> = emptyList(),
 ) {
-    fun forServices(s: Set<Service>) = Shelf(
-        topMovies.filter { it.service in s }.take(10),
-        topShows.filter { it.service in s }.take(10),
-        newReleases.filter { it.service in s }.take(20),
-        comingSoon.filter { it.service in s }.take(20),
-        byLang.mapValues { (_, v) -> v.filter { it.service in s }.take(20) },
-    )
+    /** Owner: horror only in its own row at the very bottom; no scary poster in the upper rows. */
+    fun forServices(s: Set<Service>): Shelf {
+        fun f(l: List<Title>, n: Int) = l.filter { it.service in s && !it.horror }.take(n)
+        val allHorror = (horror + topMovies + newReleases + comingSoon + byLang.values.flatten()).filter { it.horror && it.service in s }
+        return Shelf(f(topMovies, 10), f(topShows, 10), f(newReleases, 20), f(comingSoon, 20),
+            byLang.mapValues { (_, v) -> f(v, 20) }, allHorror.distinctBy { it.id }.sortedByDescending { it.popularity }.take(20))
+    }
 
     fun toJson(): JSONObject = JSONObject()
         .put("top_movies", JSONArray(topMovies.map { it.toJson() }))
         .put("top_shows", JSONArray(topShows.map { it.toJson() }))
         .put("new", JSONArray(newReleases.map { it.toJson() }))
         .put("soon", JSONArray(comingSoon.map { it.toJson() }))
+        .put("horror", JSONArray(horror.map { it.toJson() }))
         .apply { for ((l, v) in byLang) put("lang_" + l.name, JSONArray(v.map { it.toJson() })) }
 
     companion object {
@@ -64,7 +67,8 @@ data class Shelf(
         private fun list(a: JSONArray?) = (0 until (a?.length() ?: 0)).map { Title.fromJson(a!!.getJSONObject(it)) }
         fun fromJson(o: JSONObject) = Shelf(list(o.optJSONArray("top_movies")), list(o.optJSONArray("top_shows")),
             list(o.optJSONArray("new")), list(o.optJSONArray("soon")),
-            Lang.values().associateWith { list(o.optJSONArray("lang_" + it.name)) }.filterValues { it.isNotEmpty() })
+            Lang.values().associateWith { list(o.optJSONArray("lang_" + it.name)) }.filterValues { it.isNotEmpty() },
+            list(o.optJSONArray("horror")))
     }
 }
 
@@ -81,7 +85,9 @@ object Tmdb {
         return if (isBearer(k)) k.count { it == '.' } == 2 else Regex("[0-9a-fA-F]{32}").matches(k)
     }
 
-    fun discoverUrl(tv: Boolean, providerId: Int, kind: String, today: LocalDate, lang: Lang? = null): String {
+    const val HORROR = 27
+
+    fun discoverUrl(tv: Boolean, providerId: Int, kind: String, today: LocalDate, lang: Lang? = null, genre: Int? = null): String {
         val dateField = if (tv) "first_air_date" else "primary_release_date"
         val p = linkedMapOf(
             "watch_region" to "IN", "with_watch_providers" to providerId.toString(),
@@ -94,6 +100,7 @@ object Tmdb {
             "soon" -> { p["sort_by"] = "popularity.desc"; p["$dateField.gte"] = today.plusDays(1).toString(); p["$dateField.lte"] = today.plusDays(90).toString() }
         }
         if (lang != null) p["with_original_language"] = lang.codes
+        if (genre != null) p["with_genres"] = genre.toString()
         val q = p.entries.joinToString("&") { it.key + "=" + URLEncoder.encode(it.value, "UTF-8") }
         return "$API/discover/${if (tv) "tv" else "movie"}?$q"
     }
@@ -116,12 +123,14 @@ object Tmdb {
             val o = arr.getJSONObject(i)
             if (o.optBoolean("adult", false)) return@mapNotNull null
             val name = (if (tv) o.optString("name") else o.optString("title")).ifBlank { return@mapNotNull null }
+            val genres = o.optJSONArray("genre_ids")
+            val horror = genres != null && (0 until genres.length()).any { genres.optInt(it) == HORROR }
             Title(o.getInt("id"), tv, name,
                 o.optString("poster_path").takeIf { it.startsWith("/") },
                 o.optString("backdrop_path").takeIf { it.startsWith("/") },
                 o.optDouble("popularity", 0.0),
                 if (tv) o.optString("first_air_date") else o.optString("release_date"),
-                service)
+                service, horror)
         }
     }
 
@@ -150,7 +159,12 @@ object Tmdb {
         val ids = parseProviders(get("$API/watch/providers/movie?watch_region=IN&language=en-IN", key))
         val top = mutableListOf<List<Title>>(); val topTv = mutableListOf<List<Title>>()
         val new = mutableListOf<List<Title>>(); val soon = mutableListOf<List<Title>>()
+        val horror = mutableListOf<List<Title>>()
+        val langs = Lang.values().associateWith { mutableListOf<List<Title>>() }
         for ((s, id) in ids) {
+            horror += parseDiscover(get(discoverUrl(false, id, "top", today, genre = HORROR), key), false, s)
+            for (l in Lang.values()) for (tv in listOf(false, true))
+                langs.getValue(l) += parseDiscover(get(discoverUrl(tv, id, "top", today, l), key), tv, s)
             top += parseDiscover(get(discoverUrl(false, id, "top", today), key), false, s)
             topTv += parseDiscover(get(discoverUrl(true, id, "top", today), key), true, s)
             new += parseDiscover(get(discoverUrl(false, id, "new", today), key), false, s)
@@ -159,6 +173,6 @@ object Tmdb {
             soon += parseDiscover(get(discoverUrl(true, id, "soon", today), key), true, s)
         }
         // keep extra so that switching a service off still leaves 10
-        return Shelf(merge(top, 40), merge(topTv, 40), merge(new, 40), merge(soon, 40), langs.mapValues { merge(it.value, 40) })
+        return Shelf(merge(top, 40), merge(topTv, 40), merge(new, 40), merge(soon, 40), langs.mapValues { merge(it.value, 40) }, merge(horror, 30))
     }
 }

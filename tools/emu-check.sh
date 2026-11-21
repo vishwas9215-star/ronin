@@ -26,7 +26,12 @@ U=$(ui); for w in "New Releases" "Winter Road"; do echo "$U" | grep -q "$w" && p
 adb shell input keyevent DPAD_DOWN; adb shell input keyevent DPAD_DOWN; shot 05-hollywood-bollywood 1
 U=$(ui); for w in "Hollywood" "Bollywood" "Steel Horizon"; do echo "$U" | grep -q "$w" && pass "rows show '$w'" || fail "rows show '$w'"; done
 adb shell input keyevent DPAD_DOWN; adb shell input keyevent DPAD_DOWN; adb shell input keyevent DPAD_DOWN; shot 06-bottom 1
+U=$(ui); echo "$U" | grep -q "Night Market" && pass "horror visible somewhere" || true
 adb shell input keyevent BACK; shot 07-back-to-top 1
+# poster click: emulator has no Netflix, so it must fall back to Google search / app home without crashing
+adb shell input keyevent DPAD_DOWN; adb shell input keyevent DPAD_DOWN; sleep 1; adb shell input keyevent DPAD_CENTER; sleep 8
+shot 07b-poster-click 1; adb logcat -d -s RoninHome | grep "open '" | tail -1 | tee -a $R
+adb shell am start -W -n com.ronin.home/.MainActivity --ez demo true >/dev/null; sleep 2
 # every focusable tile reachable: count focus moves that change focus
 # open "My subscriptions" the way the family will: Back (top) -> Up -> Right -> OK
 adb shell input keyevent BACK; sleep 1; adb shell input keyevent DPAD_UP; sleep 1; adb shell input keyevent DPAD_RIGHT; sleep 1; adb shell input keyevent DPAD_CENTER

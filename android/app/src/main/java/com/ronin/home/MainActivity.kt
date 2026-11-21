@@ -120,6 +120,15 @@ class MainActivity : Activity() {
         try { startActivity(i) } catch (e: Exception) { Toast.makeText(this, "Could not open", Toast.LENGTH_SHORT).show() }
     }
 
+    /** Poster → that movie/show itself (details page), see Links. */
+    private fun openTitle(t: Title) {
+        Toast.makeText(this, "Opening ${t.name}…", Toast.LENGTH_SHORT).show()
+        thread(name = "link") {
+            val link = Links.lookup(t)
+            runOnUiThread { Log.i("RoninHome", "open '${t.name}' via " + Links.open(this, t, link)) }
+        }
+    }
+
     private fun allTvApps(): List<Pair<String, String>> {
         if (demo) return Demo.otherApps
         val pm = packageManager
@@ -150,6 +159,7 @@ class MainActivity : Activity() {
             row("Top 10 Movies", shelf.topMovies.mapIndexed { i, t -> posterTile(t, i + 1) })
             row("Top 10 Shows", shelf.topShows.mapIndexed { i, t -> posterTile(t, i + 1) })
             row("Coming Soon", shelf.comingSoon.map { posterTile(it, 0) })
+            row("Horror", shelf.horror.map { posterTile(it, 0) })
         }
         row("All Apps", Catalog.others(allTvApps(), subs).map { appTile(it, small = true) })
         column.post { column.findViewWithTag<View>("first")?.requestFocus() }
@@ -285,7 +295,7 @@ class MainActivity : Activity() {
         Ui.round(f, 10)
         Ui.focusable(f, 10)
         f.contentDescription = t.name
-        f.setOnClickListener { open(t.service.pkg) }
+        f.setOnClickListener { openTitle(t) }
         return f
     }
 

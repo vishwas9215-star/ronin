@@ -83,6 +83,28 @@ class LogicTest {
         assertEquals(s, Shelf.fromJson(s.toJson()))
     }
 
+    @Test fun horrorOnlyInItsOwnRow() {
+        val s = Demo.shelf.forServices(all)
+        val upper = s.topMovies + s.topShows + s.newReleases + s.comingSoon + s.byLang.values.flatten()
+        assertFalse(upper.any { it.horror })
+        assertEquals(setOf("Night Market", "The Quiet House"), s.horror.map { it.name }.toSet())
+        val h = Tmdb.parseDiscover("""{"results":[{"id":9,"title":"Scary","poster_path":"/x.jpg","genre_ids":[53,27]}]}""", false, Service.PRIME)
+        assertTrue(h.single().horror)
+    }
+
+    @Test fun wikidataLinks() {
+        val j = """{"results":{"bindings":[
+          {"label":{"value":"Netflix ID"},"val":{"value":"70131314"},"fmt":{"value":"https://www.netflix.com/title/${'$'}1"}},
+          {"label":{"value":"Amazon Prime Video ID"},"val":{"value":"amzn1.dv.gti.abc"}},
+          {"label":{"value":"Disney+ Hotstar ID"},"val":{"value":"1260012345"},"fmt":{"value":"https://www.hotstar.com/in/${'$'}1"}}]}}"""
+        assertEquals("https://www.netflix.com/title/70131314", Links.pick(j, Service.NETFLIX))
+        assertEquals("https://app.primevideo.com/detail?gti=amzn1.dv.gti.abc", Links.pick(j, Service.PRIME))
+        assertEquals("https://www.hotstar.com/in/1260012345", Links.pick(j, Service.JIOHOTSTAR))
+        assertNull(Links.pick("""{"results":{"bindings":[]}}""", Service.NETFLIX))
+        assertTrue(Links.sparql(27205, false).contains("P4947") && Links.sparql(1399, true).contains("P4983"))
+        assertEquals("Inception 2010", Links.searchText(Title(1, false, "Inception", null, null, 1.0, "2010-07-15", Service.NETFLIX)))
+    }
+
     @Test fun languageRows() {
         val u = Tmdb.discoverUrl(true, 8, "top", LocalDate.of(2026, 11, 21), Lang.SOUTH)
         assertTrue(u, u.contains("with_original_language=ta%7Cte%7Cml%7Ckn") && u.contains("/discover/tv?"))
