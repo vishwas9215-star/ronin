@@ -1,0 +1,89 @@
+# Ronin Home (TV launcher): unit tests, signed APK, then a check on an Android TV 14 emulator with screenshots.
+# Results go to the prerelease "ronin-home" (APK + qa-*.png + qa-results.txt). Nothing is sent to any TV.
+name: ronin-home
+
+on:
+  push:
+    branches: [ronin-home]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ronin-home
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Signing key
+        env:
+          RONIN_KEYS_PASS: ${{ secrets.RONIN_KEYS_PASS }}
+        run: |
+          if [ -n "$RONIN_KEYS_PASS" ]; then
+            mkdir -p "$RUNNER_TEMP/keys"
+            printf '%s' "$RONIN_KEYS_PASS" > "$RUNNER_TEMP/keys/pass"
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in keys/ronin-keys.tar.enc -pass "file:$RUNNER_TEMP/keys/pass" | tar -xf - -C "$RUNNER_TEMP/keys"
+            echo "RONIN_KEYSTORE=$RUNNER_TEMP/keys/ronin-android.p12" >> "$GITHUB_ENV"
+            echo "::add-mask::$RONIN_KEYS_PASS"
+            echo "RONIN_KEYSTORE_PASS=$RONIN_KEYS_PASS" >> "$GITHUB_ENV"
+          else
+            echo "::warning::RONIN_KEYS_PASS is not set - debug-signed APK"
+          fi
+      - name: Unit tests + APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew --no-daemon testDebugUnitTest assembleRelease
+      - name: Test report
+        if: always()
+        run: |
+          for f in android/app/build/test-results/testDebugUnitTest/*.xml; do grep -o 'testcase name="[^"]*"\|<failure' "$f"; done | tee -a "$GITHUB_STEP_SUMMARY" || true
+      - name: Collect APK
+        run: cp android/app/build/outputs/apk/release/*.apk RoninHome.apk && ls -l RoninHome.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: RoninHome.apk
+
+  tv-emulator:
+    needs: apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Android TV 14 emulator check
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: android-tv
+          arch: x86
+          profile: tv_1080p
+          disable-animations: false
+          ram-size: 4096M
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash tools/emu-check.sh
+      - name: Publish APK + screenshots (prerelease ronin-home)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view ronin-home >/dev/null 2>&1 || gh release create ronin-home --target "$GITHUB_SHA" --prerelease --title "Ronin Home (test builds)" --notes "Ronin Home TV launcher test builds + emulator screenshots. Not installed anywhere automatically."
+          sleep 2
+          gh release upload ronin-home RoninHome.apk --clobber
+          for f in qa/*; do [ -f "$f" ] && cp "$f" "qa-$(basename "$f")" && gh release upload ronin-home "qa-$(basename "$f")" --clobber; done
+          cat qa/results.txt >> "$GITHUB_STEP_SUMMARY" || true

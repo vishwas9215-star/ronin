@@ -1,0 +1,85 @@
+package com.ronin.home
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.time.LocalDate
+
+class LogicTest {
+    private val all = Service.values().toSet()
+
+    @Test fun castleNeverInKids() {
+        val kids = Catalog.visible(Catalog.kidsApps + AppEntry(Service.CASTLE.pkg, "Castle Kids", kids = true), all) { true }
+        assertFalse(kids.any { it.pkg == Service.CASTLE.pkg })
+        assertEquals("YouTube Kids", kids.first().label)
+    }
+
+    @Test fun switchedOffServiceLeavesHomeAndKids() {
+        val subs = all - Service.NETFLIX
+        assertFalse(Catalog.visible(Catalog.myApps, subs) { true }.any { it.pkg == Service.NETFLIX.pkg })
+        assertFalse(Catalog.visible(Catalog.kidsApps, subs) { true }.any { it.pkg == Service.NETFLIX.pkg })
+        assertFalse(Catalog.others(listOf(Service.NETFLIX.pkg to "Netflix"), subs).any { it.pkg == Service.NETFLIX.pkg })
+    }
+
+    @Test fun castleAlwaysOnHome() {
+        assertTrue(Catalog.visible(Catalog.myApps, emptySet()) { true }.any { it.pkg == Service.CASTLE.pkg })
+    }
+
+    @Test fun missingAppsHidden() {
+        val v = Catalog.visible(Catalog.myApps, all) { it == Service.CASTLE.pkg }
+        assertEquals(listOf(Service.CASTLE.pkg), v.map { it.pkg })
+    }
+
+    @Test fun allAppsHidesGoogleHomeAndTclChannel() {
+        val o = Catalog.others(listOf(Catalog.LAUNCHER_X to "Google TV", "com.tcl.waterfall.overseas" to "TCL Channel",
+            "org.videolan.vlc" to "VLC", "com.android.vending" to "Play Store", "a.b" to "apple"), all)
+        assertEquals(listOf("apple", "Play Store"), o.map { it.label })
+    }
+
+    @Test fun providerNames() {
+        assertEquals(Service.NETFLIX, Service.fromProviderName("Netflix"))
+        assertNull(Service.fromProviderName("Netflix basic with Ads"))
+        assertEquals(Service.PRIME, Service.fromProviderName("Amazon Prime Video"))
+        assertEquals(Service.JIOHOTSTAR, Service.fromProviderName("JioHotstar"))
+        assertEquals(Service.JIOHOTSTAR, Service.fromProviderName("Hotstar"))
+        assertNull(Service.fromProviderName("ZEE5"))
+        val p = Tmdb.parseProviders("""{"results":[{"provider_id":8,"provider_name":"Netflix"},{"provider_id":232,"provider_name":"Zee5"},
+            {"provider_id":119,"provider_name":"Amazon Prime Video"},{"provider_id":2336,"provider_name":"JioHotstar"}]}""")
+        assertEquals(mapOf(Service.NETFLIX to 8, Service.PRIME to 119, Service.JIOHOTSTAR to 2336), p)
+    }
+
+    @Test fun keyKinds() {
+        assertTrue(Tmdb.looksValid("0123456789abcdef0123456789ABCDEF"))
+        assertFalse(Tmdb.isBearer("0123456789abcdef0123456789ABCDEF"))
+        assertTrue(Tmdb.isBearer("eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJ4In0.c2lnbmF0dXJl"))
+        assertTrue(Tmdb.looksValid("eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJ4In0.c2lnbmF0dXJl"))
+        assertFalse(Tmdb.looksValid("hello"))
+    }
+
+    @Test fun discoverUrlIndiaFlatrateNoAdult() {
+        val u = Tmdb.discoverUrl(false, 8, "new", LocalDate.of(2026, 11, 21))
+        assertTrue(u, u.contains("watch_region=IN") && u.contains("with_watch_providers=8") && u.contains("flatrate") && u.contains("include_adult=false"))
+        assertTrue(u, u.contains("primary_release_date.gte=2026-09-22") && u.contains("primary_release_date.lte=2026-11-21"))
+        assertTrue(Tmdb.discoverUrl(true, 8, "soon", LocalDate.of(2026, 11, 21)).contains("first_air_date.gte=2026-11-22"))
+    }
+
+    @Test fun parseAndMerge() {
+        val m = Tmdb.parseDiscover("""{"results":[{"id":1,"title":"A","poster_path":"/a.jpg","popularity":5},
+            {"id":2,"title":"Adult","poster_path":"/b.jpg","popularity":99,"adult":true},{"id":3,"title":"NoPoster","popularity":50}]}""", false, Service.NETFLIX)
+        val p = Tmdb.parseDiscover("""{"results":[{"id":1,"title":"A","poster_path":"/a.jpg","popularity":5},{"id":4,"title":"B","poster_path":"/c.jpg","popularity":9}]}""", false, Service.PRIME)
+        val merged = Tmdb.merge(listOf(m, p), 10)
+        assertEquals(listOf("B", "A"), merged.map { it.name })
+        val tv = Tmdb.parseDiscover("""{"results":[{"id":7,"name":"Show","poster_path":"/s.jpg","first_air_date":"2026-01-01"}]}""", true, Service.JIOHOTSTAR)
+        assertEquals("Show", tv.single().name); assertTrue(tv.single().isTv)
+    }
+
+    @Test fun shelfFiltersAndRoundTrips() {
+        val s = Demo.shelf
+        val noNetflix = s.forServices(all - Service.NETFLIX)
+        assertFalse(noNetflix.topMovies.any { it.service == Service.NETFLIX })
+        assertTrue(s.topMovies.size <= 10 && s.hero != null)
+        assertEquals(s, Shelf.fromJson(s.toJson()))
+    }
+}

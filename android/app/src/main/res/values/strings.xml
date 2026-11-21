@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_key_desc">Opens Ronin Home when you press the Home button. It only listens to the Home button; Gemini, voice and Settings buttons are not touched.</string>
+</resources>
