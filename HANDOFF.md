@@ -305,7 +305,10 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
   you're not a bot") - the owner checks on the real TV. tools/uitest/tvtidy.
 - TV app renamed "Ronin YouTube" (owner 21:15) with a new banner (owner 21:17 "यूट्यूब के हिसाब से आइकॉन"): Ronin's
   shield in red with a white play triangle, "Ronin / YouTube" - an original mark, not YouTube's own logo. Old banner
-  kept in git history. — owner 21 Nov 15:42–15:44
+  kept in git history.
+- OPEN BUG (owner 21:41): with tidy() the remote reaches Previous / Play / Next only, never CC / ⚙ Settings. The owner
+  wants it fixed in another chat: full handoff in docs/TV-HANDOFF.md (also in the Project doc claude/TV-HANDOFF.md and
+  on Google Drive "Ronin Browser/TV-HANDOFF.md"). Do not publish 3.14.5 to TVs before that is fixed or tidy() removed. — owner 21 Nov 15:42–15:44
 - ⭐ speed-dial row on top of Recent (small round tiles, photo + first name, one tap calls): Ronin pins (prefs pins /
   unpinned, ⭐ button on each Contacts row), contacts starred in Google Contacts, people called (answered) 2+ times in
   30 days. CallInfo.favorites / pin.
