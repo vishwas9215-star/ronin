@@ -58,13 +58,15 @@ object Links {
     }
 
     /** Network (background thread). */
-    fun lookup(t: Title): String? {
+    fun lookup(ctx: Context, t: Title): String? {
         val k = (if (t.isTv) "t" else "m") + t.id + t.service.name
         mem[k]?.let { return it.ifEmpty { null } }
+        val disk = ctx.getSharedPreferences("links", Context.MODE_PRIVATE)
+        disk.getString(k, null)?.let { mem[k] = it; return it.ifEmpty { null } }
         val url = try {
             val q = "https://query.wikidata.org/sparql?format=json&query=" + URLEncoder.encode(sparql(t.id, t.isTv), "UTF-8")
             val c = URL(q).openConnection() as HttpURLConnection
-            c.connectTimeout = 5000; c.readTimeout = 7000
+            c.connectTimeout = 4000; c.readTimeout = 4000
             c.setRequestProperty("User-Agent", "RoninHome/1.0 (family TV launcher; github.com/vishwas9215-star/ronin)")
             c.setRequestProperty("Accept", "application/sparql-results+json")
             val body = c.inputStream.bufferedReader().use { it.readText() }
@@ -72,6 +74,7 @@ object Links {
             pick(body, t.service)
         } catch (e: Exception) { Log.w(TAG, "wikidata: $e"); null }
         mem[k] = url ?: ""
+        if (url != null) disk.edit().putString(k, url).apply()   // misses are retried next time (Wikidata grows)
         return url
     }
 

@@ -124,7 +124,7 @@ class MainActivity : Activity() {
     private fun openTitle(t: Title) {
         Toast.makeText(this, "Opening ${t.name}…", Toast.LENGTH_SHORT).show()
         thread(name = "link") {
-            val link = Links.lookup(t)
+            val link = Links.lookup(this, t)
             runOnUiThread { Log.i("RoninHome", "open '${t.name}' via " + Links.open(this, t, link)) }
         }
     }
@@ -154,8 +154,13 @@ class MainActivity : Activity() {
             }))
         } else {
             // Movies & Shows are for the parents (horror allowed). The Kids row above has apps only, never posters.
-            row("New Releases", shelf.newReleases.map { posterTile(it, 0) })
-            for (l in Lang.values()) row(l.title, shelf.byLang[l].orEmpty().map { posterTile(it, 0) })
+            // Hollywood first (owner); a title shows once in these rows (first row wins), Top 10 keep their ranks.
+            val seen = HashSet<String>()
+            fun once(l: List<Title>) = l.filter { seen.add((if (it.isTv) "t" else "m") + it.id) }
+            val hw = once(shelf.byLang[Lang.HOLLYWOOD].orEmpty())
+            row(Lang.HOLLYWOOD.title, hw.map { posterTile(it, 0) })
+            row("New Releases", once(shelf.newReleases).map { posterTile(it, 0) })
+            for (l in Lang.values().drop(1)) row(l.title, once(shelf.byLang[l].orEmpty()).map { posterTile(it, 0) })
             row("Top 10 Movies", shelf.topMovies.mapIndexed { i, t -> posterTile(t, i + 1) })
             row("Top 10 Shows", shelf.topShows.mapIndexed { i, t -> posterTile(t, i + 1) })
             row("Coming Soon", shelf.comingSoon.map { posterTile(it, 0) })
