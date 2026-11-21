@@ -1,0 +1,45 @@
+package com.ronin.browser
+
+import android.content.ContentProvider
+import android.content.ContentValues
+import android.content.Context
+import android.database.Cursor
+import android.database.MatrixCursor
+import android.net.Uri
+import org.json.JSONArray
+
+/**
+ * Ronin Browser (3.14.3): hands the family's ⭐ saved SMS copies (kept from the time Messages was inside the browser)
+ * to the new Ronin Phone app. Only an app signed with Ronin's own key may read it (signature permission).
+ */
+class SavedSmsProvider : ContentProvider() {
+    override fun onCreate() = true
+    override fun query(uri: Uri, projection: Array<out String>?, selection: String?, args: Array<out String>?, sort: String?): Cursor {
+        val c = MatrixCursor(arrayOf("json"))
+        c.addRow(arrayOf<Any>(SmsStore.saved(context!!).toString()))
+        return c
+    }
+    override fun getType(uri: Uri): String? = null
+    override fun insert(uri: Uri, values: ContentValues?): Uri? = null
+    override fun delete(uri: Uri, selection: String?, args: Array<out String>?) = 0
+    override fun update(uri: Uri, values: ContentValues?, selection: String?, args: Array<out String>?) = 0
+}
+
+/** Ronin Phone, first start: take the ⭐ saved SMS over from Ronin Browser once. */
+object SavedSmsImport {
+    fun once(ctx: Context) {
+        val p = ctx.getSharedPreferences("ronin_sms", Context.MODE_PRIVATE)
+        if (p.getBoolean("savedImported", false) || ctx.packageName == "com.ronin.browser") return
+        val browserThere = try { ctx.packageManager.getPackageInfo("com.ronin.browser", 0); true } catch (e: Exception) { false }
+        if (!browserThere) { p.edit().putBoolean("savedImported", true).apply(); return }
+        try {
+            ctx.contentResolver.query(Uri.parse("content://com.ronin.browser.savedsms/saved"), null, null, null, null)?.use { c ->
+                if (c.moveToFirst()) {
+                    val a = JSONArray(c.getString(0))
+                    for (i in 0 until a.length()) SmsStore.save(ctx, a.getJSONObject(i))
+                    p.edit().putBoolean("savedImported", true).apply()
+                }
+            }
+        } catch (e: Exception) { } // an older browser without the provider: try again next time
+    }
+}

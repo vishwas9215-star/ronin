@@ -26,6 +26,14 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Two apps from one code (21 Nov 2026, Play Protect): Ronin Browser (com.ronin.browser) has no SMS / call log /
+    // accessibility; Ronin Phone (com.ronin.phone) is only Messages + Calls. Their manifests: src/browser, src/phone.
+    flavorDimensions += "app"
+    productFlavors {
+        create("browser") { dimension = "app"; applicationId = "com.ronin.browser" }
+        create("phone") { dimension = "app"; applicationId = "com.ronin.phone" }
+    }
+
     signingConfigs {
         if (keyFile != null && keyPass != null) {
             create("ronin") {

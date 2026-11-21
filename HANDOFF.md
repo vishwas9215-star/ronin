@@ -295,6 +295,28 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Notification ✕ Close sent "pause": the next 1 s media check showed a paused card again (the 'flaky' song test).
   Now Close sends "stop" (pause + let go). Owner said "हाँ, V3.12.0 publish करो" 16:26.
 
+## 3.14.3 (branch `claude/v3.14.3`; NOT published) — owner 21 Nov 11:27–11:31 (calls chat)
+- **Play Protect called Ronin "harmful"** (tablet + phone) since the SMS / call log / accessibility permissions came back
+  in 3.13. Owner chose: TWO apps from one code (gradle flavors `browser` / `phone`):
+  - Ronin Browser `com.ronin.browser` (src/browser/AndroidManifest.xml): no SMS / call log / contacts / phone state /
+    accessibility. Menu → Phone: opens Ronin Phone, or "Get Ronin Phone" (Updater.installPhone).
+  - Ronin Phone `com.ronin.phone` (src/phone/AndroidManifest.xml): Messages + Calls only, parts on from the start, call
+    recording kept (owner's choice, so Play Protect may still warn about THIS app), no self-update / camera. Ronin Browser
+    updates it (phone.json + RoninPhone.apk in every release; Updater.checkPhone).
+  - ⭐ saved SMS move over once: SavedSmsProvider (browser, signature permission com.ronin.permission.SAVED_SMS) →
+    SavedSmsImport (phone, on Messages start).
+  - Links from Ronin Phone open in Ronin Browser by package. Tests: androidTestBrowser (DeviceTest / TvTest / SiteTour),
+    androidTestPhone (PhoneTest). CI: test{Browser,Phone}DebugUnitTest, connectedBrowser…, connectedPhone… (phone, tablet).
+- **Adult video sites** (owner: main video ran at 16x as an "ad"; Stripchat / cam ads):
+  - inject_adblock.js skipper: no bare "Skip" / "Advertisement"; the label must be ON the video; > 180 s or > 75 s is
+    never an ad; a new source in the same <video> (Fluid Player) gives back speed + sound. Test: playerads/t.js.
+  - builtin.go: cam redirect / affiliate hosts and more adult ad networks; cam picture servers (doppiocdn, strpst,
+    mmcdn, dditscdn …) blocked only inside OTHER sites, never on a cam site itself; cam widget paths; `cams-wgt` boxes.
+    Research report by an independent agent (EasyList adult, HaGeZi). Test: adblock_test.go TestBlockedFrom.
+  - Video download NOT added (owner's rule 9: nothing that helps piracy). Adult sites already open in Private when the
+    Family Filter is off.
+- Also on this branch: PR #3 (CI quiet: no e-mails for draft PRs / notes-only commits / publish cross-cancels).
+
 ## 3.14.2 (PUBLISHED 21 Nov 2026 10:21 IST on "हाँ, V3.14.2 publish करो"; run 44866848465; tag before-3.14.2 local) — owner 21 Nov 09:44 (calls chat; built on 3.14.1, the other chat's work untouched)
 - After a call there were two Recents cards (Ronin Calls + the call screen): InCallActivity is now
   excludeFromRecents + autoRemoveFromRecents and leaves with finishAndRemoveTask (back to it: the ongoing call notification).

@@ -226,7 +226,7 @@ class MainActivity : AppCompatActivity() {
         ui.postDelayed({
             if (isFinishing) return@postDelayed
             if (!Family.prefs(this).getBoolean("adultAsked", false)) Family.chooseAdult(this, first = true)
-            else if (!Parts.prefs(this).getBoolean("asked", false) && Parts.hasPhone(this)) Parts.choose(this, first = true)
+            // (Messages / Calls are the separate Ronin Phone app since 3.14.3: no question here any more)
         }, 1200)
     }
 
@@ -2082,9 +2082,11 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         )
         val phone = ArrayList<Sheet.Row>()
         if (Parts.hasPhone(this)) {
-            if (Parts.isOn(this, Parts.MESSAGES)) phone.add(Sheet.Row("📩", "Ronin Messages", "", "#1D4ED8", "m-messages") { startActivity(Intent(this, MessagesActivity::class.java)) })
-            if (Parts.isOn(this, Parts.CALLS)) phone.add(Sheet.Row("📞", "Ronin Calls", "", "#15803D", "m-calls") { startActivity(Intent(this, CallsActivity::class.java)) })
-            phone.add(Sheet.Row("📱", L("Messages / Calls चालू-बंद", "Turn Messages / Calls on or off"), "", "#334155", "m-parts") { Parts.choose(this, first = false) })
+            // Messages + Calls live in the separate Ronin Phone app (3.14.3, Play Protect): open it, or get it
+            if (Updater.phoneInstalled(this)) {
+                phone.add(Sheet.Row("📩", "Ronin Messages", "", "#1D4ED8", "m-messages") { openPhone("com.ronin.browser.MessagesActivity") })
+                phone.add(Sheet.Row("📞", "Ronin Calls", "", "#15803D", "m-calls") { openPhone("com.ronin.browser.CallsActivity") })
+            } else phone.add(Sheet.Row("📱", L("Ronin Phone (Messages + Calls) लें", "Get Ronin Phone (Messages + Calls)"), "", "#1D4ED8", "m-getphone") { Updater.installPhone(this) })
         }
         val settings = arrayListOf(
             // the BROWSER's own day / night (Messages / Calls follow the phone's setting instead)
@@ -2115,6 +2117,10 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             .show()
     }
     private var menuSheet: android.app.Dialog? = null
+    private fun openPhone(cls: String) {
+        try { startActivity(Intent().setClassName(Updater.PHONE_PACKAGE, cls).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        catch (e: Exception) { packageManager.getLaunchIntentForPackage(Updater.PHONE_PACKAGE)?.let { startActivity(it) } }
+    }
 
     private fun textSize(t: Tab, up: Boolean) {
         val pct = Nav.nextZoom(t.web.settings.textZoom, up)

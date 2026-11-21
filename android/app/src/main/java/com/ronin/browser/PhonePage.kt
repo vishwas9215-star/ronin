@@ -148,7 +148,9 @@ abstract class PhonePage : AppCompatActivity() {
         try {
             when {
                 u.startsWith("tel:") -> startActivity(Intent(Intent.ACTION_DIAL, Uri.parse(u)))
-                u.startsWith("http") -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u), this, MainActivity::class.java))
+                // links open in Ronin Browser (its own app since 3.14.3); without it, in the phone's browser
+                u.startsWith("http") -> try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u)).setPackage("com.ronin.browser")) }
+                    catch (e: Exception) { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u))) }
             }
         } catch (e: Exception) { }
     }

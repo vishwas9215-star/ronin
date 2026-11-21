@@ -122,6 +122,7 @@ class RoninApp : Application() {
         const val LISTS_URL = "$REPO/releases/download/lists/adblock-domains.txt.gz"
         const val THREATS_URL = "$REPO/releases/download/lists/threat-domains.txt.gz"
         const val UPDATE_URL = "$REPO/releases/latest/download/android.json"
+        const val PHONE_UPDATE_URL = "$REPO/releases/latest/download/phone.json"
         lateinit var instance: RoninApp
     }
 }

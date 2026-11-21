@@ -84,7 +84,8 @@ jobs:
           fi
       - name: Unit tests + APK
         working-directory: android
-        run: ./gradlew --no-daemon testDebugUnitTest assembleRelease
+        # two apps from one code (3.14.3): Ronin Browser (com.ronin.browser) + Ronin Phone (com.ronin.phone)
+        run: ./gradlew --no-daemon testBrowserDebugUnitTest testPhoneDebugUnitTest assembleRelease
       - name: Test summary
         if: always()
         run: |
@@ -102,13 +103,17 @@ jobs:
       - name: Name the APK
         run: |
           mkdir -p out
-          f=$(ls android/app/build/outputs/apk/release/*.apk | head -1)
+          f=$(ls android/app/build/outputs/apk/browser/release/*.apk | head -1)
           cp "$f" out/Ronin.apk
+          f=$(ls android/app/build/outputs/apk/phone/release/*.apk | head -1)
+          cp "$f" out/RoninPhone.apk
           ls -la out
       - uses: actions/upload-artifact@v4
         with:
           name: android
-          path: out/Ronin.apk
+          path: |
+            out/Ronin.apk
+            out/RoninPhone.apk
       - name: Test APK for the real phone / tablet (release "qa", never offered as an update)
         if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && !inputs.publish)
         env:
@@ -116,7 +121,8 @@ jobs:
         run: |
           gh release view qa >/dev/null 2>&1 || gh release create qa --title "QA screenshots" --notes "Emulator screenshots from the last build (not a Ronin release)." --prerelease || true
           cp out/Ronin.apk Ronin-test.apk
-          gh release upload qa Ronin-test.apk --clobber
+          cp out/RoninPhone.apk RoninPhone-test.apk
+          gh release upload qa Ronin-test.apk RoninPhone-test.apk --clobber
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -160,10 +166,11 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           working-directory: android
           script: |
-            if [ "${{ matrix.device }}" = tv ]; then timeout 25m ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ronin.browser.TvTest || echo failed > ../device-tests-failed; else timeout 30m ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notClass=com.ronin.browser.SiteTourTest,com.ronin.browser.TvTest || echo failed > ../device-tests-failed; fi
+            if [ "${{ matrix.device }}" = tv ]; then timeout 25m ./gradlew --no-daemon connectedBrowserDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ronin.browser.TvTest || echo failed > ../device-tests-failed; else timeout 30m ./gradlew --no-daemon connectedBrowserDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notClass=com.ronin.browser.SiteTourTest,com.ronin.browser.TvTest || echo failed > ../device-tests-failed; fi
+            if [ "${{ matrix.device }}" != tv ]; then timeout 15m ./gradlew --no-daemon connectedPhoneDebugAndroidTest || echo failed > ../device-tests-failed; fi
             timeout 120 adb pull /data/local/tmp/qa ../qa || true
             timeout 60 adb logcat -d -s RoninTV > ../tv-log.txt || true
-            if [ "${{ matrix.device }}" != tv ]; then timeout 15m ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ronin.browser.SiteTourTest || echo "site tour did not finish (the test emulator is weak with heavy real sites; see screenshots)" > ../site-tour-note; fi
+            if [ "${{ matrix.device }}" != tv ]; then timeout 15m ./gradlew --no-daemon connectedBrowserDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ronin.browser.SiteTourTest || echo "site tour did not finish (the test emulator is weak with heavy real sites; see screenshots)" > ../site-tour-note; fi
             timeout 120 adb pull /data/local/tmp/qa ../qa2 || true
             timeout 60 adb logcat -d -b crash > ../crash.txt || true
       - name: Screenshots for checking (release "qa")
@@ -234,12 +241,15 @@ jobs:
           printf '%s' "$RONIN_KEYS_PASS" > "$RUNNER_TEMP/keys/pass"
           openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in keys/ronin-keys.tar.enc -pass "file:$RUNNER_TEMP/keys/pass" | tar -xf - -C "$RUNNER_TEMP/keys"
           BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/v$V"
-          cp dl/windows/Ronin.exe dl/windows/RoninSetup.exe dl/android/Ronin.apk rel/
+          cp dl/windows/Ronin.exe dl/windows/RoninSetup.exe dl/android/Ronin.apk dl/android/RoninPhone.apk rel/
           go run ./tools/release -version "$V" -exe rel/Ronin.exe -base "$BASE" -key "$RUNNER_TEMP/keys/ronin-release-private.key" -out rel
           CODE=$(echo "$V" | awk -F. '{print $1*10000+$2*100+$3}')
           SHA=$(sha256sum rel/Ronin.apk | cut -d' ' -f1)
           SIZE=$(stat -c %s rel/Ronin.apk)
           printf '{"versionCode":%s,"versionName":"%s","url":"%s/Ronin.apk","sha256":"%s","size":%s}\n' "$CODE" "$V" "$BASE" "$SHA" "$SIZE" > rel/android.json
+          # Ronin Phone (Messages + Calls): installed / updated by Ronin Browser (3.14.3)
+          PSHA=$(sha256sum rel/RoninPhone.apk | cut -d' ' -f1); PSIZE=$(stat -c %s rel/RoninPhone.apk)
+          printf '{"versionCode":%s,"versionName":"%s","url":"%s/RoninPhone.apk","sha256":"%s","size":%s}\n' "$CODE" "$V" "$BASE" "$PSHA" "$PSIZE" > rel/phone.json
           (cd rel && sha256sum * > SHA256SUMS.txt)
           rm -rf "$RUNNER_TEMP/keys"
-          gh release create "v$V" rel/* --target "$GITHUB_SHA" --latest --title "Ronin $V" --notes "Ronin Browser $V for Windows and Android. Windows: RoninSetup.exe (or automatic update). Android phone / tablet: Ronin.apk (or Menu > Check for updates)."
+          gh release create "v$V" rel/* --target "$GITHUB_SHA" --latest --title "Ronin $V" --notes "Ronin Browser $V for Windows and Android. Windows: RoninSetup.exe (or automatic update). Android phone / tablet: Ronin.apk (or Menu > Check for updates). Messages + Calls: RoninPhone.apk (Ronin Browser installs and updates it)."

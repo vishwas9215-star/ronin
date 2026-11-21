@@ -425,109 +425,22 @@ class DeviceTest {
 
     @Test
     fun theBrowserIsOnlyABrowser() {
-        // 3.12: Social / Mail / SOS are gone for good. 3.13: Messages / Calls are back (off until the family
-        // turns them on), but never location, never the WhatsApp watcher, never Mail on a phone / tablet
+        // 3.14.3 (Play Protect called Ronin harmful): the browser never asks for SMS, call log, contacts or
+        // accessibility; Messages + Calls are the separate Ronin Phone app. Never location, never Social / Mail / SOS.
         val pm = app.packageManager
         val info = pm.getPackageInfo(app.packageName, android.content.pm.PackageManager.GET_PERMISSIONS or android.content.pm.PackageManager.GET_ACTIVITIES or android.content.pm.PackageManager.GET_SERVICES or android.content.pm.PackageManager.MATCH_DISABLED_COMPONENTS)
         val perms = info.requestedPermissions?.toList() ?: emptyList()
-        for (p in listOf("android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION", "android.permission.FOREGROUND_SERVICE_LOCATION"))
-            assertTrue("still asks for $p", p !in perms)
+        for (p in listOf("android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION", "android.permission.FOREGROUND_SERVICE_LOCATION",
+                "android.permission.READ_SMS", "android.permission.RECEIVE_SMS", "android.permission.SEND_SMS", "android.permission.RECEIVE_MMS",
+                "android.permission.READ_CALL_LOG", "android.permission.CALL_PHONE", "android.permission.READ_CONTACTS", "android.permission.READ_PHONE_STATE"))
+            assertTrue("the browser still asks for $p", p !in perms)
         val parts = (info.activities?.map { it.name } ?: emptyList()) + (info.services?.map { it.name } ?: emptyList())
-        for (c in listOf("SosActivity", "MailActivity", "SocialActivity", "NotifyWatch"))
-            assertTrue("$c is still in the app", parts.none { it.endsWith(".$c") })
-        for (c in listOf("MessagesActivity", "CallsActivity"))
-            assertTrue("$c is missing", parts.any { it.endsWith(".$c") })
-        // switched off until chosen: no Messages / Calls icon on a fresh install
-        val st = pm.getComponentEnabledSetting(android.content.ComponentName(app, "com.ronin.browser.MessagesLauncher"))
-        if (!Parts.isOn(app, Parts.MESSAGES)) assertTrue("Messages icon shows before it was chosen", st != android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED)
+        for (c in listOf("SosActivity", "MailActivity", "SocialActivity", "NotifyWatch", "MessagesActivity", "CallsActivity", "InCallActivity", "RecordAccess", "RoninInCallService"))
+            assertTrue("$c is still in the browser", parts.none { it.endsWith(".$c") })
+        assertEquals("the browser is com.ronin.browser", "com.ronin.browser", app.packageName)
         ActivityScenario.launch(MainActivity::class.java).use { sc ->
             Thread.sleep(2000)
             assertEquals("Safe Social row still on the new tab page", "0", eval(sc, "document.querySelectorAll('#ql .chips[data-s=\\\"Safe Social\\\"]').length"))
-        }
-    }
-
-    private fun <A : PhonePage> evalPage(sc: ActivityScenario<A>, js: String): String {
-        val latch = CountDownLatch(1); var out = ""
-        sc.onActivity { a -> a.webForTest().evaluateJavascript(js) { out = it ?: ""; latch.countDown() } }
-        latch.await(15, TimeUnit.SECONDS); return out
-    }
-
-    @Test
-    fun roninMessagesSortsScamAndWorkSms() {
-        if (!Parts.hasPhone(app)) return // a tablet without SIM never gets Ronin Messages
-        Parts.set(app, Parts.MESSAGES, true)
-        // (the role stays with Ronin afterwards: taking it away revokes the SMS permissions,
-        // and Android then ends Ronin's process, which would end this test run too)
-        val ops = shell("cmd appops set ${app.packageName} ACCESS_RESTRICTED_SETTINGS allow")
-        Thread.sleep(1000)
-        val out = shell("cmd role add-role-holder android.app.role.SMS ${app.packageName} 0") + shell("cmd role get-role-holders android.app.role.SMS")
-        assertTrue("Ronin did not become the SMS app: $ops | $out", waitFor(15) { SmsStore.isDefault(app) })
-        val now = System.currentTimeMillis()
-        fun inbox(from: String, body: String) = app.contentResolver.insert(android.provider.Telephony.Sms.Inbox.CONTENT_URI, android.content.ContentValues().apply {
-            put("address", from); put("body", body); put("date", now); put("read", 0); put("type", 1) })
-        inbox("+919812300011", "Mujhe urgent 10000 rupaye ki zarurat hai, hospital me hoon, is QR par bhej do")
-        inbox("JM-SBIINB-S", "482913 is your OTP for login. Never share it with anyone.")
-        inbox("VM-SHOPPR-P", "Big sale! Flat 70% off today only, shop now")
-        ActivityScenario.launch(MessagesActivity::class.java).use { sc ->
-            assertTrue("messages page did not load", waitFor(20) { evalPage(sc, "window.__roninMessages?window.__roninMessages.list().length:0").toIntOrNull()?.let { it >= 3 } == true })
-            val cats = evalPage(sc, "JSON.stringify(window.__roninMessages.list().map(t=>t.address+':'+t.cat))")
-            assertTrue("scam SMS not in ⛔: $cats", cats.contains("+919812300011:scam"))
-            assertTrue("bank OTP not in काम के: $cats", cats.contains("JM-SBIINB-S:work"))
-            assertTrue("ad not in विज्ञापन: $cats", cats.contains("VM-SHOPPR-P:ads"))
-            // 3.13: the new OTP is pinned on top, the four boxes are at the top
-            assertEquals("new OTP not pinned", "1", evalPage(sc, "document.querySelectorAll('#otpCard').length"))
-            shot("16a-ronin-messages")
-            evalPage(sc, "document.querySelector('[data-tab=scam]').click(),1")
-            shot("16-ronin-messages-scam")
-        }
-    }
-
-    @Test
-    fun simNameIsKeptForRecentAndThreatTipShown() {
-        // CNAP: the network's KYC name of an unknown caller is kept for Recent (the fake "Daroga ji" case)
-        CallInfo.keepCnap(app, "+91 98765 43210", "RAMESH KUMAR")
-        assertEquals("RAMESH KUMAR", CallInfo.cnapOf(app, "9876543210"))
-        assertTrue(CallInfo.threatTip().contains("Digital arrest") || CallInfo.threatTip().contains("digital arrest", ignoreCase = true))
-    }
-
-    @Test
-    fun callScreenNeverLeavesASecondRecentsCard() {
-        // owner 21 Nov 2026: after a call he had to swipe away two cards (Ronin Calls + the call screen)
-        val info = app.packageManager.getActivityInfo(android.content.ComponentName(app, InCallActivity::class.java),
-            android.content.pm.PackageManager.MATCH_DISABLED_COMPONENTS)
-        assertTrue("call screen shows in Recents", info.flags and android.content.pm.ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS != 0)
-        assertTrue("call screen card stays after the call", info.flags and android.content.pm.ActivityInfo.FLAG_AUTO_REMOVE_FROM_RECENTS != 0)
-    }
-
-    @Test
-    fun callButtonsShowWhatWasTappedAtOnce() {
-        // 3.13.3 (owner: Speaker needed 2-3 taps): a tap shows its result at once, before Android confirms,
-        // and on speaker the screen must not go dark near the face (no proximity lock)
-        CallHub.pending = true
-        assertTrue(CallHub.speakerOn()); assertFalse(CallHub.atEar())
-        CallHub.pending = false
-        assertFalse(CallHub.speakerOn())
-        CallHub.pending = null
-        CallHub.muted = true; assertTrue(CallHub.isMuted())
-        CallHub.muted = false; assertFalse(CallHub.isMuted())
-        CallHub.muted = null
-    }
-
-    @Test
-    fun roninCallsOpensOnRecentAndHasAKeypad() {
-        if (!Parts.hasPhone(app)) return
-        Parts.set(app, Parts.CALLS, true)
-        ActivityScenario.launch(CallsActivity::class.java).use { sc ->
-            assertTrue("calls page did not load", waitFor(20) { evalPage(sc, "document.querySelectorAll('[data-tab=recent].on').length") == "1" })
-            shot("17a-ronin-calls-recent")
-            // Block / Delete ask "are you sure?": the page's questions must reach the screen (3.11 fix)
-            var chrome = false
-            sc.onActivity { a -> chrome = a.webForTest().webChromeClient != null }
-            assertTrue("phone pages cannot ask questions (no WebChromeClient)", chrome)
-            evalPage(sc, "document.querySelector('[data-tab=pad]').click(),1")
-            assertTrue("calls keypad did not load", waitFor(10) { evalPage(sc, "document.querySelectorAll('.pad button').length") == "12" })
-            evalPage(sc, "document.querySelector('[data-key=\"1\"]').click(),1")
-            shot("17-ronin-calls")
         }
     }
 

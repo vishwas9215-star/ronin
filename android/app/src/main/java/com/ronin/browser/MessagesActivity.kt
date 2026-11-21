@@ -19,6 +19,7 @@ class MessagesActivity : PhonePage() {
 
     override fun onStart() {
         super.onStart()
+        Thread { SavedSmsImport.once(applicationContext); runOnUiThread { event("changed") } }.start()
         try { contentResolver.registerContentObserver(Telephony.Sms.CONTENT_URI, true, watch) } catch (e: Exception) { }
     }
     override fun onStop() { super.onStop(); try { contentResolver.unregisterContentObserver(watch) } catch (e: Exception) { } }

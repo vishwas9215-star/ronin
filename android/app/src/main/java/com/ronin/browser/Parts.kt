@@ -24,8 +24,12 @@ object Parts {
     private fun cn(ctx: Context, c: String) = ComponentName(ctx.packageName, "com.ronin.browser.$c")
     fun prefs(ctx: Context) = Family.prefs(ctx)
 
-    fun isOn(ctx: Context, part: String): Boolean =
-        ctx.packageManager.getComponentEnabledSetting(cn(ctx, parts.getValue(part).first())) == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+    fun isOn(ctx: Context, part: String): Boolean {
+        val st = ctx.packageManager.getComponentEnabledSetting(cn(ctx, parts.getValue(part).first()))
+        // Ronin Phone (3.14.3): its parts are on from the start (manifest default)
+        if (ctx.packageName == "com.ronin.phone") return st != PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+        return st == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+    }
 
     fun set(ctx: Context, part: String, on: Boolean) {
         for (c in parts.getValue(part)) ctx.packageManager.setComponentEnabledSetting(cn(ctx, c),

@@ -47,6 +47,7 @@ object Updater {
                     if (!quiet) Toast.makeText(a, "Could not check for updates now.", Toast.LENGTH_SHORT).show()
                 } else if (info.code <= current) {
                     if (!quiet) Toast.makeText(a, "Ronin is up to date (${info.name}).", Toast.LENGTH_SHORT).show()
+                    checkPhone(a, quiet) // the browser also brings Ronin Phone's updates (it has no updater of its own)
                 } else {
                     AlertDialog.Builder(a)
                         .setTitle("Ronin ${info.name} is ready")
@@ -59,11 +60,57 @@ object Updater {
         }
     }
 
-    private fun download(a: Activity, info: Info) {
-        Toast.makeText(a, "Downloading Ronin ${info.name}...", Toast.LENGTH_SHORT).show()
+    // ---- Ronin Phone (Messages + Calls, its own app since 3.14.3): installed / updated by the browser ----
+    const val PHONE_PACKAGE = "com.ronin.phone"
+    fun phoneInstalled(a: Activity): Boolean = phoneCode(a) > 0
+    @Suppress("DEPRECATION")
+    private fun phoneCode(a: Activity): Int = try {
+        val pi = a.packageManager.getPackageInfo(PHONE_PACKAGE, 0)
+        if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode.toInt() else pi.versionCode
+    } catch (e: Exception) { 0 }
+
+    private fun fetchPhone(): Info? = try {
+        val c = URL(RoninApp.PHONE_UPDATE_URL).openConnection() as HttpURLConnection
+        c.connectTimeout = 15000; c.readTimeout = 20000
+        if (c.responseCode == 200) parse(c.inputStream.bufferedReader().readText()) else null
+    } catch (e: Exception) { null }
+
+    /** A newer Ronin Phone is offered only when Ronin Phone is already installed. */
+    fun checkPhone(a: Activity, quiet: Boolean) {
+        if (!phoneInstalled(a)) return
+        thread(name = "ronin-phone-update") {
+            val info = fetchPhone()
+            val current = phoneCode(a)
+            a.runOnUiThread {
+                if (a.isFinishing || a.isDestroyed || info == null || info.code <= current) return@runOnUiThread
+                AlertDialog.Builder(a)
+                    .setTitle("Ronin Phone ${info.name}")
+                    .setMessage(L("Ronin Phone (Messages + Calls) का नया version तैयार है। अभी install करें?", "A new Ronin Phone (Messages + Calls) is ready. Install it now?"))
+                    .setPositiveButton("Update") { _, _ -> download(a, info, "RoninPhone.apk", "Ronin Phone") }
+                    .setNegativeButton(L("बाद में", "Later"), null)
+                    .show()
+            }
+        }
+    }
+
+    /** Menu → Ronin Phone when it is not installed yet: download and install it (Android asks to confirm). */
+    fun installPhone(a: Activity) {
+        Toast.makeText(a, L("Ronin Phone ला रहा हूँ...", "Getting Ronin Phone..."), Toast.LENGTH_SHORT).show()
+        thread(name = "ronin-phone-get") {
+            val info = fetchPhone()
+            a.runOnUiThread {
+                if (a.isFinishing || a.isDestroyed) return@runOnUiThread
+                if (info == null) Toast.makeText(a, L("अभी Ronin Phone नहीं मिला, थोड़ी देर बाद कोशिश करें।", "Could not get Ronin Phone now. Try again later."), Toast.LENGTH_LONG).show()
+                else download(a, info, "RoninPhone.apk", "Ronin Phone")
+            }
+        }
+    }
+
+    private fun download(a: Activity, info: Info, fileName: String = "Ronin.apk", label: String = "Ronin") {
+        Toast.makeText(a, "Downloading $label ${info.name}...", Toast.LENGTH_SHORT).show()
         thread(name = "ronin-update-dl") {
             val dir = File(a.cacheDir, "updates").apply { mkdirs() }
-            val f = File(dir, "Ronin.apk")
+            val f = File(dir, fileName)
             val ok = try {
                 val c = URL(info.url).openConnection() as HttpURLConnection
                 c.connectTimeout = 20000; c.readTimeout = 60000
