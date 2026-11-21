@@ -171,6 +171,7 @@ class MainActivity : AppCompatActivity() {
         PlayerBridge.control = { a -> ui.post { mediaControl(a) } }
 
         app.startLists()
+        liveScreens++
         val kept = KeptPlayer.take() // a song that kept playing after Ronin was swiped away
         val restore = savedInstanceState?.getStringArrayList("tabs")
         val start = intent?.dataString
@@ -180,7 +181,8 @@ class MainActivity : AppCompatActivity() {
         }
         when {
             !restore.isNullOrEmpty() -> {
-                restore.take(40).forEach { newTab(it, select = false, lazy = true) }
+                val keep = restore.take(40).toMutableList(); if (kept != null) keep.remove(kept.url) // no second copy of the song tab
+                keep.forEach { newTab(it, select = false, lazy = true) }
                 select(tabs[savedInstanceState.getInt("active", 0).coerceIn(0, tabs.size - 1)])
             }
             saved != null && saved.first.isNotEmpty() -> {
@@ -655,7 +657,7 @@ class MainActivity : AppCompatActivity() {
         val i = tabs.indexOf(t)
         tabs.remove(t)
         holder.removeView(t.web)
-        if (t == mediaTab) { mediaTab = null; mediaPlaying = false; MediaPlaybackService.stop(this) }
+        if (t == mediaTab) { mediaTab = null; mediaPlaying = false; KeptPlayer.wantKeep = false; MediaPlaybackService.stop(this) }
         if (t.isPrivate) { t.web.clearCache(true); t.web.clearHistory() }
         t.web.destroy()
         if (t.isPrivate && tabs.none { it.isPrivate }) wipePrivate()
@@ -1064,7 +1066,7 @@ class MainActivity : AppCompatActivity() {
         holder.removeView(old)
         old.destroy()
         if (t !in tabs || t.web !== old) return
-        if (t == mediaTab) { mediaTab = null; mediaPlaying = false; MediaPlaybackService.stop(this) }
+        if (t == mediaTab) { mediaTab = null; mediaPlaying = false; KeptPlayer.wantKeep = false; MediaPlaybackService.stop(this) }
         val w = makeWebView({ t }, t.isPrivate, t.claudeOrigin)
         t.web = w
         holder.addView(w, if (i >= 0) i else holder.indexOfChild(pullBadge).coerceAtLeast(0))
@@ -1967,6 +1969,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
 
     override fun onStart() {
         super.onStart()
+        KeptPlayer.take()?.let { adoptKept(it) } // kept a moment after this screen was made (reopen race)
         if (timersPaused || tabs.isNotEmpty()) { tabs.firstOrNull()?.web?.resumeTimers(); timersPaused = false }
         ui.removeCallbacks(lowerQuality)
         if (lowered) { lowered = false; mediaTab?.web?.evaluateJavascript(PageScripts.lowQuality(false), null) }
@@ -1981,9 +1984,11 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         // Ronin swiped away / closed while a YouTube song plays: that ONE page keeps playing (KeptPlayer), all other
         // tabs are freed. Nothing playing: the player card and its wake lock go, as before.
         var keptWeb: WebView? = null
+        liveScreens--
         if (!isChangingConfigurations && mediaTab != null) {
             val t = mediaTab!!
-            if (canKeepPlaying()) {
+            // another browser screen already open (Ronin reopened before this one closed): stop, never an orphan page
+            if (canKeepPlaying() && liveScreens == 0) {
                 keptWeb = t.web
                 KeptPlayer.hold(this, t.web, t.url, mediaTitle, mediaPlaying, lastPlayingAt)
             } else { KeptPlayer.wantKeep = false; MediaPlaybackService.stop(this) }
@@ -2261,6 +2266,8 @@ h1{margin:0 0 4px;font-size:24px}p.sub{margin:0 0 6px;opacity:.7}p.note{margin-t
         /** A separate key for the Data button (it sits inside web pages; it can only start an export). */
         val dataKey: String = java.util.UUID.randomUUID().toString().replace("-", "")
         /** Ronin's own error page: Reload, and "Open anyway" without https (only with pageKey). */
+        /** Browser screens alive right now: a song page is kept only when the last one closes (else it stops). */
+        @Volatile var liveScreens = 0
         const val RELOAD_LINK = "https://ronin.home/reload"
         const val ERROR_PAGE = "https://ronin.home/error"
         const val HTTP_LINK = "https://ronin.home/http"

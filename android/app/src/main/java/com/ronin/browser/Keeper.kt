@@ -36,11 +36,15 @@ object KeptPlayer {
     private var stage: android.app.Presentation? = null
     private var display: android.hardware.display.VirtualDisplay? = null
     private var reader: android.media.ImageReader? = null
+    private var frames: android.os.HandlerThread? = null // the thrown-away pictures are handled off the main thread
 
     private fun putOnStage(a: Context, w: RoninWebView) {
         try {
             val r = android.media.ImageReader.newInstance(64, 64, android.graphics.PixelFormat.RGBA_8888, 2)
-            r.setOnImageAvailableListener({ ir -> try { ir.acquireLatestImage()?.close() } catch (e: Exception) { } }, ui)
+            val ft = android.os.HandlerThread("ronin-song-frames", android.os.Process.THREAD_PRIORITY_BACKGROUND).apply { start() }
+            frames = ft
+            // no work per picture: take it and close it (YouTube is on its smallest picture anyway)
+            r.setOnImageAvailableListener({ ir -> try { ir.acquireLatestImage()?.close() } catch (e: Exception) { } }, Handler(ft.looper))
             val dm = a.getSystemService(android.hardware.display.DisplayManager::class.java)
             val vd = dm.createVirtualDisplay("ronin-song", 64, 64, 160, r.surface, android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY)
             val p = android.app.Presentation(a, vd.display)
@@ -58,7 +62,8 @@ object KeptPlayer {
         try { stage?.dismiss() } catch (e: Throwable) { }
         try { display?.release() } catch (e: Throwable) { }
         try { reader?.close() } catch (e: Throwable) { }
-        stage = null; display = null; reader = null
+        try { frames?.quitSafely() } catch (e: Throwable) { }
+        stage = null; display = null; reader = null; frames = null
     }
     fun onStageForTest() = stage?.isShowing == true
 
@@ -119,6 +124,8 @@ object KeptPlayer {
         override fun run() {
             val w = kept?.web ?: return
             val ctx = app ?: return
+            // the next check is planned first: a page that never answers cannot stop the checks (watchdog)
+            ui.postDelayed(this, if (playing) 2000L else 5000L)
             w.evaluateJavascript(PageScripts.MEDIA_STATE) { raw ->
                 if (kept?.web !== w) return@evaluateJavascript
                 val o = try { JSONObject(JSONArray("[$raw]").getString(0)) } catch (e: Exception) { JSONObject() }
@@ -127,8 +134,7 @@ object KeptPlayer {
                 val t = o.optString("t", title).ifEmpty { title }
                 if (p) lastPlayingAt = now
                 if (p != playing || t != title) { playing = p; title = t; MediaPlaybackService.update(ctx, t, o.optString("a"), p) }
-                if (!p && now - lastPlayingAt > 10 * 60_000) { release(); return@evaluateJavascript }
-                ui.postDelayed(this, if (p) 2000L else 5000L)
+                if (!p && now - lastPlayingAt > 10 * 60_000) release()
             }
         }
     }

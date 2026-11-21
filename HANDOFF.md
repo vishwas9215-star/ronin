@@ -319,6 +319,11 @@ Asked: a YouTube / YouTube Music song keeps playing after a swipe to Home AND af
   stopFromTheCardEndsAKeptSong (card play / pause reach the kept page, Stop -> page, card and service gone),
   aPausedSongIsNotKeptAfterASwipe. 3.14.0's closingRoninEndsTheSongCard removed (the behaviour changed on purpose).
   DeviceTest init releases anything kept by an earlier test.
+- QA on 5c474ed fixed: reopen race (MainActivity.liveScreens: a page is kept only when the LAST browser screen
+  closes, else stopped; onStart also adopts a kept page); ImageReader pictures are taken and closed on their own
+  background HandlerThread (no main-thread work per picture); Keeper poll plans its next run before asking the page
+  (watchdog); the no-second-copy rule also for the savedInstanceState restore; closing / recovering the media tab
+  clears KeptPlayer.wantKeep (DeviceTest closingTheSongTabNeverLeavesItToBeKept).
 - Device check: some phones (OxygenOS battery optimisation) kill apps on a Recents swipe even with a foreground
   service; if the song stops on his tablet, Settings -> Battery -> Ronin -> "Allow background activity".
 

@@ -1222,4 +1222,17 @@ class DeviceTest {
         assertTrue("card / wake lock left behind", waitFor(10) { !ourNotification() })
         try { sc.close() } catch (e: Throwable) { }
     }
+
+    @Test
+    fun closingTheSongTabNeverLeavesItToBeKept() {
+        val sc = playSong("ronin-keep-close")
+        assertTrue("a playing song is not marked to be kept", waitFor(8) { KeptPlayer.wantKeep })
+        sc.onActivity { a -> a.closeTabForTest("https://m.youtube.com/ronin-keep-close") }
+        assertFalse("closing the song tab left it marked to be kept", KeptPlayer.wantKeep)
+        assertTrue("card left after closing the song tab", waitFor(10) { !ourNotification() })
+        sc.onActivity { a -> a.finishAndRemoveTask() }
+        Thread.sleep(2000)
+        assertFalse("a closed tab's page was kept", KeptPlayer.holding)
+        try { sc.close() } catch (e: Throwable) { }
+    }
 }
