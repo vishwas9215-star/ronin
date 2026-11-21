@@ -309,6 +309,9 @@ Asked: a YouTube / YouTube Music song keeps playing after a swipe to Home AND af
 - Opening Ronin again: MainActivity.onCreate takes the kept page (KeptPlayer.take), puts it back as the front tab
   (adoptKept: wireWebView with this screen's clients), mediaTab restored, normal picture again in onStart; the same
   address is removed once from the saved tabs (no second copy).
+- A page on no screen stops its video AND sound (CI proved it: time froze after the swipe). So the kept page sits on
+  a tiny 64x64 private VirtualDisplay (VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY, no permission) inside a Presentation;
+  its frames go to an ImageReader and are dropped at once. Off the stage again on take() / release().
 - All WebViews are now made with a MutableContextWrapper(activity) so a kept page never holds a closed screen.
 - Not playing (paused > 15 s, or no song): as before, the card and wake lock go on the swipe.
 - Tests (DeviceTest): aSongKeepsPlayingAfterRoninIsSwipedAwayAndComesBack (finishAndRemoveTask = Recents swipe;
