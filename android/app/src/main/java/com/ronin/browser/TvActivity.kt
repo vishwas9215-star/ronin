@@ -46,7 +46,10 @@ class TvActivity : AppCompatActivity() {
             WebViewCompat.addDocumentStartJavaScript(web, NO_ADS_JS, setOf("https://www.youtube.com"))
         }
         web.addJavascriptInterface(Bridge(), "RoninTv")
-        web.webChromeClient = WebChromeClient()
+        web.webChromeClient = object : WebChromeClient() {
+            // owner 21 Nov 2026: the big white "▶ in a circle" before every song was Android's own video picture: none
+            override fun getDefaultVideoPoster(): android.graphics.Bitmap = android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888)
+        }
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? {
                 val u = req.url.toString()
@@ -146,6 +149,62 @@ class TvActivity : AppCompatActivity() {
   document.addEventListener('pause', tell(false), true);
   document.addEventListener('ended', tell(false), true);
   window.__roninTvPrune = function (o) { return prune(o, 0); };
+
+  // ---- owner 21 Nov 2026: best picture by itself; a clean play screen without Like / Dislike / Comments / Ask (✦) /
+  // Save / Subscribe / Description (CC, settings, previous / play / next stay; subscribing is done on the phone) ----
+  var WANT = ['hd1080', 'hd1440', 'hd720', 'large', 'medium'];
+  function best() {
+    var p = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+    if (!p || typeof p.getAvailableQualityLevels !== 'function') return;
+    var lv = p.getAvailableQualityLevels() || [], q = null;
+    for (var i = 0; i < WANT.length && !q; i++) if (lv.indexOf(WANT[i]) >= 0) q = WANT[i];
+    if (!q || (p.getPlaybackQuality && p.getPlaybackQuality() === q)) return;
+    try { if (p.setPlaybackQualityRange) p.setPlaybackQualityRange(q, q); if (p.setPlaybackQuality) p.setPlaybackQuality(q); } catch (e) {}
+  }
+  var HIDE = /^(like|dislike|i like this|i dislike this|comments?|ask|ask about this video|save|save to playlist|subscribe|subscribed|unsubscribe|description|पसंद|नापसंद|टिप्पणी|टिप्पणियां|पूछें|सेव करें|सदस्यता लें|सदस्यता ली गई|विवरण)\b/i;
+  function tidy() {
+    if (!/watch/.test(location.hash + location.pathname)) return;
+    var els = document.querySelectorAll('[aria-label],[title],button,[role=button],[tabindex],ytlr-button-renderer,ytlr-toggle-button-renderer');
+    for (var i = 0; i < els.length && i < 600; i++) {
+      var e = els[i];
+      if (e.getAttribute('data-ronin-hidden')) continue;
+      var name = (e.getAttribute('aria-label') || e.getAttribute('title') || e.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!name || name.length > 90 || !HIDE.test(name) || /views|ago|minutes|seconds|•/i.test(name)) continue;
+      var r = e.getBoundingClientRect();
+      // a button, never a video tile below the player ("Like a Prayer" is a song, not the Like button)
+      if (!r.width || r.width > 420 || r.height > 160 || e.querySelector('img,video')) continue;
+      var b = e;
+      while (b.parentElement && b.parentElement !== document.body) {
+        var pr = b.parentElement.getBoundingClientRect();
+        if (pr.width - r.width > 12 || pr.height - r.height > 12) break;
+        b = b.parentElement;
+      }
+      b.setAttribute('data-ronin-hidden', '1'); b.style.setProperty('display', 'none', 'important');
+    }
+  }
+  function onHidden() {
+    var a = document.activeElement;
+    if (a && a.closest && a.closest('[data-ronin-hidden]')) return true;
+    return !!document.querySelector('[data-ronin-hidden][class*=focused],[data-ronin-hidden] [class*=focused],[data-ronin-hidden][focused],[data-ronin-hidden] [focused]');
+  }
+  // the remote never lands on a hidden button: OK there does nothing; an arrow moves on once more
+  var hops = 0;
+  document.addEventListener('keydown', function (ev) {
+    var k = ev.keyCode;
+    if ((k === 13 || k === 23) && onHidden()) { ev.preventDefault(); ev.stopImmediatePropagation(); return; }
+    if (k >= 37 && k <= 40 && ev.isTrusted !== false) {
+      hops = 0;
+      var again = function () {
+        if (!onHidden() || hops++ > 7) return;
+        var t = document.activeElement || document.body;
+        ['keydown', 'keyup'].forEach(function (type) { try { t.dispatchEvent(new KeyboardEvent(type, { key: ev.key, code: ev.code, keyCode: k, which: k, bubbles: true })); } catch (e) {} });
+        setTimeout(again, 60);
+      };
+      setTimeout(again, 60);
+    }
+  }, true);
+  setInterval(function () { try { tidy(); best(); } catch (e) {} }, 1200);
+  window.__roninTvTidy = function () { tidy(); best(); };
 })();
 """
     }

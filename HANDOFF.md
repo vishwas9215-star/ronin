@@ -295,7 +295,14 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Notification ✕ Close sent "pause": the next 1 s media check showed a paused card again (the 'flaky' song test).
   Now Close sends "stop" (pause + let go). Owner said "हाँ, V3.12.0 publish करो" 16:26.
 
-## 3.14.5 (branch `claude/v3.14.3`; NOT published) — owner 21 Nov 15:42–15:44
+## 3.14.5 (branch `claude/v3.14.3`; NOT published)
+- TV (owner 21 Nov 21:02-21:04, after installing Ronin TV 3.14.4 by 5-install-on-tv.bat: "TV बहुत अच्छा चल रहा है"):
+  no white "▶ in a circle" before songs (WebChromeClient.getDefaultVideoPoster = 1 px see-through; TvTest);
+  best quality by itself (player setPlaybackQualityRange to hd1080 when offered, every 1.2 s on the watch screen);
+  clean play screen: Like / Dislike / Comments / Ask (✦) / Save / Subscribe / Description hidden by their label
+  (only on #/watch, only button-sized, never a video tile), OK on a hidden button blocked, arrows hop past it.
+  YouTube's TV DOM cannot be seen from here (non-TV browsers get a fallback page, the CI TV emulator gets "confirm
+  you're not a bot") - the owner checks on the real TV. tools/uitest/tvtidy. — owner 21 Nov 15:42–15:44
 - ⭐ speed-dial row on top of Recent (small round tiles, photo + first name, one tap calls): Ronin pins (prefs pins /
   unpinned, ⭐ button on each Contacts row), contacts starred in Google Contacts, people called (answered) 2+ times in
   30 days. CallInfo.favorites / pin.

@@ -40,6 +40,17 @@ class TvTest {
         assertTrue("Ronin TV is not in the TV home row", found.any { it.activityInfo.name.endsWith(".TvActivity") })
     }
 
+    // owner 21 Nov 2026: a big white "▶ in a circle" before every song = Android's default video picture: never shown
+    @Test
+    fun noWhitePlayPictureBeforeAVideo() {
+        ActivityScenario.launch(TvActivity::class.java).use { sc ->
+            var w = -1; var px = 0
+            sc.onActivity { a -> a.web.webChromeClient?.defaultVideoPoster?.let { w = it.width; px = it.getPixel(0, 0) } }
+            assertTrue("default video picture is $w px wide", w == 1)
+            assertTrue("default video picture is not see-through: $px", android.graphics.Color.alpha(px) == 0)
+        }
+    }
+
     @Test
     fun youtubeTvScreenWithoutAdsAndRemoteKeys() {
         ActivityScenario.launch(TvActivity::class.java).use { sc ->

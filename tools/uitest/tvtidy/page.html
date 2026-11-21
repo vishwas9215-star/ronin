@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8"><title>YouTube TV play screen (copy of the owner's TV, 21 Nov 2026)</title>
+<style>body{margin:0;background:#000;color:#fff;font:20px sans-serif}.row{display:flex;gap:16px;padding:10px}.btn{display:inline-flex;width:64px;height:64px;border-radius:32px;background:#333;align-items:center;justify-content:center}.pill{padding:14px 24px;border-radius:30px;background:#333}.tile{width:400px;height:240px;background:#222}.tile img{width:100%;height:180px}</style>
+<div id="movie_player" class="html5-video-player"><video></video></div>
+<div class="row" id="ctl">
+  <span class="btn" tabindex="0" aria-label="Previous video">⏮</span><span class="btn" tabindex="0" aria-label="Pause">⏸</span><span class="btn" tabindex="0" aria-label="Next video">⏭</span>
+  <ytlr-button-renderer><span class="btn" tabindex="0" aria-label="Like this video along with 1 lakh other people">👍</span></ytlr-button-renderer>
+  <ytlr-button-renderer><span class="btn" tabindex="0" aria-label="Dislike this video">👎</span></ytlr-button-renderer>
+  <ytlr-button-renderer><span class="btn" tabindex="0" aria-label="Comments">💬</span></ytlr-button-renderer>
+  <ytlr-button-renderer><span class="btn" tabindex="0" aria-label="Ask">✦</span></ytlr-button-renderer>
+  <ytlr-button-renderer><span class="btn" tabindex="0" aria-label="Save">🔖</span></ytlr-button-renderer>
+  <span class="btn" tabindex="0" aria-label="Captions">CC</span><span class="btn" tabindex="0" aria-label="Settings">⚙</span>
+</div>
+<div class="row"><span class="pill" tabindex="0">Description</span><span class="pill" tabindex="0">Subscribe</span></div>
+<div class="row"><div class="tile" tabindex="0" aria-label="Like a Prayer - Madonna"><img alt=""><div>Like a Prayer</div></div><div class="tile" tabindex="0" aria-label="Saaun Di Jhadi"><img alt=""></div></div>
+<script>
+  // a stand-in for YouTube's player: which quality was asked for
+  var p = document.getElementById('movie_player'); window.asked = [];
+  p.getAvailableQualityLevels = function () { return ['hd2160', 'hd1440', 'hd1080', 'hd720', 'large', 'medium', 'auto']; };
+  var cur = 'medium'; p.getPlaybackQuality = function () { return cur; };
+  p.setPlaybackQualityRange = function (a) { window.asked.push(a); cur = a; }; p.setPlaybackQuality = function (a) { cur = a; };
+  window.liked = 0; document.querySelector('[aria-label^="Like this"]').addEventListener('keydown', function (e) { if (e.keyCode === 13) window.liked++; });
+</script>
