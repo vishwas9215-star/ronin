@@ -232,6 +232,13 @@ var pathRules = []struct{ host, prefix string }{
 	{"google.com", "/adsense/"},
 	{"facebook.com", "/tr"},
 	{"instagram.com", "/logging/"},
+	// cam-site advert paths (EasyList adult); visiting the site itself is not blocked
+	{"chaturbate.com", "/affiliates/"},
+	{"chaturbate.com", "/in/"},
+	{"chaturbate.com", "/creative/"},
+	{"stripchat.com", "/api/external/"},
+	{"bongacams.com", "/promo.php"},
+	{"camsoda.com", "/promos/"},
 }
 
 func pathBlocked(host, path string) bool {
@@ -255,6 +262,12 @@ func (e *Engine) BlockedFrom(rawURL, topHost string) bool {
 	}
 	host := strings.ToLower(u.Hostname())
 	topHost = strings.ToLower(topHost)
+	// on one of these sites itself (opened on purpose), their picture / stream servers must load
+	for _, d := range thirdPartyBlock {
+		if topHost == d || strings.HasSuffix(topHost, "."+d) {
+			return false
+		}
+	}
 	for _, d := range thirdPartyBlock {
 		if host == d || strings.HasSuffix(host, "."+d) {
 			return !(topHost == d || strings.HasSuffix(topHost, "."+d))

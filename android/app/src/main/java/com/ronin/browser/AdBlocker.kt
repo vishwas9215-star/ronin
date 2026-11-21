@@ -101,6 +101,8 @@ class AdBlocker(rules: Rules) {
         if (blocked(url)) return true
         val host = Rules.hostOf(url)
         val top = Rules.normalize(topHost)
+        // on one of these sites itself (opened on purpose), their picture / stream servers must load (same as Windows)
+        if (thirdParty.any { top == it || top.endsWith(".$it") }) return false
         for (d in thirdParty) {
             if (host == d || host.endsWith(".$d")) return !(top == d || top.endsWith(".$d"))
         }

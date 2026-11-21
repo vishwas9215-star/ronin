@@ -9,7 +9,7 @@
   var isYT = /(^|\.)youtube\.com$/.test(host) || /(^|\.)youtube-nocookie\.com$/.test(host);
 
   // ---- 1. generic ad boxes (safe selectors only) ----
-  var css = "ins.adsbygoogle,iframe[id^='google_ads_iframe'],div[id^='div-gpt-ad'],[data-ad-slot],[data-google-query-id],.adsbygoogle,amp-ad,amp-embed[type='taboola'],.taboola-container,#taboola-below-article-thumbnails,.OUTBRAIN,[id^='taboola-'],[class^='trc_rbox']{display:none!important}";
+  var css = "div[class*='cams-wgt'],a[href^='https://go.xlirdr.com'],a[href^='https://go.xlviiirdr.com'],a[href^='https://go.xlviirdr.com'],a[href^='https://go.strpjmp.com'],a[href*='chaturbate.com/in/'],a[href*='chaturbate.com/affiliates/'],iframe[src*='creative.stripchat'],iframe[src*='/widgets/'][src*='creative.'],ins.adsbygoogle,iframe[id^='google_ads_iframe'],div[id^='div-gpt-ad'],[data-ad-slot],[data-google-query-id],.adsbygoogle,amp-ad,amp-embed[type='taboola'],.taboola-container,#taboola-below-article-thumbnails,.OUTBRAIN,[id^='taboola-'],[class^='trc_rbox']{display:none!important}";
 
   if (isYT) {
     css += "ytd-ad-slot-renderer,ytd-in-feed-ad-layout-renderer,ytd-promoted-sparkles-web-renderer,ytd-promoted-video-renderer,ytd-display-ad-renderer,ytd-compact-promoted-video-renderer,ytd-companion-slot-renderer,ytd-action-companion-ad-renderer,ytd-banner-promo-renderer,ytd-statement-banner-renderer,ytd-video-masthead-ad-v3-renderer,ytd-primetime-promo-renderer,ytd-merch-shelf-renderer,ytd-player-legacy-desktop-watch-ads-renderer,ytd-rich-item-renderer:has(ytd-ad-slot-renderer),#player-ads,#masthead-ad,#panels ytd-ads-engagement-panel-content-renderer,ytd-engagement-panel-section-list-renderer[target-id='engagement-panel-ads'],.ytp-ad-overlay-container,.ytp-ad-image-overlay,.ytp-featured-product,.ytp-suggested-action,ytm-promoted-sparkles-web-renderer,ad-slot-renderer{display:none!important}";
@@ -197,8 +197,11 @@
           // a long video is the film itself, never a pre-roll; and nothing is "an ad" for more than 75 s
           if (ad && (isFinite(dur) && dur > 180 || v.__roninNotAd)) ad = false;
           if (ad && v.__roninAd && Date.now() - v.__roninAd.t > 75000) { v.__roninNotAd = true; ad = false; }
+          // some players (Fluid Player) play the advert in the SAME <video> and then switch back to the film:
+          // a new source means the advert is over - normal speed and sound at once
+          if (v.__roninAd && v.__roninAd.s && v.currentSrc && v.currentSrc !== v.__roninAd.s) ad = false;
           if (ad) {
-            if (!v.__roninAd) v.__roninAd = { m: v.muted, r: v.playbackRate || 1, t: Date.now() };
+            if (!v.__roninAd) v.__roninAd = { m: v.muted, r: v.playbackRate || 1, t: Date.now(), s: v.currentSrc };
             v.muted = true;
             try { if (v.playbackRate < 16) v.playbackRate = 16; } catch (e) {}
             var d = v.duration;

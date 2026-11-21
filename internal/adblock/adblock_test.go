@@ -106,6 +106,16 @@ func TestBlockedFrom(t *testing.T) {
 	if e.BlockedFrom("https://www.youtube.com/watch?v=1", "www.youtube.com") {
 		t.Error("normal page blocked")
 	}
+	// 21 Nov 2026: Stripchat-style cam boxes inside video sites (their picture servers, redirects, widget paths)
+	for _, u := range []string{"https://img.doppiocdn.com/thumbs/1.jpg", "https://go.xlviiirdr.com/?userId=1", "https://creative.stripchat.com/widgets/x",
+		"https://chaturbate.com/in/?tour=x", "https://stripchat.com/api/external/v4/widget", "https://bngprm.com/promo"} {
+		if !e.BlockedFrom(u, "www.somevideosite.com") {
+			t.Error("cam advert not blocked: " + u)
+		}
+	}
+	if e.BlockedFrom("https://img.doppiocdn.com/thumbs/1.jpg", "stripchat.com") {
+		t.Error("the cam site's own pictures blocked on its own site")
+	}
 }
 
 func TestDangerList(t *testing.T) {

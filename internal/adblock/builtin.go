@@ -38,6 +38,23 @@ var builtinBlock = []string{
 	"propellerads.com", "propu.sh", "clickadu.com", "adcash.com", "onclickads.net", "popcash.net",
 	"popads.net", "monetag.com", "aclib.net", "adsco.re", "twinrdsrv.com", "xlivrdr.com",
 	"chaturbate-ads.com", "imglnkd.com", "imglnke.com", "a.realsrv.com", "mnaspm.com",
+	// cam-site affiliate / redirect hosts and adult ad networks (research 21 Nov 2026: EasyList adult, HaGeZi
+	// popup / pro lists; the owner still saw Stripchat-style cam ads on video sites)
+	"strpjmp.com", "xlirdr.com", "xliirdr.com", "xliiirdr.com", "xlvirdr.com", "xlviirdr.com", "xlviiirdr.com", "xlrdr.com",
+	"xxxjmp.com", "xxxijmp.com", "xxxiijmp.com", "xxxvjmp.com", "tmrjmp.com", "admjmp.com", "dmzjmp.com", "hpyjmp.com",
+	"hpyrdr.com", "smljmp.com", "jsmjmp.com",
+	"awecr.com", "awecre.com", "awecrjmp.com", "awecrptjmp.com", "awejmp.com", "awembd.com", "awemdia.com", "awempt.com",
+	"awemwh.com", "awentw.com", "aweproto.com", "aweprotostatic.com", "aweprt.com", "awepsi.com", "awept.com", "aweptjmp.com",
+	"awptjmp.com", "awbbjmp.com", "awestatic.com", "awestat.com", "ptwmjmp.com", "ptapjmp.com", "ptbbjmp.com", "ptcrwmjmp.com",
+	"bngpt.com", "bngprm.com", "bngpst.com", "bngprl.com", "bngpop.com", "bcprm.com", "tools.bongacams.com",
+	"serve.ads.chaturbate.com", "cno.jerkmate.com", "cno.jerkmate.net", "crakbanner.com", "crakrevenue.xyz",
+	"cam4tracking.com", "cam4ads.com", "cdnads.cam4.com", "promos.camsoda.com", "streamateaccess.com", "livepromotools.com",
+	"creative.stripchat.com", "creative.stripchat.global", "creative.strip.chat", "creative.strpjmp.com",
+	"runative-syndicate.com", "sacdnssedge.com", "twinrdsyte.com", "twinrdengine.com", "twinred.com", "jads.co", "juicyads.in",
+	"traffichaus.com", "hprofits.com", "trafficforce.com", "adnium.com", "tubeadvertising.eu", "fpctraffic.com", "fpctraffic2.com",
+	"o333o.com", "wpncdn.com", "sexad.net", "eroadvertising.com", "effectivegatecpm.com", "highperformanceformat.com",
+	"clickaine.com", "adxxx.com", "trafficshop.com", "trafficholder.com", "tubeadv.com", "hubtraffic.com", "adsession.com",
+	"trafficbroker.com", "xdtraffic.com", "imglnka.com", "imglnkb.com", "imglnkc.com",
 	// Indian ad networks often seen on news sites
 	"vdo.ai", "colombiaonline.com", "colombia.com", "izooto.com", "affinity.com", "adgebra.co.in",
 	"tyroo.com", "komli.com", "vserv.com", "truvidplayer.com", "adpushup.com",
@@ -68,5 +85,9 @@ var builtinAllow = []string{
 var thirdPartyBlock = []string{
 	"chaturbate.com", "stripchat.com", "livejasmin.com", "cam4.com", "camsoda.com", "bongacams.com",
 	"jerkmate.com", "fuckbook.com", "adultfriendfinder.com", "xhamsterlive.com", "cams.com",
+	// the cam sites' own picture / stream servers: their "live cam" boxes inside other sites (research 21 Nov 2026)
+	"doppiocdn.com", "doppiocdn.net", "strpst.com", "stripst.com", "stripchat.global", "strip.chat", "mmcdn.com", "highwebmedia.com",
+	"dditscdn.com", "dditsadn.com", "jerkmate.net", "jerkmate.tv", "jerkmatelive.com", "streamate.com", "naiadsystems.com",
+	"flirt4free.com", "imlive.com", "xhamstercams.com", "xlovecam.com", "livecam.com",
 	"dream11.com", "1xbet.com", "stake.com", "parimatch.in", "rummycircle.com",
 }
