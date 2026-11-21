@@ -361,7 +361,7 @@ class CallActionReceiver : BroadcastReceiver() {
 /** The call screen: big buttons, the caller's warning, mute / speaker / keypad, end. */
 class InCallActivity : AppCompatActivity() {
     private lateinit var who: TextView; private lateinit var warn: TextView; private lateinit var state: TextView
-    private lateinit var ringRow: LinearLayout; private lateinit var talkRow: LinearLayout; private lateinit var keypad: GridLayout
+    private lateinit var ringRow: LinearLayout; private lateinit var talkRow: LinearLayout; private lateinit var keypad: LinearLayout
     private lateinit var second: TextView
     private lateinit var simName: TextView
     private lateinit var simRow: LinearLayout
@@ -420,9 +420,46 @@ class InCallActivity : AppCompatActivity() {
             addView(muteBtn); addView(speakerBtn); addView(keypadBtn) }
         val r2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; addView(btn(L("📵 Call काटें", "📵 Hang up"), "#dc2626") { top()?.disconnect() }) }
         talkRow.addView(r1); talkRow.addView(r2)
-        keypad = GridLayout(this).apply { columnCount = 3; visibility = android.view.View.GONE
-            for (k in listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#")) addView(Button(this@InCallActivity).apply { text = k; textSize = 24f
-                setOnClickListener { top()?.let { c -> c.playDtmfTone(k[0]); c.stopDtmfTone() } } }) }
+        // the in-call keypad (customer care "press 1..."): big keys over the whole width, and the digits pressed
+        // shown large above them (owner, 21 Nov 2026: the keys were tiny on the left and nothing showed what was pressed)
+        val typed = TextView(this).apply {
+            textSize = 34f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; letterSpacing = 0.12f
+            setSingleLine(true); ellipsize = android.text.TextUtils.TruncateAt.START; minHeight = (56 * d).toInt()
+            contentDescription = L("दबाए गए नंबर", "Digits pressed")
+        }
+        val grid = GridLayout(this).apply { columnCount = 3; useDefaultMargins = false }
+        val letters = mapOf("2" to "ABC", "3" to "DEF", "4" to "GHI", "5" to "JKL", "6" to "MNO", "7" to "PQRS", "8" to "TUV", "9" to "WXYZ", "0" to "+")
+        for (k in listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#")) grid.addView(TextView(this).apply {
+            val sub = letters[k]
+            text = if (sub == null) k else android.text.SpannableString(k + "\n" + sub).apply {
+                setSpan(android.text.style.RelativeSizeSpan(0.42f), k.length + 1, length, 0)
+                setSpan(android.text.style.ForegroundColorSpan(Color.parseColor("#9AA3B2")), k.length + 1, length, 0)
+            }
+            textSize = 30f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; includeFontPadding = false
+            isClickable = true; isFocusable = true; contentDescription = k
+            background = android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(Color.parseColor("#66FFFFFF")),
+                GradientDrawable().apply { setColor(Color.parseColor("#1E2533")); cornerRadius = 36 * d }, null)
+            layoutParams = GridLayout.LayoutParams(GridLayout.spec(GridLayout.UNDEFINED, 1f), GridLayout.spec(GridLayout.UNDEFINED, 1f)).apply {
+                width = 0; height = (68 * d).toInt(); setMargins((6 * d).toInt(), (5 * d).toInt(), (6 * d).toInt(), (5 * d).toInt())
+            }
+            // the tone sounds while the finger is down, like a normal phone
+            setOnTouchListener { v, e ->
+                when (e.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        v.isPressed = true; v.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                        top()?.playDtmfTone(k[0]); typed.append(k)
+                    }
+                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                        v.isPressed = false; top()?.stopDtmfTone(); if (e.actionMasked == android.view.MotionEvent.ACTION_UP) v.performClick()
+                    }
+                }
+                true
+            }
+        })
+        keypad = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; visibility = android.view.View.GONE; setPadding(0, 0, 0, (8 * d).toInt())
+            addView(typed); addView(grid, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
         simRow = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         // the buttons sit at the BOTTOM, where the thumb is (owner, 19 Nov 2026); the space in between stays empty
         val gap = android.view.View(this).apply { layoutParams = LinearLayout.LayoutParams(1, 0, 1f) }
@@ -435,7 +472,7 @@ class InCallActivity : AppCompatActivity() {
         }
         // Back leaves the call running and the screen reachable (Recents / the notification)
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() { if (CallHub.calls.isEmpty()) finish() else moveTaskToBack(true) }
+            override fun handleOnBackPressed() { if (CallHub.calls.isEmpty()) finishAndRemoveTask() else moveTaskToBack(true) }
         })
         answerIf(intent)
         // the screen goes dark at the ear, so the cheek presses nothing
@@ -476,7 +513,8 @@ class InCallActivity : AppCompatActivity() {
     private fun refresh() {
         who.removeCallbacks(tick)
         val c = top()
-        if (c == null) { prox?.let { if (it.isHeld) it.release() }; finish(); return }
+        // the call is over: the call screen leaves Recents too (owner: two cards to swipe away after a call)
+        if (c == null) { prox?.let { if (it.isHeld) it.release() }; finishAndRemoveTask(); return }
         val num = CallHub.number(c)
         who.text = SmsStore.contactName(this, num) ?: num.ifEmpty { "Private number" }
         val saved = SmsStore.contactName(this, num) != null

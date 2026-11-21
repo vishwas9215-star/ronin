@@ -240,6 +240,8 @@
             android:name=".InCallActivity"
             android:enabled="false"
             android:exported="false"
+            android:excludeFromRecents="true"
+            android:autoRemoveFromRecents="true"
             android:label="Ronin Call"
             android:launchMode="singleInstance"
             android:taskAffinity="com.ronin.browser.incall"

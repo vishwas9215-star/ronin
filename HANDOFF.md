@@ -295,6 +295,14 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Notification ✕ Close sent "pause": the next 1 s media check showed a paused card again (the 'flaky' song test).
   Now Close sends "stop" (pause + let go). Owner said "हाँ, V3.12.0 publish करो" 16:26.
 
+## 3.14.2 (branch `claude/v3.14.2-calls`; NOT published) — owner 21 Nov 09:44 (calls chat; built on 3.14.1, the other chat's work untouched)
+- After a call there were two Recents cards (Ronin Calls + the call screen): InCallActivity is now
+  excludeFromRecents + autoRemoveFromRecents and leaves with finishAndRemoveTask (back to it: the ongoing call notification).
+  DeviceTest callScreenNeverLeavesASecondRecentsCard.
+- In-call keypad (customer care "press 1"): 12 big round keys over the whole width (68 dp, letters under the digits),
+  tone while the finger is down, buzz, and the pressed digits shown large above the keys.
+- Only Calls.kt (InCallActivity), the manifest entry of InCallActivity, a DeviceTest and VERSION changed.
+
 ## 3.14.1 (BUILT on branch `claude/v3.14.1`, draft PR #2; NOT merged, NOT published) — owner 21 Nov 06:46
 Asked: a YouTube / YouTube Music song keeps playing after a swipe to Home AND after swiping Ronin away from Recents
 (3.14.0 stopped it on a Recents swipe).

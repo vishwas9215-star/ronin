@@ -491,6 +491,15 @@ class DeviceTest {
     }
 
     @Test
+    fun callScreenNeverLeavesASecondRecentsCard() {
+        // owner 21 Nov 2026: after a call he had to swipe away two cards (Ronin Calls + the call screen)
+        val info = app.packageManager.getActivityInfo(android.content.ComponentName(app, InCallActivity::class.java),
+            android.content.pm.PackageManager.MATCH_DISABLED_COMPONENTS)
+        assertTrue("call screen shows in Recents", info.flags and android.content.pm.ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS != 0)
+        assertTrue("call screen card stays after the call", info.flags and android.content.pm.ActivityInfo.FLAG_AUTO_REMOVE_FROM_RECENTS != 0)
+    }
+
+    @Test
     fun callButtonsShowWhatWasTappedAtOnce() {
         // 3.13.3 (owner: Speaker needed 2-3 taps): a tap shows its result at once, before Android confirms,
         // and on speaker the screen must not go dark near the face (no proximity lock)
