@@ -85,5 +85,5 @@ jobs:
           gh release view ronin-home >/dev/null 2>&1 || gh release create ronin-home --target "$GITHUB_SHA" --prerelease --title "Ronin Home (test builds)" --notes "Ronin Home TV launcher test builds + emulator screenshots. Not installed anywhere automatically."
           sleep 2
           gh release upload ronin-home RoninHome.apk --clobber
-          for f in qa/*; do [ -f "$f" ] && cp "$f" "qa-$(basename "$f")" && gh release upload ronin-home "qa-$(basename "$f")" --clobber; done
+          for f in qa/*; do [ -s "$f" ] && cp "$f" "qa-$(basename "$f")" && gh release upload ronin-home "qa-$(basename "$f")" --clobber; done
           cat qa/results.txt >> "$GITHUB_STEP_SUMMARY" || true

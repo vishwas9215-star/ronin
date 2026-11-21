@@ -32,13 +32,14 @@ class ClockView(ctx: Context) : FrameLayout(ctx) {
         setBackgroundColor(Color.BLACK)
         box.addView(TextClock(ctx).apply {
             format12Hour = "h:mm"; format24Hour = "HH:mm"; textSize = 150f
+            gravity = Gravity.CENTER; isSingleLine = true
             setTextColor(0xFFE6E9EF.toInt()); typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL); includeFontPadding = false
-        })
+        }, LinearLayout.LayoutParams(ctx.dp(640), -2))
         box.addView(TextClock(ctx).apply {
             format12Hour = "EEEE, d MMMM"; format24Hour = "EEEE, d MMMM"; textSize = 26f
             setTextColor(0xFF8D96A8.toInt()); typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
         }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = ctx.dp(8) })
-        addView(box, LayoutParams(-2, -2, Gravity.CENTER))
+        addView(box, LayoutParams(ctx.dp(640), -2, Gravity.CENTER))
     }
 
     override fun onAttachedToWindow() { super.onAttachedToWindow(); h.postDelayed(move, 60_000) }
