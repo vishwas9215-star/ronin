@@ -37,6 +37,8 @@ class DeviceTest {
     init {
         // the "which parts?" question of the first start does not cover the tests
         InstrumentationRegistry.getInstrumentation().targetContext.getSharedPreferences("ronin_parts", Context.MODE_PRIVATE).edit().putBoolean("asked", true).putBoolean("adultAsked", true).commit()
+        // a song page kept from an earlier test (3.14.1) is let go first
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { if (KeptPlayer.holding) KeptPlayer.release() }
         // 3.14 keeps the open tabs for the next start: every test starts with one fresh tab
         InstrumentationRegistry.getInstrumentation().targetContext.getSharedPreferences("ronin", Context.MODE_PRIVATE).edit().remove("savedTabs").remove("claudeView").commit()
     }
@@ -799,17 +801,8 @@ class DeviceTest {
         }
     }
 
-    @Test
-    fun closingRoninEndsTheSongCard() {
-        val song = Base64.encodeToString(inst.context.assets.open("song.webm").readBytes(), Base64.NO_WRAP)
-        val sc = ActivityScenario.launch(MainActivity::class.java)
-        sc.onActivity { a -> a.loadHtmlForTest("<html><head><title>Close test - YouTube</title></head><body><video id=v loop playsinline src='data:video/webm;base64,$song'></video></body></html>", "https://m.youtube.com/ronin-close-test") }
-        Thread.sleep(3000)
-        eval(sc, "document.getElementById('v').play(); 1")
-        assertTrue("no 'playing' notification", waitFor(15) { ourNotification() })
-        sc.close() // like a swipe-away: the page is gone
-        assertTrue("player card (and its wake lock) left behind after Ronin closed", waitFor(10) { !ourNotification() })
-    }
+    // (3.14.0 closingRoninEndsTheSongCard: since 3.14.1 a PLAYING YouTube song outlives the closed screen on purpose;
+    //  a paused one does not - see aPausedSongIsNotKeptAfterASwipe / stopFromTheCardEndsAKeptSong)
 
     @Test
     fun historyIsWrittenWithoutStoppingTheScreen() {
