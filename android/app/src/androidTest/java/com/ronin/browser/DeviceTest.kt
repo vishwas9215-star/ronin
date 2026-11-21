@@ -1149,4 +1149,83 @@ class DeviceTest {
             }
         } finally { store.httpSites = store.httpSites - "ronin-remembered.invalid" - "ronin-badcert.invalid" }
     }
+
+    // ---- 3.14.1: the song goes on after Ronin is swiped away from Recents ----------------------------
+
+    private fun evalKept(js: String): String {
+        val latch = CountDownLatch(1); var out = ""
+        inst.runOnMainSync { val w = KeptPlayer.webForTest(); if (w == null) latch.countDown() else w.evaluateJavascript(js) { out = it ?: ""; latch.countDown() } }
+        latch.await(15, TimeUnit.SECONDS); return out
+    }
+
+    /** A song page on a song site (YouTube's address), playing; returns the screen. */
+    private fun playSong(tag: String): ActivityScenario<MainActivity> {
+        val song = Base64.encodeToString(inst.context.assets.open("song.webm").readBytes(), Base64.NO_WRAP)
+        val sc = ActivityScenario.launch(MainActivity::class.java)
+        sc.onActivity { a -> a.loadHtmlForTest("<html><head><title>$tag - YouTube</title></head><body><video id=v loop playsinline src='data:video/webm;base64,$song'></video></body></html>", "https://m.youtube.com/$tag") }
+        Thread.sleep(3000)
+        eval(sc, "document.getElementById('v').play(); 1")
+        assertTrue("song did not start", waitFor(10) { eval(sc, "document.getElementById('v').currentTime").toDoubleOrNull()?.let { it > 0.5 } == true })
+        assertTrue("no 'playing' notification", waitFor(15) { ourNotification() })
+        return sc
+    }
+
+    @Test
+    fun aSongKeepsPlayingAfterRoninIsSwipedAwayAndComesBack() {
+        val sc = playSong("ronin-keep-test")
+        var w: android.webkit.WebView? = null
+        sc.onActivity { a -> w = a.webForTest(); a.finishAndRemoveTask() } // = swiped away from Recents
+        assertTrue("the song page was not kept", waitFor(10) { KeptPlayer.holding })
+        assertTrue("another page was kept", KeptPlayer.webForTest() === w)
+        val t1 = evalKept("document.getElementById('v').currentTime").toDouble()
+        Thread.sleep(5000)
+        val t2 = evalKept("document.getElementById('v').currentTime").toDouble()
+        assertTrue("song stopped after the swipe ($t1 -> $t2)", t2 > t1 + 3)
+        assertTrue("player card gone after the swipe", ourNotification())
+        assertTrue("media session not PLAYING", MediaPlaybackService.running && MediaPlaybackService.lastPlaying)
+        try { sc.close() } catch (e: Throwable) { }
+        // Ronin opened again: the same page is back as a tab, still playing
+        ActivityScenario.launch(MainActivity::class.java).use { sc2 ->
+            Thread.sleep(1500)
+            var same = false
+            sc2.onActivity { a -> same = a.webForTest() === w }
+            assertTrue("the kept song page did not come back as the front tab", same)
+            assertFalse(KeptPlayer.holding)
+            val a1 = eval(sc2, "document.getElementById('v').currentTime").toDouble()
+            Thread.sleep(3000)
+            assertTrue("song not playing after coming back", eval(sc2, "document.getElementById('v').currentTime").toDouble() > a1 + 1.5)
+            shot("28-song-back-after-swipe")
+            // the card's ✕ ends it all
+            app.startService(Intent(app, MediaPlaybackService::class.java).setAction(MediaPlaybackService.ACTION_CLOSE))
+            assertTrue("card still there after Close", waitFor(10) { !ourNotification() })
+        }
+    }
+
+    @Test
+    fun stopFromTheCardEndsAKeptSong() {
+        val sc = playSong("ronin-keep-stop")
+        sc.onActivity { a -> a.finishAndRemoveTask() }
+        assertTrue("the song page was not kept", waitFor(10) { KeptPlayer.holding })
+        try { sc.close() } catch (e: Throwable) { }
+        // the notification's play / pause work on the kept page
+        app.startService(Intent(app, MediaPlaybackService::class.java).setAction(MediaPlaybackService.ACTION_PLAY_PAUSE))
+        assertTrue("pause did not reach the kept page", waitFor(8) { evalKept("document.getElementById('v').paused") == "true" })
+        app.startService(Intent(app, MediaPlaybackService::class.java).setAction(MediaPlaybackService.ACTION_PLAY_PAUSE))
+        assertTrue("play did not reach the kept page", waitFor(8) { evalKept("document.getElementById('v').paused") == "false" })
+        app.startService(Intent(app, MediaPlaybackService::class.java).setAction(MediaPlaybackService.ACTION_CLOSE))
+        assertTrue("kept page not let go after Stop", waitFor(10) { !KeptPlayer.holding })
+        assertTrue("card / service left behind after Stop", waitFor(10) { !ourNotification() && !MediaPlaybackService.running })
+    }
+
+    @Test
+    fun aPausedSongIsNotKeptAfterASwipe() {
+        val sc = playSong("ronin-keep-paused")
+        eval(sc, "document.getElementById('v').pause(); 1")
+        Thread.sleep(17_000) // longer than the gap between two songs (15 s)
+        sc.onActivity { a -> a.finishAndRemoveTask() }
+        Thread.sleep(3000)
+        assertFalse("a paused song page was kept", KeptPlayer.holding)
+        assertTrue("card / wake lock left behind", waitFor(10) { !ourNotification() })
+        try { sc.close() } catch (e: Throwable) { }
+    }
 }

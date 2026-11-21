@@ -104,7 +104,7 @@ class MediaPlaybackService : Service() {
                         PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or PlaybackStateCompat.ACTION_STOP
                 )
                 .setState(
-                    if (playing) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED,
+                    (if (playing) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED).also { lastPlaying = playing },
                     PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, if (playing) 1f else 0f
                 )
                 .build()
@@ -172,15 +172,18 @@ class MediaPlaybackService : Service() {
         stopSelf()
     }
 
-    /** Ronin was swiped away from Recents: the page that played is gone, so the card and the wake lock go too. */
+    /**
+     * Ronin was swiped away from Recents. A YouTube song that plays keeps playing (KeptPlayer holds its page; owner
+     * 21 Nov 06:46); anything else: the card and the wake lock go.
+     */
     override fun onTaskRemoved(rootIntent: Intent?) {
         val c = rootIntent?.component?.className
-        if (c == null || c == MainActivity::class.java.name) stopEverything()
+        if ((c == null || c == MainActivity::class.java.name) && !KeptPlayer.wantKeep && !KeptPlayer.holding) stopEverything()
         super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
-        running = false
+        running = false; lastPlaying = false
         dropWake()
         session.release()
         super.onDestroy()
@@ -188,6 +191,8 @@ class MediaPlaybackService : Service() {
 
     companion object {
         @Volatile var running = false
+        /** The media session's last state (true = PLAYING), for the device tests. */
+        @Volatile var lastPlaying = false
         const val CHANNEL = "media"
         const val NOTIFICATION_ID = 77
         const val ACTION_UPDATE = "com.ronin.browser.UPDATE"
