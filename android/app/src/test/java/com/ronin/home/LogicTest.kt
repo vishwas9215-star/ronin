@@ -82,4 +82,11 @@ class LogicTest {
         assertTrue(s.topMovies.size <= 10 && s.hero != null)
         assertEquals(s, Shelf.fromJson(s.toJson()))
     }
+
+    @Test fun onlyGoogleHomeMainScreenIsReplaced() {
+        assertTrue(HomeKeyService.isGoogleHomeScreen("com.google.android.tvlauncher", "com.google.android.tvlauncher.MainActivity"))
+        assertTrue(HomeKeyService.isGoogleHomeScreen(Catalog.LAUNCHER_X, "com.google.android.apps.tv.launcherx.home.HomeActivity"))
+        assertFalse(HomeKeyService.isGoogleHomeScreen(Catalog.LAUNCHER_X, "com.google.android.apps.tv.launcherx.details.DetailsActivity"))
+        assertFalse(HomeKeyService.isGoogleHomeScreen("com.netflix.ninja", "com.netflix.MainActivity"))
+    }
 }

@@ -28,9 +28,18 @@ class HomeKeyService : AccessibilityService() {
         return true
     }
 
+    private var lastAssistant = 0L
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Diagnostics only (which screen is on top), kept short; helps if a TV build behaves differently.
-        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) note("window ${event.packageName}/${event.className}")
+        if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        val pkg = event.packageName?.toString() ?: return
+        val cls = event.className?.toString() ?: ""
+        note("window $pkg/$cls")
+        val now = SystemClock.elapsedRealtime()
+        if (pkg in ASSISTANT) { lastAssistant = now; return }
+        // Some TVs do not hand the HOME button to us: then the Google home screen appears.
+        // Replace ONLY its main screen, and never right after Gemini/voice (it may be showing a movie page).
+        if (isGoogleHomeScreen(pkg, cls) && now - lastAssistant > 8_000) showHome("google-home")
     }
 
     override fun onInterrupt() {}
@@ -51,5 +60,16 @@ class HomeKeyService : AccessibilityService() {
         } catch (e: Exception) { }
     }
 
-    companion object { const val TAG = "RoninHome" }
+    companion object {
+        const val TAG = "RoninHome"
+        val ASSISTANT = setOf("com.google.android.katniss", "com.google.android.apps.bard", "com.google.android.googlequicksearchbox")
+        private val HOMES = setOf(Catalog.LAUNCHER_X, "com.google.android.tvlauncher")
+
+        /** Main screen of the Google home only (not its movie / details / search pages). */
+        fun isGoogleHomeScreen(pkg: String, cls: String): Boolean {
+            if (pkg !in HOMES) return false
+            val c = cls.substringAfterLast('.')
+            return c == "MainActivity" || c == "HomeActivity" || c == "LauncherActivity"
+        }
+    }
 }
