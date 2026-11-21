@@ -303,3 +303,7 @@ Installed on laptop: 3.1.2 (C:\Ronin Ecosystem\Ronin Browser). Tested OK on lapt
       "Claude का browser अभी चालू नहीं" + Reload when the server is off (server part not deployed yet)
 - [-] Two APKs / removing call recorder / permission changes / silent self-update: owner's decision (questions in HANDOFF)
 
+## 21 Nov — 3.14.1 Android (branch claude/v3.14.1, draft PR #2; NOT published)
+- [b] A YouTube / YouTube Music song keeps playing after Ronin is swiped away from Recents; opening Ronin brings the
+      same tab back, still playing; the card's play / pause / ✕ work; paused 10 min or ✕ = everything let go
+
