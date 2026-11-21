@@ -310,6 +310,12 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
   via RecognizerIntent hi-IN, prompt() fallback) > 📛 SIM (CNAP) name > 🛠 name next to the number in a company SMS
   (CallerId.personIn, e.g. "technician Ramesh Kumar (98…)") > number. Chips "🔍 कौन?" (Google search of the number in
   Ronin Browser, only on tap) and "🎤 नाम". Ringing notice / in-call screen use CallInfo.display / tag.
+- Caller-ID QA (independent, 2 blockers) fixed: order-time call is level "maybe" (never trusted) and order words are
+  delivery / technician only; only a scam-clean, non-promo, non-money company SMS vouches; UPI handles (98…@ybl) are
+  not numbers; only your own ANSWERED outgoing call = "known" (unanswered = grey hint, long incoming scam call no
+  longer trusted); names must be Capitalised (no "WILL CALL"); SMS read without LIMIT (break at 1500); CallerId.known()
+  never reads on the main thread (cached / empty + background warm), call screening runs in a thread, after-call
+  notice in a thread, warm 4 s after each SMS; SIM name said once in the ring notice; voice cancel = no typing box.
 
 ## 3.14.3 (branch `claude/v3.14.3`; NOT published) — owner 21 Nov 11:27–11:31 (calls chat)
 - **Play Protect called Ronin "harmful"** (tablet + phone) since the SMS / call log / accessibility permissions came back

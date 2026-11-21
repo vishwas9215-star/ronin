@@ -434,7 +434,8 @@ class LogicTest {
         assertNull(CallerId.personIn("Your order will be delivered today. Contact 9876501234"))
         val k2 = CallerId.Known(service = mapOf("9876501234" to "Airtel"), people = mapOf("9876501234" to "Ramesh (Airtel)"))
         assertTrue(CallerId.judge("9876501234", false, "", k2, now)!!.text.contains("Ramesh (Airtel)"))
-        assertEquals("known", CallerId.judge("+918045671234", false, "", k, now)!!.level) // during the Swiggy order
+        assertEquals("maybe", CallerId.judge("+918045671234", false, "", k, now)!!.level) // during the Swiggy order: a hint only
+        assertFalse(CallerId.trusted(CallerId.judge("+918045671234", false, "", k, now))) // QA: a fake courier SMS must not open the door
         assertEquals("info", CallerId.judge("+918045671234", false, "", k, now + 8 * 3600_000L)!!.level) // long after it
         assertEquals("info", CallerId.judge("1401234567", false, "", k, now + 8 * 3600_000L)!!.level) // telemarketing: grey
         assertNull(CallerId.judge("9415012345", true, "", k, now)) // a contact
@@ -446,6 +447,17 @@ class LogicTest {
         assertTrue(CallerId.companyHeader("VM-AIRTEL-S")); assertFalse(CallerId.companyHeader("+919812300011")); assertFalse(CallerId.companyHeader("AIRTEL"))
         assertTrue(CallerId.promo("VM-OFFERS-P"))
         assertTrue(CallerId.orderLike("Your Swiggy order is out for delivery")); assertFalse(CallerId.orderLike("Your bill of Rs 499 is due"))
+        assertFalse(CallerId.orderLike("Your bill of Rs 499 is due. Visit airtel.in")); assertFalse(CallerId.orderLike("Install the app now"))
+        assertTrue(CallerId.orderLike("Airtel technician Ramesh will visit you today"))
+        // QA: a UPI handle is not a phone number; a bank / UPI SMS never vouches
+        assertEquals(emptyList<String>(), CallerId.numbersIn("Rs 1.00 credited to A/c XX1234 from 9876543210@ybl"))
+        assertTrue(CallerId.moneySms("Money requested by 9876543210 Rs 500")); assertFalse(CallerId.moneySms("Technician Ramesh 9876501234 will visit"))
+        // QA: all-caps words are not a name
+        assertNull(CallerId.personIn("OUR EXECUTIVE WILL CALL YOU FROM 9876501234"))
+        assertNull(CallerId.personIn("Technician Visit Scheduled for today, call 9876501234"))
+        assertNull(CallerId.personIn("Call Helpline 9876501234"))
+        val k3 = CallerId.Known(dialed = setOf("9000000001"))
+        assertEquals("info", CallerId.judge("9000000001", false, "", k3, now)!!.level) // you called, no answer: a hint, not trust
         assertEquals("Airtel", CallerId.brand("VM-AIRTEL-S"))
     }
 }

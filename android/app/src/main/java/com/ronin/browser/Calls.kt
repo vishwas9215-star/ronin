@@ -53,7 +53,9 @@ object CallInfo {
     /** A short line for a caller not in contacts (3.14.3: smart, see CallerId; red only for a real risk). */
     fun label(ctx: Context, number: String, cnap: String = cnapOf(ctx, number)): String {
         val w = CallerId.judge(number, SmsStore.contactName(ctx, number) != null, cnap, CallerId.known(ctx)) ?: return ""
-        return (if (cnap.isNotEmpty()) L("📛 SIM पर नाम: ", "📛 Name on the SIM: ") + cnap + " · " else "") + w.text
+        if (cnap.isEmpty()) return w.text
+        // the judge's own "name from the SIM" line already says it: say the name once
+        return L("📛 SIM पर नाम: ", "📛 Name on the SIM: ") + cnap + if (w.text.startsWith("📛")) L(" · contact में नहीं", " · not in contacts") else " · " + w.text
     }
 
     /** The owner's own name for a number (spoken once, kept on the phone; not a contact). */
@@ -174,7 +176,8 @@ class CallsActivity : PhonePage() {
             "label" -> bg { done(CallInfo.label(this, a.optString("number"))) }
             // owner 21 Nov 2026 (both hands hurt): say a name for an unknown number once; kept on the phone, not a contact
             "nameVoice" -> listen(L("इस नंबर का नाम बोलें", "Say a name for this number")) { text ->
-                if (text != null) CallInfo.setTag(this, a.optString("number"), text); done(text)
+                if (text != null && text != PhonePage.NO_VOICE) CallInfo.setTag(this, a.optString("number"), text)
+                done(if (text == null || text == PhonePage.NO_VOICE) text else CallInfo.tag(this, a.optString("number")))
             }
             "setTag" -> { CallInfo.setTag(this, a.optString("number"), a.optString("name")); done(true) }
             "set" -> {
@@ -195,7 +198,19 @@ class CallsActivity : PhonePage() {
 
 /** Incoming calls first pass: unknown / foreign callers can be silenced (never emergency numbers). */
 class RoninCallScreen : CallScreeningService() {
+    // in a thread (QA 21 Nov): reading the call log + SMS for "is this number known?" must not hold the main thread;
+    // respondToCall may come from any thread. It also fills CallerId's cache for the ring / call screens right after.
     override fun onScreenCall(d: Call.Details) {
+        Thread {
+            var silence = false
+            try { silence = shouldSilence(d) } catch (e: Throwable) { }
+            val b = CallResponse.Builder()
+            if (Build.VERSION.SDK_INT >= 29) b.setSilenceCall(silence)
+            try { respondToCall(d, b.build()) } catch (e: Throwable) { }
+        }.start()
+    }
+
+    private fun shouldSilence(d: Call.Details): Boolean {
         val num = d.handle?.schemeSpecificPart ?: ""
         val p = CallInfo.prefs(this)
         val incoming = Build.VERSION.SDK_INT < 29 || d.callDirection == Call.Details.DIRECTION_INCOMING
@@ -207,9 +222,8 @@ class RoninCallScreen : CallScreeningService() {
             if (p.getBoolean("silenceUnknown", false) && !CallerId.trusted(CallerId.judge(num, false, "", CallerId.known(this)))) silence = true
             if (p.getBoolean("silenceForeign", false) && dg.startsWith("+") && !dg.startsWith("+91")) silence = true
         }
-        val b = CallResponse.Builder()
-        if (Build.VERSION.SDK_INT >= 29) b.setSilenceCall(silence)
-        respondToCall(d, b.build())
+        if (num.isNotEmpty()) CallerId.known(this) // warm for the ring screen even when nothing is silenced
+        return silence
     }
 }
 
@@ -303,7 +317,9 @@ object CallHub {
     }
 
     /** After a call from a number that is not saved: "Spam? Block / Report" in one tap. */
-    fun afterUnknown(ctx: Context, num: String) {
+    fun afterUnknown(ctx: Context, num: String) { Thread { try { afterUnknownNow(ctx.applicationContext, num) } catch (e: Throwable) { } }.start() }
+
+    private fun afterUnknownNow(ctx: Context, num: String) {
         if (num.isEmpty() || CallInfo.isEmergency(ctx, num) || SmsStore.contactName(ctx, num) != null) return
         if (!SmsStore.canReadContacts(ctx)) return // without contacts everyone looks unknown
         // your own call, your order's company, a bank's 1600 line: no "spam?" question after it (owner 21 Nov)

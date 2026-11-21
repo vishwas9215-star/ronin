@@ -76,10 +76,11 @@
       const named = r => !!(r.name || r.tag || r.sim || r.guess);
       const mine = rows.filter(r => !q || [r.name, r.tag, r.sim, r.guess].some(x => (x || '').toLowerCase().includes(q)) || (r.number || '').includes(q)).slice(0, 300);
       const chip = (txt, id, f) => h('button', { cls: 'chip', 'data-act': id, on: { click: (e) => { e.stopPropagation(); f(); } } }, txt);
-      const whoIs = r => ask('open', { url: 'https://www.google.com/search?q=' + encodeURIComponent('"' + (r.number.replace(/\D/g, '').length > 10 && r.number.replace(/\D/g, '').startsWith('91') ? r.number.replace(/\D/g, '').slice(-10) : r.number.replace(/\D/g, '')) + '"') });
+      const whoIs = r => { const d = r.number.replace(/\D/g, ''); ask('open', { url: 'https://www.google.com/search?q=' + encodeURIComponent('"' + (d.length > 10 ? d.slice(-10) : d) + '"') }); };
       const nameIt = async r => {
         let n = await ask('nameVoice', { number: r.number });
-        if (n == null) { n = prompt(L('इस नंबर का नाम (जैसे: Airtel वाले भैया)', 'A name for this number (e.g. Airtel technician)'), r.tag || ''); if (n == null) return; await ask('setTag', { number: r.number, name: n }); }
+        if (n == null) return; // the owner said nothing / closed it: no typing box (hands hurt)
+        if (n === '__no_voice__') { n = prompt(L('इस नंबर का नाम (जैसे: Airtel वाले भैया)', 'A name for this number (e.g. Airtel technician)'), r.tag || ''); if (n == null) return; await ask('setTag', { number: r.number, name: n }); }
         r.tag = String(n).trim(); fill();
       };
       // 3.14.3 (owner 21 Nov): red only for a real risk; your order's company / your own call / a 1600 bank line stay calm

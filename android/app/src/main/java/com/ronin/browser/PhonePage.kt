@@ -37,11 +37,16 @@ abstract class PhonePage : AppCompatActivity() {
         pendingSpeech?.invoke(r.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim()?.ifEmpty { null }); pendingSpeech = null
     }
     /** The phone's own voice typing (Hindi first); null when it is not there or nothing was said. */
+    companion object { const val NO_VOICE = "__no_voice__" } // this phone has no voice typing: the page asks by keyboard
+
     protected fun listen(prompt: String, then: (String?) -> Unit) {
         val i = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "hi-IN").putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, prompt)
-        runOnUiThread { try { pendingSpeech = then; speech.launch(i) } catch (e: Exception) { pendingSpeech = null; then(null) } }
+        runOnUiThread {
+            pendingSpeech?.invoke(null) // an earlier question still open: it ends empty, never hangs
+            try { pendingSpeech = then; speech.launch(i) } catch (e: Exception) { pendingSpeech = null; then(NO_VOICE) }
+        }
     }
     private var pendingPerm: (() -> Unit)? = null
     private val permAsk = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { pendingPerm?.invoke(); pendingPerm = null }

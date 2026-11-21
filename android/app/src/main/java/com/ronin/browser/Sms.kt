@@ -385,6 +385,7 @@ class SmsDeliverReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.SMS_DELIVER_ACTION) return
         val parts = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return
+        CallerId.warm(ctx, 4000) // an order / technician SMS (once it is saved): the next call already knows it
         if (parts.isEmpty()) return
         val address = parts[0].displayOriginatingAddress ?: parts[0].originatingAddress ?: ""
         val body = parts.joinToString("") { it.displayMessageBody ?: "" }
