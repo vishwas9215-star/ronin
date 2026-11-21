@@ -86,6 +86,7 @@ object KeptPlayer {
         w.evaluateJavascript(PageScripts.lowQuality(true), null) // nobody looks: the smallest picture (battery)
         playing = playing0; title = title0; lastPlayingAt = if (playing0) System.currentTimeMillis() else lastPlayed
         kept = Kept(w, url, title0, playing0, lastPlayingAt)
+        MainActivity.mediaOwner = 0 // the card belongs to the kept page now
         PlayerBridge.control = { c -> ui.post { control(c) } }
         ui.removeCallbacks(poll); ui.postDelayed(poll, 2000)
     }

@@ -1235,4 +1235,31 @@ class DeviceTest {
         assertFalse("a closed tab's page was kept", KeptPlayer.holding)
         try { sc.close() } catch (e: Throwable) { }
     }
+
+    @Test
+    fun aScreenRestoredWithOnlyTheKeptSongTabDoesNotCrash() {
+        // saved state holds only the song tab while that page is kept: Ronin must open on it, not crash
+        val url = "https://m.youtube.com/ronin-keep-restore"
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            Thread.sleep(1500)
+            sc.onActivity { a -> a.loadHtmlForTest("<html><body><h1>song tab</h1></body></html>", url) }
+            Thread.sleep(1000)
+            var kept: android.webkit.WebView? = null
+            inst.runOnMainSync {
+                val w = RoninWebView(android.content.MutableContextWrapper(app))
+                w.loadDataWithBaseURL(url, "<html><body><h1>kept song</h1></body></html>", "text/html", "utf-8", null)
+                KeptPlayer.hold(app, w, url, "kept song", true, System.currentTimeMillis())
+                kept = w
+            }
+            assertTrue(KeptPlayer.holding)
+            sc.recreate() // the system makes the screen again from its saved state (tabs = only the song tab)
+            Thread.sleep(1500)
+            assertEquals(Lifecycle.State.RESUMED, sc.state)
+            var same = false; var n = 0
+            sc.onActivity { a -> same = a.currentWebForTest() === kept; n = a.tabUrlsForTest().size }
+            assertTrue("the kept song page is not the front tab after the restore", same)
+            assertEquals("a second copy of the song tab", 1, n)
+            assertFalse(KeptPlayer.holding)
+        }
+    }
 }

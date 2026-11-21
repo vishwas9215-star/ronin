@@ -183,17 +183,19 @@ class MainActivity : AppCompatActivity() {
             !restore.isNullOrEmpty() -> {
                 val keep = restore.take(40).toMutableList(); if (kept != null) keep.remove(kept.url) // no second copy of the song tab
                 keep.forEach { newTab(it, select = false, lazy = true) }
-                select(tabs[savedInstanceState.getInt("active", 0).coerceIn(0, tabs.size - 1)])
+                // only the song tab was open: it comes back just below (adoptKept), nothing else to show here
+                if (tabs.isNotEmpty()) select(tabs[savedInstanceState.getInt("active", 0).coerceIn(0, tabs.size - 1)])
             }
             saved != null && saved.first.isNotEmpty() -> {
                 saved.first.forEach { newTab(it, select = false, lazy = true) }
-                select(tabs[saved.second.coerceIn(0, tabs.size - 1)])
+                if (tabs.isNotEmpty()) select(tabs[saved.second.coerceIn(0, tabs.size - 1)])
                 if (start != null && start.startsWith("http")) openFromOutside(start)
             }
             start != null && start.startsWith("http") -> if (isClaudeLink(start) || Nav.claudePairingHost(start) != null) { newTab(HOME); openFromOutside(start) } else newTab(start)
             else -> if (kept == null) newTab(HOME)
         }
         if (kept != null) adoptKept(kept)
+        if (tabs.isEmpty()) newTab(HOME)
         restoring = false
         handleSpecial(intent)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -595,6 +597,7 @@ class MainActivity : AppCompatActivity() {
         k.web.visibility = View.GONE
         k.web.keepPlaying = true
         mediaTab = tab; mediaPlaying = k.playing; mediaTitle = k.title; lastPlayingAt = k.lastPlayingAt
+        mediaOwner = System.identityHashCode(this)
         lowered = true // onStart asks YouTube for its normal picture again
         PlayerBridge.control = { a -> ui.post { mediaControl(a) } }
         select(tab)
@@ -1206,6 +1209,7 @@ a{display:block;margin:20px auto 0;max-width:340px;padding:18px;border-radius:14
     }
     fun historyForTest(): String = current?.web?.copyBackForwardList()?.let { l -> (0 until l.size).joinToString(" | ") { i -> (if (i == l.currentIndex) "*" else "") + (l.getItemAtIndex(i)?.url ?: "").take(60) } } ?: ""
     /** Like a real page: its history entry carries its own address (loadHtmlForTest's do not). */
+    fun currentWebForTest(): WebView? = current?.web
     fun loadPageForTest(html: String, baseUrl: String) {
         val t = current ?: newTab(HOME)
         t.url = baseUrl; t.topHost = Rules.hostOf(baseUrl)
@@ -1898,6 +1902,7 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
         if (playing && mediaTab != t) {
             mediaTab?.web?.keepPlaying = false
             mediaTab = t
+            mediaOwner = System.identityHashCode(this)
             if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 askNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
@@ -1991,7 +1996,11 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             if (canKeepPlaying() && liveScreens == 0) {
                 keptWeb = t.web
                 KeptPlayer.hold(this, t.web, t.url, mediaTitle, mediaPlaying, lastPlayingAt)
-            } else { KeptPlayer.wantKeep = false; MediaPlaybackService.stop(this) }
+            } else {
+                KeptPlayer.wantKeep = false
+                // the card belongs to whichever screen plays now: an older screen closing late never removes a newer one's
+                if (mediaOwner == 0 || mediaOwner == System.identityHashCode(this)) { mediaOwner = 0; MediaPlaybackService.stop(this) }
+            }
             mediaTab = null; mediaPlaying = false
         }
         readAloud?.shutdown()
@@ -2268,6 +2277,8 @@ h1{margin:0 0 4px;font-size:24px}p.sub{margin:0 0 6px;opacity:.7}p.note{margin-t
         /** Ronin's own error page: Reload, and "Open anyway" without https (only with pageKey). */
         /** Browser screens alive right now: a song page is kept only when the last one closes (else it stops). */
         @Volatile var liveScreens = 0
+        /** Which browser screen owns the player card now (0 = none / the kept page). */
+        @Volatile var mediaOwner = 0
         const val RELOAD_LINK = "https://ronin.home/reload"
         const val ERROR_PAGE = "https://ronin.home/error"
         const val HTTP_LINK = "https://ronin.home/http"

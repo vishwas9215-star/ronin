@@ -324,6 +324,10 @@ Asked: a YouTube / YouTube Music song keeps playing after a swipe to Home AND af
   background HandlerThread (no main-thread work per picture); Keeper poll plans its next run before asking the page
   (watchdog); the no-second-copy rule also for the savedInstanceState restore; closing / recovering the media tab
   clears KeptPlayer.wantKeep (DeviceTest closingTheSongTabNeverLeavesItToBeKept).
+- QA on 249df0d fixed: crash when the saved state held only the kept song tab (select on an empty list) -> guarded,
+  the kept page is adopted and selected, Home only if nothing at all (DeviceTest
+  aScreenRestoredWithOnlyTheKeptSongTabDoesNotCrash). MainActivity.mediaOwner: an older screen closing late stops
+  the player card only if it still owns it.
 - Device check: some phones (OxygenOS battery optimisation) kill apps on a Recents swipe even with a foreground
   service; if the song stops on his tablet, Settings -> Battery -> Ronin -> "Allow background activity".
 
