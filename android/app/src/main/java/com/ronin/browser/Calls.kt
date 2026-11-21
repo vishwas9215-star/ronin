@@ -273,6 +273,16 @@ object CallHub {
     val calls = ArrayList<Call>()
     val incoming = HashMap<Call, Boolean>()
 
+    /**
+     * "Report (Chakshu)" opens Ronin Browser on the filled form straight from the notification (Android 12+ does not let
+     * a receiver open a screen after a notification tap). Without Ronin Browser: the form in the phone's browser.
+     */
+    fun reportCall(ctx: Context, num: String, code: Int): PendingIntent {
+        val i = Intent(Intent.ACTION_VIEW, Uri.parse(Chakshu.FORM)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (Chakshu.hasBrowser(ctx)) i.setPackage("com.ronin.browser").putExtra(Chakshu.EXTRA, Chakshu.data("call", num, "", System.currentTimeMillis()))
+        return PendingIntent.getActivity(ctx, code, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+
     /** After a call from a number that is not saved: "Spam? Block / Report" in one tap. */
     fun afterUnknown(ctx: Context, num: String) {
         if (num.isEmpty() || CallInfo.isEmergency(ctx, num) || SmsStore.contactName(ctx, num) != null) return
@@ -288,7 +298,7 @@ object CallHub {
             .setContentText(L("स्पैम / धमकी वाली थी? एक tap में block या शिकायत करें।", "Spam or a threat? Block or report in one tap."))
             .setAutoCancel(true)
             .addAction(0, L("🚫 Block", "🚫 Block"), act("block", 1))
-            .addAction(0, L("📵 चक्षु पर शिकायत", "📵 Report (Chakshu)"), act("report", 2)).build()
+            .addAction(0, L("📵 चक्षु पर शिकायत", "📵 Report (Chakshu)"), reportCall(ctx, num, id * 4 + 2)).build()
         try { nm.notify(id, n) } catch (e: SecurityException) { }
     }
     var screen: (() -> Unit)? = null
@@ -349,10 +359,8 @@ class CallActionReceiver : BroadcastReceiver() {
                 if (id != 0) ctx.getSystemService(NotificationManager::class.java).cancel(id)
             }
             "report" -> {
-                // Ronin Phone (3.14.3) has no browser inside: Ronin Browser by package, else the phone's browser
-                val u = Uri.parse("https://sancharsaathi.gov.in/sfc/")
-                try { ctx.startActivity(Intent(Intent.ACTION_VIEW, u).setPackage("com.ronin.browser").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                catch (e: Exception) { try { ctx.startActivity(Intent(Intent.ACTION_VIEW, u).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e2: Exception) { } }
+                // older notifications: Ronin Browser on the filled Chakshu form
+                Chakshu.open(ctx, Chakshu.data("call", num, "", System.currentTimeMillis()))
                 if (id != 0) ctx.getSystemService(NotificationManager::class.java).cancel(id)
             }
             "decline" -> CallHub.calls.lastOrNull { CallHub.ringing(it) }?.reject(false, null)

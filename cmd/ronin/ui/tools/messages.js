@@ -237,7 +237,7 @@
         h('div', {}, isNumber ? h('button', { cls: 'pill', on: { click: () => ask('open', { url: 'tel:' + t.address }) } }, '📞') : '', ' ',
           h('button', { cls: 'pill', id: 'block', on: { click: () => block(t) } }, '🚫'), ' ',
           h('button', { cls: 'pill', id: 'del', on: { click: () => del(t) } }, '🗑'))),
-      t.cat === 'scam' ? h('div', { cls: 'card' }, L('🆘 ठगी हो गई? ', '🆘 Lost money? '), h('a', { cls: 'pill red', href: 'tel:1930' }, '📞 1930'), ' ', h('button', { cls: 'pill', on: { click: () => ask('open', { url: 'https://sancharsaathi.gov.in/sfc/' }) } }, L('चक्षु पर शिकायत', 'Report on Chakshu'))) : '',
+      t.cat === 'scam' ? h('div', { cls: 'card' }, L('🆘 ठगी हो गई? ', '🆘 Lost money? '), h('a', { cls: 'pill red', href: 'tel:1930' }, '📞 1930'), ' ', h('button', { cls: 'pill', id: 'chakshu', on: { click: () => { const m = msgs.filter(x => x.type === 1).pop() || msgs[msgs.length - 1] || {}; ask('chakshu', { address: m.address || t.address, body: m.body || '', date: m.date || 0 }); } } }, L('चक्षु पर शिकायत', 'Report on Chakshu'))) : '',
       body,
       // a company sender ("HDFCBK") cannot get a reply: no send box there
       isName(t.address) ? h('p', { cls: 'note', style: 'text-align:center' }, L('इस sender को जवाब नहीं भेजा जा सकता।', 'You cannot reply to this sender.')) :

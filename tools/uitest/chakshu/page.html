@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><title>Chakshu form copy (ids as on sancharsaathi.gov.in, 21 Nov 2026)</title>
+<button>Accept essential cookies</button>
+<select id="sfc-medium"><option value="">Select Medium</option><option value="1">Call</option><option value="2">SMS</option><option value="3">WhatsApp</option></select>
+<select id="sfc-category"><option value="">Select Category</option><option value="1">KYC</option><option value="2">Impersonation</option><option value="3">Customer care</option><option value="4">Online job / lottery /gifts/loan offers</option><option value="5">Sextortion</option><option value="6">IVR</option><option value="7">Malicious link</option><option value="9">Investment</option><option value="10">DoT</option><option value="11">Relative</option><option value="30">Other</option></select>
+<input type="file" id="user-sfc-file">
+<input type="radio" id="sms-without-shortcode" name="t"><input type="radio" id="sms-with-shortcode" name="t">
+<input id="suspected-number"><input id="suspected-shortcode" maxlength="14">
+<input id="sfc-date-input" readonly><input id="sfc-time-input">
+<textarea id="sfc-remarks" maxlength="500"></textarea>
+<input id="sms-cta"><input id="sms-cta-url">
+<input id="mobile"><input id="captcha">
+<button id="send-otp" onclick="document.getElementById('otpbox').style.display='block'">Verify Mobile via OTP</button>
+<div id="otpbox" style="display:none"><input id="mobile-otp"><button id="verify-otp" onclick="window.verified=this.previousElementSibling.value;document.getElementById('sub').style.display='block'">Verify OTP</button></div>
+<div id="sub" style="display:none"><input type="checkbox" id="declaration"><button id="preview-button" onclick="window.previewed=true">Preview</button><button id="submit-form" onclick="window.submitted=true">Submit</button></div>
+<script>window.changes=[];document.getElementById('user-sfc-file').addEventListener('change',e=>window.changes.push(e.target.files.length+':'+(e.target.files[0]||{}).name+':'+(e.target.files[0]||{}).size))</script>

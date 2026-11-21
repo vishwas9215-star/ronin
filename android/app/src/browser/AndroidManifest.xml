@@ -12,6 +12,8 @@
 
     <!-- only Ronin Phone (same signing key) may take the family's ⭐ saved SMS copies over from the old browser -->
     <permission android:name="com.ronin.permission.SAVED_SMS" android:protectionLevel="signature" />
+    <!-- 3.14.3: asks Ronin Phone for the Sanchar Saathi OTP of the Chakshu form (same signature only) -->
+    <uses-permission android:name="com.ronin.permission.SAVED_SMS" />
 
 
     <queries>

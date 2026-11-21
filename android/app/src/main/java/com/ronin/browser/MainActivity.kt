@@ -87,6 +87,8 @@ class MainActivity : AppCompatActivity() {
         @Volatile var topHost = ""
         @Volatile var isTools = false // Ronin's own PDF / Photo tools page is open in this tab
         var isPrivate = false // adult / gambling site: own cookies, no history, wiped when closed
+        var chakshu: String? = null // the scam SMS / call Ronin Phone sent: fills the Chakshu form in this tab
+        var chakshuLoop = false
         var crashedAt = 0L // when its page engine was last ended (a second time within 30 s = no automatic reload)
         var claudeOrigin: String? = null // set = the "🤖 Claude" tab (his own server's live view; cookies kept, nothing injected)
     }
@@ -241,6 +243,8 @@ class MainActivity : AppCompatActivity() {
     /** "Ronin Mail" icon, and a WhatsApp / SMS message shared to Ronin ("क्या यह ठगी है?"). */
     private fun handleSpecial(i: Intent?) {
         i ?: return
+        // Ronin Phone's "Report on Chakshu": the form opening now gets the message (taken once, fresh only)
+        i.getStringExtra(Chakshu.EXTRA)?.let { if (Chakshu.isForm(i.dataString)) pendingChakshu = it to System.currentTimeMillis(); i.removeExtra(Chakshu.EXTRA) }
         if (i.action == Intent.ACTION_SEND && i.type?.startsWith("text/") == true) {
             val text = (i.getStringExtra(Intent.EXTRA_TEXT) ?: "").take(4000)
             if (text.isNotBlank()) ui.post { openTools("scamcheck:" + Uri.encode(text)) }
@@ -626,6 +630,44 @@ class MainActivity : AppCompatActivity() {
     fun pullReloadForTest() { current?.let { pullReload(it) } }
 
     private val adblockJs: String by lazy { assets.open("ronin/inject_adblock.js").bufferedReader().readText() }
+    private val chakshuJs: String by lazy { assets.open("ronin/chakshu.js").bufferedReader().readText() }
+    private var pendingChakshu: Pair<String, Long>? = null
+
+    /**
+     * The Chakshu form finished loading in [t]: fill it with the message, then every 2 s bring the Sanchar Saathi OTP
+     * from Ronin Phone once the owner pressed "Verify Mobile via OTP", and remember his mobile number for next time.
+     */
+    private fun fillChakshu(t: Tab) {
+        val msg = t.chakshu ?: return
+        val p = getSharedPreferences("ronin_chakshu", MODE_PRIVATE)
+        val data = try { JSONObject(msg).put("mobile", p.getString("mobile", "")) } catch (e: Exception) { return }
+        t.web.evaluateJavascript("$chakshuJs;window.__roninChakshu.start($data);1", null)
+        if (t.chakshuLoop) return // a reload of the form: the running loop serves the new page too
+        t.chakshuLoop = true
+        val started = System.currentTimeMillis()
+        var asking = false
+        fun tick() {
+            if (t !in tabs || !Chakshu.isForm(t.url) || System.currentTimeMillis() - started > 15 * 60_000) { t.chakshuLoop = false; return }
+            t.web.evaluateJavascript("window.__roninChakshu?window.__roninChakshu.state():''") { raw ->
+                val s = try { JSONObject(jsString(raw)) } catch (e: Exception) { null }
+                if (s != null) {
+                    val mobile = s.optString("mobile")
+                    if (Regex("[1-9][0-9]{9}").matches(mobile) && p.getString("mobile", "") != mobile) p.edit().putString("mobile", mobile).apply()
+                    if (s.optBoolean("needOtp") && !asking) {
+                        asking = true
+                        val since = s.optLong("otpSince")
+                        Thread {
+                            val code = Chakshu.otpFromPhone(this, since)
+                            ui.post { asking = false; if (code != null) t.web.evaluateJavascript("window.__roninChakshu&&window.__roninChakshu.otp(" + JSONObject.quote(code) + ")", null) }
+                        }.start()
+                    }
+                    if (s.optString("phase") == "preview") { t.chakshuLoop = false; return@evaluateJavascript }
+                }
+                ui.postDelayed({ tick() }, 2000)
+            }
+        }
+        ui.postDelayed({ tick() }, 2000)
+    }
     /** url "" = an empty tab (a page fills it: new window); lazy = the page loads when the tab is first shown. */
     fun newTab(url: String, select: Boolean = true, private: Boolean = false, lazy: Boolean = false, claude: String? = null): Tab {
         lateinit var tab: Tab
@@ -1022,6 +1064,11 @@ class MainActivity : AppCompatActivity() {
             updateTabsButton()
             showDataButton(t)
             if (url.startsWith("http") && !url.startsWith("https://ronin.home") && !t.title.startsWith("⛔") && !t.isPrivate && t.claudeOrigin == null && !Sensitive.site(url)) app.store.addHistory(t.title, url)
+            if (Chakshu.isForm(url)) {
+                pendingChakshu?.let { (m, at) -> if (System.currentTimeMillis() - at < 5 * 60_000) t.chakshu = m }
+                pendingChakshu = null
+                fillChakshu(t)
+            }
         }
 
         /** Android ended the page engine (low memory, many tabs): only the pages reload, Ronin itself stays. */

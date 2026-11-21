@@ -382,4 +382,21 @@ class LogicTest {
         for (h in listOf("acs.evil-phish.in", "3ds-verify.attacker.xyz", "3dsecure.example-bank.in", "acs.hdfcbank.com.evil.in", "www.google.com", "razorpay.com.evil.in", "facebook.com", "acsfake"))
             assertFalse(h, Nav.paymentStep(h, bankOrPay))
     }
+
+    // owner 21 Nov 2026: "Report on Chakshu" fills the form; only the Sanchar Saathi OTP may go into it, never a bank's
+    @Test
+    fun chakshuTakesOnlyTheSancharSaathiOtp() {
+        assertTrue(Chakshu.isSancharOtp("VM-DOTGOV-G", "123456 is your OTP for verification"))
+        assertTrue(Chakshu.isSancharOtp("JD-ABCDEF-G", "Your OTP is 654321"))
+        assertTrue(Chakshu.isSancharOtp("AD-XYZPQR-S", "OTP for Sanchar Saathi portal is 112233"))
+        assertTrue(Chakshu.isSancharOtp("AD-XYZPQR-T", "Your Chakshu complaint OTP: 4455"))
+        assertFalse(Chakshu.isSancharOtp("JM-SBIINB-S", "482913 is your OTP for login. Never share it with anyone."))
+        assertFalse(Chakshu.isSancharOtp("VM-HDFCBK-T", "OTP 998877 for txn of Rs 5000 at Amazon"))
+        assertFalse(Chakshu.isSancharOtp("+919812300011", "Your OTP is 123456"))
+        assertTrue(Chakshu.isForm("https://sancharsaathi.gov.in/sfc/Home/sfc-complaint.jsp"))
+        assertFalse(Chakshu.isForm("https://sancharsaathi.gov.in.evil.in/sfc/Home/sfc-complaint.jsp"))
+        val d = org.json.JSONObject(Chakshu.data("sms", "VM-LENPTE-S", "Get a personal loan", 1763700000000))
+        assertEquals("sms", d.getString("medium")); assertEquals("VM-LENPTE-S", d.getString("address")); assertEquals(1763700000000, d.getLong("date"))
+        assertEquals("call", org.json.JSONObject(Chakshu.data("call", "9812300011", "", 0)).getString("medium"))
+    }
 }

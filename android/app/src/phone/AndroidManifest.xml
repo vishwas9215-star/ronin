@@ -17,6 +17,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <permission android:name="com.ronin.permission.SAVED_SMS" android:protectionLevel="signature" />
     <uses-permission android:name="com.ronin.permission.SAVED_SMS" />
 
     <queries>
@@ -180,5 +181,11 @@
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/record_access" />
         </service>
 
+        <!-- 3.14.3: the Sanchar Saathi OTP for Ronin Browser's Chakshu form (Ronin's signature only) -->
+        <provider
+            android:name=".ChakshuOtpProvider"
+            android:authorities="com.ronin.phone.otp"
+            android:exported="true"
+            android:permission="com.ronin.permission.SAVED_SMS" />
     </application>
 </manifest>

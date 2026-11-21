@@ -321,6 +321,17 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
   SMS + accessibility app from a browser (Ronin Phone) - fallback: install from the laptop by adb (owner's bat).
   Old call recordings stay on the phone but are not listed in Ronin Phone (they belong to the browser package).
 - CI run 44875517945 all green (windows, android, phone, tablet, tv). RoninPhone.apk + 3-install-ronin-phone.bat (adb) copied to C:\Ronin Ecosystem\scrcpy. Waiting for "हाँ, V3.14.3 publish करो".
+- Chakshu auto-fill (owner 21 Nov 12:15, both hands fractured: "सारे कॉलम अपने आप भर जाएँ, बस कैप्चा डालकर सबमिट"):
+  Messages "Report on Chakshu" and the unknown-call notification open Ronin Browser right on
+  sancharsaathi.gov.in/sfc/Home/sfc-complaint.jsp (no more /sfc/ landing page with many Proceed tabs) with extra
+  com.ronin.chakshu; cmd/ronin/ui/chakshu.js fills medium, category, sender header / number, date, time, remarks,
+  numbers + URLs, a picture of the SMS as the required screenshot (DataTransfer into jQuery.filer, after the site's own
+  OCR answer), the saved mobile; focuses CAPTCHA. After "Verify Mobile via OTP" the browser asks Ronin Phone's
+  ChakshuOtpProvider (signature permission) for the Sanchar Saathi OTP only (Chakshu.isSancharOtp: SMS names
+  Sanchar/Chakshu/DoT or a "-G" / DoT header - real OTP wording NOT yet seen: check on first real use), fills + verifies,
+  ticks the declaration, opens Preview. Ronin never types the CAPTCHA, never presses Submit. Checked on the live site
+  (laptop built-in browser, no submit): all fields valid, OCR ran. Tests: tools/uitest/chakshu/t.js, phone.js,
+  LogicTest.chakshuTakesOnlyTheSancharSaathiOtp.
 - Also on this branch: PR #3 (CI quiet: no e-mails for draft PRs / notes-only commits / publish cross-cancels).
 
 ## 3.14.2 (PUBLISHED 21 Nov 2026 10:21 IST on "हाँ, V3.14.2 publish करो"; run 44866848465; tag before-3.14.2 local) — owner 21 Nov 09:44 (calls chat; built on 3.14.1, the other chat's work untouched)

@@ -56,6 +56,10 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   if ((await p2.$$eval('.th', a => a.map(x => x.dataset.thread))).join() !== '1') bad('ठगी tab');
   await p2.click('.th[data-thread="1"]'); await p2.waitForSelector('.warn');
   if (!await p2.$('a[href="tel:1930"]')) bad('no 1930 on a scam conversation');
+  // owner 21 Nov 2026: "Report on Chakshu" sends the scam SMS itself (Ronin Browser fills the form with it), not a bare link
+  await p2.click('#chakshu'); await p2.waitForTimeout(100);
+  { const c = await p2.evaluate(() => window.__log.filter(m => m.op === 'chakshu').pop());
+    if (!c || c.address !== '+919812300011' || !/urgent 10000/.test(c.body || '') || !(c.date > 0)) bad('Chakshu report without the message ' + JSON.stringify(c)); }
   if (await p2.$('.b a')) bad('a link inside an SMS is tappable');
   await p2.screenshot({ path: path.join(out, 'messages-scam.png') });
   p2.on('dialog', d => d.accept());

@@ -177,6 +177,8 @@ abstract class PhonePage : AppCompatActivity() {
     protected fun common(op: String, a: JSONObject, done: (Any?) -> Unit): Boolean {
         when (op) {
             "open" -> { openOutside(a.optString("url")); done(true) }
+            // 3.14.3: Ronin Browser opens the Chakshu form already filled with this scam SMS
+            "chakshu" -> { Chakshu.open(this, Chakshu.data("sms", a.optString("address"), a.optString("body"), a.optLong("date"))); done(true) }
             "appInfo" -> { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))); done(true) }
             "defaultApps" -> { try { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) } catch (e: Exception) { startActivity(Intent(Settings.ACTION_SETTINGS)) }; done(true) }
             "copy" -> { val c = a.optString("text").filter { it.isDigit() }.take(8); if (c.length >= 4) Otp.copy(this, c); done(c.length >= 4) }
