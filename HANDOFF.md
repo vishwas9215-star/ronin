@@ -302,7 +302,10 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
   clean play screen: Like / Dislike / Comments / Ask (✦) / Save / Subscribe / Description hidden by their label
   (only on #/watch, only button-sized, never a video tile), OK on a hidden button blocked, arrows hop past it.
   YouTube's TV DOM cannot be seen from here (non-TV browsers get a fallback page, the CI TV emulator gets "confirm
-  you're not a bot") - the owner checks on the real TV. tools/uitest/tvtidy. — owner 21 Nov 15:42–15:44
+  you're not a bot") - the owner checks on the real TV. tools/uitest/tvtidy.
+- TV app renamed "Ronin YouTube" (owner 21:15) with a new banner (owner 21:17 "यूट्यूब के हिसाब से आइकॉन"): Ronin's
+  shield in red with a white play triangle, "Ronin / YouTube" - an original mark, not YouTube's own logo. Old banner
+  kept in git history. — owner 21 Nov 15:42–15:44
 - ⭐ speed-dial row on top of Recent (small round tiles, photo + first name, one tap calls): Ronin pins (prefs pins /
   unpinned, ⭐ button on each Contacts row), contacts starred in Google Contacts, people called (answered) 2+ times in
   30 days. CallInfo.favorites / pin.

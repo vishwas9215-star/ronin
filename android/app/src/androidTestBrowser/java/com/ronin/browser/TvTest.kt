@@ -38,6 +38,9 @@ class TvTest {
         val pm = inst.targetContext.packageManager
         val found = pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER).setPackage(inst.targetContext.packageName), 0)
         assertTrue("Ronin TV is not in the TV home row", found.any { it.activityInfo.name.endsWith(".TvActivity") })
+        // owner 21 Nov 2026: "इसका नाम रोनिन यूट्यूब करो"
+        val tv = found.first { it.activityInfo.name.endsWith(".TvActivity") }
+        assertTrue("TV app name: " + tv.loadLabel(pm), tv.loadLabel(pm).toString() == "Ronin YouTube")
     }
 
     // owner 21 Nov 2026: a big white "▶ in a circle" before every song = Android's default video picture: never shown
