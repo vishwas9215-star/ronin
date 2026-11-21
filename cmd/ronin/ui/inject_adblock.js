@@ -141,8 +141,11 @@
   // to its end and skipped. Only the player that shows such a label is touched,
   // and it is put back to normal as soon as the label is gone.
   function genericPlayerAds() {
-    var AD_LABEL = /^(skip ad|skip ads|skip|skip ads?\s*[›»>▶].*|skip\s*[›»>▶].*|skip ad in \d+.*|skip in \d+.*|you can skip.*|ad\s*[-–:|]?\s*\d{1,2}:\d{2}|ad\s*\d{1,2}:\d{2}|advertisement\s*\d*:?\d*|ad \d+ of \d+.*)$/i;
-    var CAN_SKIP = /^(skip ad|skip ads|skip|skip ad\s*[›»>▶].*|skip\s*[›»>▶].*)$/i;
+    // only words that really mean "this is an advert": a bare "Skip" (skip intro / skip 10 s) or a bare
+    // "Advertisement" caption of a banner next to the player is NOT one (owner 21 Nov 2026: the main video
+    // on a video site was run at 16x as if it were an ad)
+    var AD_LABEL = /^(skip ad|skip ads|skip ads?\s*[›»>▶].*|skip ad in \d+.*|skip in \d+\s*s?|you can skip (the )?ad.*|ad\s*[-–:|]?\s*\d{1,2}:\d{2}|ad\s*\d{1,2}:\d{2}|advertisement\s*[-–:|]?\s*\d{1,2}:\d{2}|ad \d+ of \d+.*)$/i;
+    var CAN_SKIP = /^(skip ad|skip ads|skip ads?\s*[›»>▶].*)$/i;
     function visible(e) { return e.offsetWidth > 0 && e.offsetHeight > 0 && getComputedStyle(e).visibility !== "hidden"; }
     // the ad labels on the page that are short, visible texts
     function findLabels() {
@@ -177,7 +180,8 @@
         var rects = list.map(function (v) { return v.getBoundingClientRect(); });
         var ads = [], skips = [];
         for (var k = 0; k < labels.length; k++) {
-          var lr = labels[k].r, cx = (lr.left + lr.right) / 2, cy = (lr.top + lr.bottom) / 2, best = -1, bestD = 41;
+          // the label must sit ON the video (an advert's own countdown / skip button), not beside it
+          var lr = labels[k].r, cx = (lr.left + lr.right) / 2, cy = (lr.top + lr.bottom) / 2, best = -1, bestD = 6;
           for (var m = 0; m < rects.length; m++) {
             var r = rects[m];
             var dx = Math.max(r.left - cx, 0, cx - r.right), dy = Math.max(r.top - cy, 0, cy - r.bottom);
@@ -189,9 +193,12 @@
           if (labels[k].skip && !skips[best]) skips[best] = labels[k].e;
         }
         for (var j = 0; j < list.length; j++) {
-          var v = list[j], ad = !!ads[j], skip = skips[j];
+          var v = list[j], ad = !!ads[j], skip = skips[j], dur = v.duration;
+          // a long video is the film itself, never a pre-roll; and nothing is "an ad" for more than 75 s
+          if (ad && (isFinite(dur) && dur > 180 || v.__roninNotAd)) ad = false;
+          if (ad && v.__roninAd && Date.now() - v.__roninAd.t > 75000) { v.__roninNotAd = true; ad = false; }
           if (ad) {
-            if (!v.__roninAd) v.__roninAd = { m: v.muted, r: v.playbackRate || 1 };
+            if (!v.__roninAd) v.__roninAd = { m: v.muted, r: v.playbackRate || 1, t: Date.now() };
             v.muted = true;
             try { if (v.playbackRate < 16) v.playbackRate = 16; } catch (e) {}
             var d = v.duration;

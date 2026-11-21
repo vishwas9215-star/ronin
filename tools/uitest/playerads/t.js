@@ -20,6 +20,8 @@ const srv = http.createServer((q, r) => { const f = path.join(dir, q.url.split('
   let fail = 0;
   if (s.aRate !== 16 || !s.aMuted || s.aT < s.d - 1) { console.log('FAIL ad not handled'); fail++; }
   if (s.bRate !== 1 || s.bMuted) { console.log('FAIL normal player touched'); fail++; }
+  // owner 21 Nov 2026: a main video with a bare "Skip" / "Skip intro" on it and an "Advertisement" banner caption under it is NOT an ad
+  { const c = await p.evaluate(() => ({ r: vc.playbackRate, m: vc.muted })); if (c.r !== 1) { console.log('FAIL main video with Skip / Advertisement caption fast-forwarded', c); fail++; } }
   await p.evaluate(() => { lab.textContent = 'Skip ad ›'; lab.onclick = () => window.clicks++; });
   await p.waitForTimeout(700);
   if (await p.evaluate(() => window.clicks) < 1) { console.log('FAIL skip not clicked'); fail++; }
