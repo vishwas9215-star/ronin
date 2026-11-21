@@ -349,7 +349,10 @@ class CallActionReceiver : BroadcastReceiver() {
                 if (id != 0) ctx.getSystemService(NotificationManager::class.java).cancel(id)
             }
             "report" -> {
-                try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://sancharsaathi.gov.in/sfc/"), ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: Exception) { }
+                // Ronin Phone (3.14.3) has no browser inside: Ronin Browser by package, else the phone's browser
+                val u = Uri.parse("https://sancharsaathi.gov.in/sfc/")
+                try { ctx.startActivity(Intent(Intent.ACTION_VIEW, u).setPackage("com.ronin.browser").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                catch (e: Exception) { try { ctx.startActivity(Intent(Intent.ACTION_VIEW, u).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e2: Exception) { } }
                 if (id != 0) ctx.getSystemService(NotificationManager::class.java).cancel(id)
             }
             "decline" -> CallHub.calls.lastOrNull { CallHub.ringing(it) }?.reject(false, null)

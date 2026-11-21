@@ -226,7 +226,8 @@ class MainActivity : AppCompatActivity() {
         ui.postDelayed({
             if (isFinishing) return@postDelayed
             if (!Family.prefs(this).getBoolean("adultAsked", false)) Family.chooseAdult(this, first = true)
-            // (Messages / Calls are the separate Ronin Phone app since 3.14.3: no question here any more)
+            // Messages / Calls are the separate Ronin Phone app since 3.14.3: a family that used them hears it once
+            else tellPhoneMoved()
         }, 1200)
     }
 
@@ -2117,6 +2118,20 @@ p{line-height:1.5}.m{color:#c9b4b8;font-size:14px}a{display:inline-block;margin-
             .show()
     }
     private var menuSheet: android.app.Dialog? = null
+    private fun tellPhoneMoved() {
+        val p = Family.prefs(this)
+        if (p.getBoolean("phoneMovedTold", false)) return
+        val used = java.io.File(filesDir, "saved-sms.json").exists() || java.io.File(applicationInfo.dataDir, "shared_prefs/ronin_phone.xml").exists() ||
+            java.io.File(applicationInfo.dataDir, "shared_prefs/ronin_sms.xml").exists()
+        p.edit().putBoolean("phoneMovedTold", true).apply()
+        if (!used || Updater.phoneInstalled(this) || !Parts.hasPhone(this)) return
+        AlertDialog.Builder(this)
+            .setTitle(L("📱 Messages और Calls अब अलग app में", "📱 Messages and Calls are now a separate app"))
+            .setMessage(L("Play Protect की चेतावनी हटाने के लिए Ronin Messages और Ronin Calls अब \"Ronin Phone\" app में हैं। आपके SMS सुरक्षित हैं; ⭐ सहेजे संदेश और settings नए app में अपने-आप आ जाएँगे।",
+                "To end the Play Protect warning, Ronin Messages and Ronin Calls now live in the \"Ronin Phone\" app. Your SMS are safe; ⭐ saved messages and settings move over by themselves."))
+            .setPositiveButton(L("Ronin Phone लें", "Get Ronin Phone")) { _, _ -> Updater.installPhone(this) }
+            .setNegativeButton(L("बाद में (Menu → Phone)", "Later (Menu → Phone)"), null).show()
+    }
     private fun openPhone(cls: String) {
         try { startActivity(Intent().setClassName(Updater.PHONE_PACKAGE, cls).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         catch (e: Exception) { packageManager.getLaunchIntentForPackage(Updater.PHONE_PACKAGE)?.let { startActivity(it) } }

@@ -315,6 +315,11 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
     Research report by an independent agent (EasyList adult, HaGeZi). Test: adblock_test.go TestBlockedFrom.
   - Video download NOT added (owner's rule 9: nothing that helps piracy). Adult sites already open in Private when the
     Family Filter is off.
+- QA (independent, no blockers) fixes: one-time "Messages / Calls moved to Ronin Phone" notice for families that used them;
+  Calls / Messages settings + language move over with the ⭐ saved SMS (row 2 of SavedSmsProvider, number kinds kept);
+  spam-call "Report" opens Ronin Browser by package. Known risk: Google's India sideload rule may block installing an
+  SMS + accessibility app from a browser (Ronin Phone) - fallback: install from the laptop by adb (owner's bat).
+  Old call recordings stay on the phone but are not listed in Ronin Phone (they belong to the browser package).
 - Also on this branch: PR #3 (CI quiet: no e-mails for draft PRs / notes-only commits / publish cross-cancels).
 
 ## 3.14.2 (PUBLISHED 21 Nov 2026 10:21 IST on "हाँ, V3.14.2 publish करो"; run 44866848465; tag before-3.14.2 local) — owner 21 Nov 09:44 (calls chat; built on 3.14.1, the other chat's work untouched)
