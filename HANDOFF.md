@@ -295,7 +295,17 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Notification ✕ Close sent "pause": the next 1 s media check showed a paused card again (the 'flaky' song test).
   Now Close sends "stop" (pause + let go). Owner said "हाँ, V3.12.0 publish करो" 16:26.
 
-## 3.14.4 (branch `claude/v3.14.3`; NOT published) — 3.14.3 test build was put on the owner's phone by adb (21 Nov 13:26)
+## 3.14.5 (branch `claude/v3.14.3`; NOT published) — owner 21 Nov 15:42–15:44
+- ⭐ speed-dial row on top of Recent (small round tiles, photo + first name, one tap calls): Ronin pins (prefs pins /
+  unpinned, ⭐ button on each Contacts row), contacts starred in Google Contacts, people called (answered) 2+ times in
+  30 days. CallInfo.favorites / pin.
+- Contact photos (Google Contacts) in Recent, Contacts and the speed-dial row (CallInfo.photoData: the phone makes a small
+  JPEG data: URL; CACHED_PHOTO_URI / PHOTO_THUMBNAIL_URI); the big photo (openContactPhotoInputStream, high-res) fills
+  the call screen behind a dark shade (owner: "वाइफ की पूरी फ़ोटो रहती थी").
+- Recent redraws by itself when the Calls screen comes back (onResume → event "changed", again after 2 s; never while
+  searching) (owner: "रिफ्रेश किया तब जाके रिसेंट वाला सबसे ऊपर आया").
+
+## 3.14.4 (branch `claude/v3.14.3`; publish run 44891133069 (tablet re-run)) — 3.14.3 test build was put on the owner's phone by adb (21 Nov 13:26)
 - Bumped because the phone already runs 3.14.3 (versionCode comes from VERSION: same code = no update).
 - Photo circles (owner 13:32, screenshots): dark letter on slate looked black in day mode → bright colour per name
   (hash), white letter, a bare number shows its first digit (no "+"), scam / risk = bright red; Calls + Messages.

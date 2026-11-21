@@ -9,7 +9,12 @@
   const P = window.roninPhone;
   let seq = 0; const waits = {};
   const ask = (op, a) => new Promise(r => { if (!P) return r(null); const id = ++seq; waits[id] = r; P.postMessage(JSON.stringify(Object.assign({ op, id }, a || {}))); });
-  if (P) P.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (waits[m.id]) { waits[m.id](m.data); delete waits[m.id]; } };
+  // back from a call (owner 21 Nov 2026: "रिफ्रेश किया तब जाके रिसेंट वाला सबसे ऊपर आया"): Recent and the favourites redraw by
+  // themselves; again after 2 s (Android writes the call into the log a moment after it ends). Never while searching.
+  const fresh = () => { const s = document.getElementById('search'); if (inSettings || (tab !== 'recent' && tab !== 'contacts') || (s && (s.value || document.activeElement === s))) return; draw(); };
+  const freshSoon = () => { fresh(); setTimeout(fresh, 2000); };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') freshSoon(); });
+  if (P) P.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (m.event === 'changed') { freshSoon(); return; } if (waits[m.id]) { waits[m.id](m.data); delete waits[m.id]; } };
   const h = (tag, attrs, ...kids) => {
     const e = document.createElement(tag);
     Object.entries(attrs || {}).forEach(([k, v]) => { if (k === 'on') Object.entries(v).forEach(([ev, f]) => e.addEventListener(ev, f)); else if (k === 'cls') e.className = v; else if (v != null && v !== false) e.setAttribute(k, v); });
@@ -61,6 +66,26 @@
       h('button', { cls: 'pill blue', on: { click: () => ask('appInfo') } }, L('⚙ App info खोलें', '⚙ Open App info'))));
   }
 
+  const looking = new Set(), failed = new Set(); // numbers being looked up now / whose look-up did not answer (kept across redraws)
+  // contact photos (the ones set in Google Contacts), made small on the phone, kept for this visit
+  const photos = {};
+  const withPhoto = (el, uri, px) => { if (!uri) return el;
+    (photos[uri + px] || (photos[uri + px] = ask('photo', { uri, px }))).then(src => { if (src && String(src).indexOf('data:image/') === 0) { el.classList.add('pic'); el.replaceChildren(h('img', { src, alt: '' })); } });
+    return el; };
+  // ⭐ speed-dial row (owner 21 Nov 2026: "फेवरेट / फैमिली वाले ऊपर, बहुत छोटे-छोटे, तुरंत फ़ोन"): pins, Google favourites,
+  // the people called most; one tap calls (this row is only for calling)
+  const favRow = () => {
+    const box = h('div', { cls: 'favs', id: 'favs' });
+    ask('favorites').then(list => {
+      list = list || [];
+      if (!list.length) { box.replaceChildren(h('div', { cls: 'favhint' }, L('⭐ Contacts में किसी के आगे ⭐ दबाएँ: वे यहाँ ऊपर आ जाएँगे', '⭐ Tap ⭐ next to someone in Contacts to keep them up here'))); return; }
+      box.replaceChildren(...list.map(f => h('button', { cls: 'fav', 'data-number': f.number, 'aria-label': f.name, on: { click: () => call(f.number) } },
+        withPhoto(h('span', { cls: 'av fa', style: 'background:' + avColor(f.number || f.name) }, avText(f.name, false)), f.photo, 120),
+        h('small', {}, String(f.name).split(/\s+/)[0].slice(0, 9)))));
+    });
+    return box;
+  };
+
   async function draw() {
     inSettings = false;
     st = (await ask('state')) || {};
@@ -68,7 +93,6 @@
     const rows = tab === 'recent' ? ((await ask('recent')) || []) : ((await ask('contacts')) || []);
     const search = h('input', { cls: 'txt', placeholder: L('🔍 नाम या नंबर', '🔍 Name or number'), id: 'search' });
     const list = h('div', { id: 'list' });
-    const looking = new Set(), failed = new Set(); // numbers being looked up now / whose look-up did not answer
     const fill = () => {
       const q = search.value.trim().toLowerCase();
       // a name for a number not in contacts (owner 21 Nov: "Truecaller जैसी पहचान"): the name 🔍 found on the web, the
@@ -93,7 +117,7 @@
       // 3.14.3 (owner 21 Nov): red only for a real risk; your order's company / your own call / a 1600 bank line stay calm
       const risk = (r) => (r.level ? r.level === 'risk' : !!r.label);
       list.replaceChildren(...(mine.length ? mine.map(r => h('div', { cls: 'th' + (risk(r) ? ' flag' : ''), 'data-number': r.number, 'data-level': r.level || '' },
-        h('div', { cls: 'avw' }, h('div', { cls: 'av', style: 'background:' + (risk(r) ? '#dc2626' : avColor(r.number || r.name)) }, avText(r.name || r.tag || r.sim || r.guess || r.number, false)), dirChip(r.type)),
+        h('div', { cls: 'avw' }, withPhoto(h('div', { cls: 'av', style: 'background:' + (risk(r) ? '#dc2626' : avColor(r.number || r.name)) }, avText(r.name || r.tag || r.sim || r.guess || r.number, false)), r.photo, 120), dirChip(r.type)),
         h('div', { cls: 'mid', on: { click: () => window.__roninDial(r.number) } }, // a tap on the name only puts the number on the keypad: only the green 📞 calls (a stray tap once called someone at night)
          h('b', { cls: r.type === 3 ? 'miss' : '' }, title(r)), h('small', {}, dirWord(r.type), (r.type ? ' • ' : '') + (named(r) ? r.number : '') + (r.date ? (named(r) ? ' • ' : '') + when(r.date) : '')), r.label ? h('span', { cls: 'lbl' + (r.level && r.level !== 'risk' ? ' ' + r.level : '') }, r.label) : '',
                   r.complaints ? h('span', { cls: 'lbl' }, L('⚠ web पर लोगों ने इस नंबर की शिकायत की है', '⚠ People complained about this number on the web')) : '',
@@ -105,11 +129,13 @@
            : chip(failed.has(last10(r.number)) ? L('🔍 फिर कोशिश (internet?)', '🔍 Try again (internet?)') : L('🔍 कौन है?', '🔍 Who is it?'), 'who', () => whoIs(r))) : ''),
         h('button', { cls: 'pill', on: { click: () => ask('sms', { number: r.number }) } }, '💬'),
         r.label ? h('button', { cls: 'pill', on: { click: async () => { if (confirm(L(r.number + ' block करें? इनकी calls और SMS नहीं आएँगे।', 'Block ' + r.number + '? Their calls and SMS will stop.'))) alert((await ask('block', { number: r.number })) ? L('🚫 Block कर दिया', '🚫 Blocked') : L('Block नहीं हुआ', 'Could not block')); } } }, '🚫') : '',
+        // Contacts: ⭐ keeps someone in the speed-dial row on top
+        tab === 'contacts' ? h('button', { cls: 'pill star' + (r.fav ? ' on' : ''), 'data-act': 'pin', 'aria-label': 'Favourite', on: { click: async (e) => { e.stopPropagation(); r.fav = !r.fav; await ask('pin', { number: r.number, on: r.fav }); fill(); } } }, r.fav ? '⭐' : '☆') : '',
         h('button', { cls: 'pill green', on: { click: () => call(r.number) } }, '📞')))
         : [h('div', { cls: 'empty' }, st.isDefault || st.log || st.contacts ? L('कुछ नहीं मिला', 'Nothing found') : L('देखने के लिए ऊपर "चालू करें" दबाएँ', 'Tap "Turn on" above to see this'))]));
     };
     search.addEventListener('input', fill);
-    app.replaceChildren(...top(), search, list);
+    app.replaceChildren(...top(), tab === 'recent' ? favRow() : '', search, list);
     fill();
   }
 

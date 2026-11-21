@@ -103,7 +103,7 @@ object CallInfo {
         if (ctx.checkSelfPermission(Manifest.permission.READ_CALL_LOG) != android.content.pm.PackageManager.PERMISSION_GRANTED) return out
         try {
             val k = CallerId.known(ctx)
-            ctx.contentResolver.query(CallLog.Calls.CONTENT_URI, arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME, CallLog.Calls.DATE, CallLog.Calls.TYPE, CallLog.Calls.DURATION),
+            ctx.contentResolver.query(CallLog.Calls.CONTENT_URI, arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME, CallLog.Calls.DATE, CallLog.Calls.TYPE, CallLog.Calls.DURATION, CallLog.Calls.CACHED_PHOTO_URI),
                 null, null, CallLog.Calls.DATE + " DESC LIMIT 300")?.use { c ->
                 while (c.moveToNext()) {
                     val num = c.getString(0) ?: ""
@@ -113,9 +113,10 @@ object CallInfo {
                     // a name for a number not in contacts: your own name for it, the SIM name, a name from a company SMS
                     val tag = if (name.isEmpty()) tag(ctx, num) else ""
                     val searched = name.isEmpty() && searched(ctx, num); val bad = name.isEmpty() && complained(ctx, num)
+                    val photo = if (name.isNotEmpty()) (try { c.getString(5) } catch (e: Exception) { null } ?: "") else ""
                     val guess = if (name.isEmpty()) k.people[CallerId.key(num)] ?: "" else ""
                     out.put(JSONObject().put("number", num).put("name", name).put("date", c.getLong(2)).put("type", c.getInt(3)).put("dur", c.getLong(4))
-                        .put("label", w?.text ?: "").put("level", w?.level ?: "").put("tag", tag).put("sim", sim).put("guess", guess).put("searched", searched).put("complaints", bad))
+                        .put("label", w?.text ?: "").put("level", w?.level ?: "").put("tag", tag).put("sim", sim).put("guess", guess).put("searched", searched).put("complaints", bad).put("photo", photo))
                 }
             }
         } catch (e: Exception) { }
@@ -125,18 +126,104 @@ object CallInfo {
     fun contacts(ctx: Context): JSONArray {
         val out = JSONArray()
         if (ctx.checkSelfPermission(Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return out
+        val pins = pins(ctx)
         try {
             ctx.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER), null, null,
+                arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER,
+                    ContactsContract.CommonDataKinds.Phone.PHOTO_THUMBNAIL_URI, ContactsContract.CommonDataKinds.Phone.STARRED), null, null,
                 ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC")?.use { c ->
                 val seen = HashSet<String>()
                 while (c.moveToNext()) {
                     val name = c.getString(0) ?: continue; val num = c.getString(1) ?: continue
-                    if (seen.add(name + digits(num).takeLast(10))) out.put(JSONObject().put("name", name).put("number", num))
+                    if (seen.add(name + digits(num).takeLast(10))) out.put(JSONObject().put("name", name).put("number", num).put("photo", c.getString(2) ?: "")
+                        .put("fav", c.getInt(3) == 1 || digits(num).takeLast(10) in pins))
                 }
             }
         } catch (e: Exception) { }
         return out
+    }
+
+    // ---- favourites (owner 21 Nov 2026: "फेवरेट / फैमिली वाले कॉन्टैक्ट ऊपर, छोटे-छोटे, तुरंत फ़ोन") ----
+    fun pins(ctx: Context): Set<String> = prefs(ctx).getStringSet("pins", emptySet()) ?: emptySet()
+    fun pin(ctx: Context, number: String, on: Boolean) {
+        val k = digits(number).takeLast(10); if (k.length < 6) return
+        val s = HashSet(pins(ctx)); if (on) s.add(k) else s.remove(k)
+        prefs(ctx).edit().putStringSet("pins", s).putStringSet("unpinned", HashSet(prefs(ctx).getStringSet("unpinned", emptySet()) ?: emptySet()).apply { if (on) remove(k) else add(k) }).apply()
+    }
+
+    /**
+     * Speed-dial row: your ⭐ pins, the contacts starred in Google Contacts (your phone's favourites), then the contacts you
+     * call most (last 30 days) - each with the photo from the contact. A contact you un-starred in Ronin stays off.
+     */
+    fun favorites(ctx: Context): JSONArray {
+        val out = JSONArray()
+        if (ctx.checkSelfPermission(Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return out
+        val pins = pins(ctx); val off = prefs(ctx).getStringSet("unpinned", emptySet()) ?: emptySet()
+        val seen = LinkedHashMap<String, JSONObject>()
+        fun add(name: String, num: String, photo: String, why: String) {
+            val k = digits(num).takeLast(10); if (k.length < 6 || k in seen || (k in off && why != "pin")) return
+            seen[k] = JSONObject().put("name", name).put("number", num).put("photo", photo).put("why", why)
+        }
+        try {
+            ctx.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER,
+                    ContactsContract.CommonDataKinds.Phone.PHOTO_THUMBNAIL_URI, ContactsContract.CommonDataKinds.Phone.STARRED), null, null,
+                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC")?.use { c ->
+                val starred = ArrayList<Triple<String, String, String>>()
+                while (c.moveToNext()) {
+                    val name = c.getString(0) ?: continue; val num = c.getString(1) ?: continue; val ph = c.getString(2) ?: ""
+                    if (digits(num).takeLast(10) in pins) add(name, num, ph, "pin")
+                    else if (c.getInt(3) == 1) starred.add(Triple(name, num, ph))
+                }
+                starred.forEach { add(it.first, it.second, it.third, "star") }
+            }
+        } catch (e: Exception) { }
+        if (ctx.checkSelfPermission(Manifest.permission.READ_CALL_LOG) == android.content.pm.PackageManager.PERMISSION_GRANTED) try {
+            val count = HashMap<String, Int>(); val info = HashMap<String, Triple<String, String, String>>()
+            ctx.contentResolver.query(CallLog.Calls.CONTENT_URI, arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME, CallLog.Calls.CACHED_PHOTO_URI, CallLog.Calls.DURATION),
+                CallLog.Calls.DATE + " > ?", arrayOf((System.currentTimeMillis() - 30 * 86_400_000L).toString()), CallLog.Calls.DATE + " DESC")?.use { c ->
+                while (c.moveToNext()) {
+                    val num = c.getString(0) ?: continue; val name = c.getString(1) ?: continue
+                    if (c.getLong(3) <= 0) continue
+                    val k = digits(num).takeLast(10)
+                    count[k] = (count[k] ?: 0) + 1; info.putIfAbsent(k, Triple(name, num, c.getString(2) ?: ""))
+                }
+            }
+            count.entries.filter { it.value >= 2 }.sortedByDescending { it.value }.take(12).forEach { e -> info[e.key]?.let { add(it.first, it.second, it.third, "often") } }
+        } catch (e: Exception) { }
+        seen.values.take(16).forEach { out.put(it) }
+        return out
+    }
+
+    private val photoCache = object : android.util.LruCache<String, String>(80) {}
+
+    /** A contact photo as a small picture for the page (data: URL), made on the phone; "" when there is none. */
+    fun photoData(ctx: Context, uri: String, px: Int = 144): String {
+        if (!uri.startsWith("content://")) return ""
+        photoCache.get("$px|$uri")?.let { return it }
+        val out = try {
+            ctx.contentResolver.openInputStream(Uri.parse(uri))?.use { s ->
+                val bmp = android.graphics.BitmapFactory.decodeStream(s) ?: return ""
+                val scaled = android.graphics.Bitmap.createScaledBitmap(bmp, px, px * bmp.height / maxOf(1, bmp.width), true)
+                val bo = java.io.ByteArrayOutputStream(); scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, bo)
+                "data:image/jpeg;base64," + android.util.Base64.encodeToString(bo.toByteArray(), android.util.Base64.NO_WRAP)
+            } ?: ""
+        } catch (e: Exception) { "" }
+        photoCache.put("$px|$uri", out)
+        return out
+    }
+
+    /** The big photo of a caller in contacts (Google Contacts' full photo / calling-card picture), or null. */
+    fun bigPhoto(ctx: Context, number: String): android.graphics.Bitmap? {
+        if (number.isEmpty() || ctx.checkSelfPermission(Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return null
+        return try {
+            var id = -1L
+            ctx.contentResolver.query(Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(number)), arrayOf(ContactsContract.PhoneLookup._ID), null, null, null)
+                ?.use { c -> if (c.moveToFirst()) id = c.getLong(0) }
+            if (id < 0) return null
+            val u = android.content.ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI, id)
+            ContactsContract.Contacts.openContactPhotoInputStream(ctx.contentResolver, u, true)?.use { android.graphics.BitmapFactory.decodeStream(it) }
+        } catch (e: Exception) { null }
     }
 
     /** Places a call through Android (works for 112 at any time). */
@@ -154,6 +241,9 @@ object CallInfo {
 /** Ronin Calls page: keypad, recent calls with warnings, contacts (ui/tools/calls.html). */
 class CallsActivity : PhonePage() {
     override val page = "calls.html"
+    private var resumes = 0
+    // back from a call / another app: the page shows the newest calls without a manual refresh (owner 21 Nov 2026)
+    override fun onResume() { super.onResume(); if (resumes++ > 0) event("changed") }
     override fun startQuery(i: Intent?): String = i?.data?.takeIf { it.scheme == "tel" }?.schemeSpecificPart?.let { "#num=" + Uri.encode(it) } ?: ""
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -172,6 +262,9 @@ class CallsActivity : PhonePage() {
             "permissions" -> askPermissions(arrayOf(Manifest.permission.READ_CALL_LOG, Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE)) { done(true) }
             "recent" -> bg { done(CallInfo.recent(this)) }
             "contacts" -> bg { done(CallInfo.contacts(this)) }
+            "favorites" -> bg { done(CallInfo.favorites(this)) }
+            "pin" -> bg { CallInfo.pin(this, a.optString("number"), a.optBoolean("on")); done(CallInfo.favorites(this)) }
+            "photo" -> bg { done(CallInfo.photoData(this, a.optString("uri"), a.optInt("px", 144).coerceIn(48, 480))) }
             "call" -> done(CallInfo.call(this, a.optString("number")))
             "inCall" -> { if (CallHub.calls.isNotEmpty()) startActivity(Intent(this, InCallActivity::class.java)); done(CallHub.calls.isNotEmpty()) }
             // Ronin Messages when it is on; otherwise the phone's own SMS app (a switched-off screen cannot open)
@@ -427,6 +520,11 @@ class InCallActivity : AppCompatActivity() {
     private lateinit var second: TextView
     private lateinit var simName: TextView
     private lateinit var simRow: LinearLayout
+    // the caller's big photo from contacts behind the call screen (owner 21 Nov 2026: "वाइफ की पूरी फ़ोटो रहती थी")
+    private lateinit var photo: android.widget.ImageView
+    private lateinit var shade: android.view.View
+    private lateinit var rootLayout: LinearLayout
+    private var photoFor = "\u0000"
     private var prox: PowerManager.WakeLock? = null
     // every second only the timer changes (a full redraw each second could swallow a tap)
     private val tick = Runnable { val c = top(); if (c != null && c.state == Call.STATE_ACTIVE) { state.text = "⏱ " + elapsed(c) + (if (CallRecorder.recordingNumber != null) "   🎙 Rec" else ""); who.postDelayed(tickRef, 1000) } }
@@ -527,7 +625,16 @@ class InCallActivity : AppCompatActivity() {
         val gap = android.view.View(this).apply { layoutParams = LinearLayout.LayoutParams(1, 0, 1f) }
         root.addView(who); root.addView(state); root.addView(simName); root.addView(second); root.addView(gap)
         root.addView(simRow); root.addView(keypad); root.addView(ringRow); root.addView(talkRow)
-        setContentView(root)
+        rootLayout = root
+        photo = android.widget.ImageView(this).apply { scaleType = android.widget.ImageView.ScaleType.CENTER_CROP; visibility = android.view.View.GONE }
+        // dark at the top (name) and bottom (buttons), the face shows in the middle
+        shade = android.view.View(this).apply { visibility = android.view.View.GONE
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.parseColor("#cc0f1218"), Color.parseColor("#330f1218"), Color.parseColor("#ee0f1218"))) }
+        val frame = android.widget.FrameLayout(this)
+        val mp = android.widget.FrameLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
+        frame.addView(photo, mp); frame.addView(shade, android.widget.FrameLayout.LayoutParams(mp)); frame.addView(root, android.widget.FrameLayout.LayoutParams(mp))
+        frame.setBackgroundColor(Color.parseColor("#0f1218"))
+        setContentView(frame)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { v, ins ->
             val b = ins.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
             v.setPadding((16 * d).toInt() + b.left, (40 * d).toInt() + b.top, (16 * d).toInt() + b.right, (24 * d).toInt() + b.bottom); androidx.core.view.WindowInsetsCompat.CONSUMED
@@ -578,6 +685,17 @@ class InCallActivity : AppCompatActivity() {
         // the call is over: the call screen leaves Recents too (owner: two cards to swipe away after a call)
         if (c == null) { prox?.let { if (it.isHeld) it.release() }; finishAndRemoveTask(); return }
         val num = CallHub.number(c)
+        if (num != photoFor) {
+            photoFor = num
+            Thread {
+                val b = CallInfo.bigPhoto(applicationContext, num)
+                runOnUiThread {
+                    if (isFinishing || photoFor != num) return@runOnUiThread
+                    if (b != null) { photo.setImageBitmap(b); photo.visibility = android.view.View.VISIBLE; shade.visibility = android.view.View.VISIBLE; rootLayout.setBackgroundColor(Color.TRANSPARENT) }
+                    else { photo.setImageDrawable(null); photo.visibility = android.view.View.GONE; shade.visibility = android.view.View.GONE; rootLayout.setBackgroundColor(Color.parseColor("#0f1218")) }
+                }
+            }.start()
+        }
         who.text = SmsStore.contactName(this, num) ?: CallInfo.tag(this, num).ifEmpty { null }?.takeIf { !CallInfo.webFraud(this, num) }?.let { "🔍 $it\n$num" } ?: num.ifEmpty { "Private number" }
         val saved = SmsStore.contactName(this, num) != null
         val sim = if (saved) "" else CallInfo.cnap(c).ifEmpty { CallInfo.cnapOf(this, num) }
