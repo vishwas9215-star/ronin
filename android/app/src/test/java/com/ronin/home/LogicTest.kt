@@ -98,7 +98,7 @@ class LogicTest {
           {"label":{"value":"Amazon Prime Video ID"},"val":{"value":"amzn1.dv.gti.abc"}},
           {"label":{"value":"Disney+ Hotstar ID"},"val":{"value":"1260012345"},"fmt":{"value":"https://www.hotstar.com/in/${'$'}1"}}]}}"""
         assertEquals("https://www.netflix.com/title/70131314", Links.pick(j, Service.NETFLIX))
-        assertEquals("https://app.primevideo.com/detail?gti=amzn1.dv.gti.abc", Links.pick(j, Service.PRIME))
+        assertEquals("https://www.primevideo.com/detail/amzn1.dv.gti.abc", Links.pick(j, Service.PRIME))
         assertEquals("https://www.hotstar.com/in/1260012345", Links.pick(j, Service.JIOHOTSTAR))
         assertNull(Links.pick("""{"results":{"bindings":[]}}""", Service.NETFLIX))
         assertTrue(Links.sparql(27205, false).contains("P4947") && Links.sparql(1399, true).contains("P4983"))

@@ -46,9 +46,10 @@ object Links {
             val v = r.optJSONObject("val")?.optString("value") ?: continue
             val fmt = r.optJSONObject("fmt")?.optString("value")
             val url = when {
+                // Wikidata's Prime pattern points to amazon.com; the Prime Video TV app opens primevideo.com links
+                service == Service.PRIME -> "https://www.primevideo.com/detail/$v"
                 fmt != null && fmt.contains("$1") -> fmt.replace("$1", v)
                 service == Service.NETFLIX -> "https://www.netflix.com/title/$v"
-                service == Service.PRIME -> "https://app.primevideo.com/detail?gti=$v"
                 else -> null
             }
             if (url != null && url.startsWith("https://")) return url
