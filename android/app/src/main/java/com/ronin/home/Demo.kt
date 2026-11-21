@@ -21,5 +21,11 @@ object Demo {
             t(19, "Startup Days", p, true), t(20, "Ocean Deep", n, true)),
         listOf(t(21, "Winter Road", n), t(22, "Tiger Trail", j), t(23, "Second Innings", p, true), t(24, "Glass House", n, true), t(25, "Old Friends", j)),
         listOf(t(31, "Festival Nights", p), t(32, "Mountain Rescue", n), t(33, "School Days 2", j, true)),
+        mapOf(
+            Lang.HOLLYWOOD to listOf(t(41, "Steel Horizon", n), t(42, "The Quiet House", p), t(43, "Galaxy Run", j), t(44, "Last Train West", n, true), t(45, "Deep Blue", p)),
+            Lang.BOLLYWOOD to listOf(t(51, "Dil Ki Baat", p), t(52, "Mumbai Nights", n, true), t(53, "Rang Barse", j), t(54, "Shaadi Season", p)),
+            Lang.KOREAN to listOf(t(61, "Seoul Spring", n, true), t(62, "My Neighbour Chef", n, true), t(63, "Han River", p), t(64, "Office Love", n, true)),
+            Lang.SOUTH to listOf(t(71, "Kaaval", j), t(72, "Simha", p), t(73, "Kerala Diaries", j, true), t(74, "Hyderabad Blues", n)),
+        ),
     )
 }

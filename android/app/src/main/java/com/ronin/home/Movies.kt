@@ -31,20 +31,25 @@ data class Title(
     }
 }
 
-/** The four Movies & Shows rows + the hero. */
+/** Family taste (owner): Hollywood first; wife also Bollywood, Korean, South Indian. Movies + shows mixed. */
+enum class Lang(val title: String, val codes: String) {
+    HOLLYWOOD("Hollywood", "en"), BOLLYWOOD("Bollywood", "hi"), KOREAN("Korean", "ko"), SOUTH("South Indian", "ta|te|ml|kn")
+}
+
+/** Movies & Shows rows (no hero card: owner dropped "#1 in India"). */
 data class Shelf(
     val topMovies: List<Title>,
     val topShows: List<Title>,
     val newReleases: List<Title>,
     val comingSoon: List<Title>,
+    val byLang: Map<Lang, List<Title>> = emptyMap(),
 ) {
-    val hero: Title? get() = (topMovies.take(1) + topShows.take(1)).maxByOrNull { it.popularity }
-
     fun forServices(s: Set<Service>) = Shelf(
         topMovies.filter { it.service in s }.take(10),
         topShows.filter { it.service in s }.take(10),
-        newReleases.filter { it.service in s },
-        comingSoon.filter { it.service in s },
+        newReleases.filter { it.service in s }.take(20),
+        comingSoon.filter { it.service in s }.take(20),
+        byLang.mapValues { (_, v) -> v.filter { it.service in s }.take(20) },
     )
 
     fun toJson(): JSONObject = JSONObject()
@@ -52,12 +57,14 @@ data class Shelf(
         .put("top_shows", JSONArray(topShows.map { it.toJson() }))
         .put("new", JSONArray(newReleases.map { it.toJson() }))
         .put("soon", JSONArray(comingSoon.map { it.toJson() }))
+        .apply { for ((l, v) in byLang) put("lang_" + l.name, JSONArray(v.map { it.toJson() })) }
 
     companion object {
         val EMPTY = Shelf(emptyList(), emptyList(), emptyList(), emptyList())
         private fun list(a: JSONArray?) = (0 until (a?.length() ?: 0)).map { Title.fromJson(a!!.getJSONObject(it)) }
         fun fromJson(o: JSONObject) = Shelf(list(o.optJSONArray("top_movies")), list(o.optJSONArray("top_shows")),
-            list(o.optJSONArray("new")), list(o.optJSONArray("soon")))
+            list(o.optJSONArray("new")), list(o.optJSONArray("soon")),
+            Lang.values().associateWith { list(o.optJSONArray("lang_" + it.name)) }.filterValues { it.isNotEmpty() })
     }
 }
 
@@ -74,7 +81,7 @@ object Tmdb {
         return if (isBearer(k)) k.count { it == '.' } == 2 else Regex("[0-9a-fA-F]{32}").matches(k)
     }
 
-    fun discoverUrl(tv: Boolean, providerId: Int, kind: String, today: LocalDate): String {
+    fun discoverUrl(tv: Boolean, providerId: Int, kind: String, today: LocalDate, lang: Lang? = null): String {
         val dateField = if (tv) "first_air_date" else "primary_release_date"
         val p = linkedMapOf(
             "watch_region" to "IN", "with_watch_providers" to providerId.toString(),
@@ -86,6 +93,7 @@ object Tmdb {
             "new" -> { p["sort_by"] = "popularity.desc"; p["$dateField.gte"] = today.minusDays(60).toString(); p["$dateField.lte"] = today.toString() }
             "soon" -> { p["sort_by"] = "popularity.desc"; p["$dateField.gte"] = today.plusDays(1).toString(); p["$dateField.lte"] = today.plusDays(90).toString() }
         }
+        if (lang != null) p["with_original_language"] = lang.codes
         val q = p.entries.joinToString("&") { it.key + "=" + URLEncoder.encode(it.value, "UTF-8") }
         return "$API/discover/${if (tv) "tv" else "movie"}?$q"
     }
@@ -151,6 +159,6 @@ object Tmdb {
             soon += parseDiscover(get(discoverUrl(true, id, "soon", today), key), true, s)
         }
         // keep extra so that switching a service off still leaves 10
-        return Shelf(merge(top, 40), merge(topTv, 40), merge(new, 40), merge(soon, 40))
+        return Shelf(merge(top, 40), merge(topTv, 40), merge(new, 40), merge(soon, 40), langs.mapValues { merge(it.value, 40) })
     }
 }

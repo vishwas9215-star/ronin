@@ -79,8 +79,14 @@ class LogicTest {
         val s = Demo.shelf
         val noNetflix = s.forServices(all - Service.NETFLIX)
         assertFalse(noNetflix.topMovies.any { it.service == Service.NETFLIX })
-        assertTrue(s.topMovies.size <= 10 && s.hero != null)
+        assertTrue(s.topMovies.size <= 10 && noNetflix.byLang.getValue(Lang.KOREAN).none { it.service == Service.NETFLIX })
         assertEquals(s, Shelf.fromJson(s.toJson()))
+    }
+
+    @Test fun languageRows() {
+        val u = Tmdb.discoverUrl(true, 8, "top", LocalDate.of(2026, 11, 21), Lang.SOUTH)
+        assertTrue(u, u.contains("with_original_language=ta%7Cte%7Cml%7Ckn") && u.contains("/discover/tv?"))
+        assertEquals(listOf("Hollywood", "Bollywood", "Korean", "South Indian"), Lang.values().map { it.title })
     }
 
     @Test fun onlyGoogleHomeMainScreenIsReplaced() {

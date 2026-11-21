@@ -67,7 +67,7 @@ object Images {
                     c.inputStream.use { inp -> f.outputStream().use { inp.copyTo(it) } }
                     c.disconnect()
                 }
-                BitmapFactory.decodeFile(f.path)
+                BitmapFactory.decodeFile(f.path, BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.RGB_565 })
             } catch (e: Exception) { f.delete(); null }
             if (bmp != null) {
                 mem.put(url, bmp)

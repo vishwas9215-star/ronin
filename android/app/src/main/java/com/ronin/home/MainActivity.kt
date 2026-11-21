@@ -133,7 +133,7 @@ class MainActivity : Activity() {
         column.removeAllViews()
         val subs = store.subscribed()
         column.addView(header())
-        column.addView(hero(shelf.hero))
+        column.addView(hero())
 
         val mine = Catalog.visible(Catalog.myApps, subs, ::installed)
         row("My Apps", mine.map { appTile(it) }, first = true)
@@ -144,9 +144,11 @@ class MainActivity : Activity() {
                 startActivity(Intent(this, SetupActivity::class.java))
             }))
         } else {
+            // Movies & Shows are for the parents (horror allowed). The Kids row above has apps only, never posters.
+            row("New Releases", shelf.newReleases.map { posterTile(it, 0) })
+            for (l in Lang.values()) row(l.title, shelf.byLang[l].orEmpty().map { posterTile(it, 0) })
             row("Top 10 Movies", shelf.topMovies.mapIndexed { i, t -> posterTile(t, i + 1) })
             row("Top 10 Shows", shelf.topShows.mapIndexed { i, t -> posterTile(t, i + 1) })
-            row("New Releases", shelf.newReleases.map { posterTile(it, 0) })
             row("Coming Soon", shelf.comingSoon.map { posterTile(it, 0) })
         }
         row("All Apps", Catalog.others(allTvApps(), subs).map { appTile(it, small = true) })
@@ -161,12 +163,12 @@ class MainActivity : Activity() {
         addView(Ui.text(context, "RONIN HOME", 12f, 0x66FFFFFF, Typeface.BOLD, "sans-serif-medium").apply { letterSpacing = 0.25f })
     }
 
-    private fun hero(h: Title?): View {
+    private fun hero(): View {
         val wrap = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             clipChildren = false
-            layoutParams = Ui.lp(MATCH, dp(232), t = dp(6))
+            layoutParams = Ui.lp(MATCH, dp(196), t = dp(2))
         }
         // Left: the clock the owner liked
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false }
@@ -190,34 +192,10 @@ class MainActivity : Activity() {
         buttons.addView(Ui.button(this, "Castle — New") { open(Service.CASTLE.pkg) })
         buttons.addView(Ui.button(this, "My subscriptions") { startActivity(Intent(this, SubscriptionsActivity::class.java)) },
             Ui.lp(WRAP, WRAP, l = dp(14)))
-        left.addView(buttons, Ui.lp(WRAP, WRAP, t = dp(18)))
         wrap.addView(left, LinearLayout.LayoutParams(0, WRAP, 1f))
-
-        // Right: #1 in India (from the subscribed services only)
-        if (h != null) wrap.addView(heroCard(h), Ui.lp(dp(392), dp(220), l = dp(16)))
+        // Right: the two buttons (calm; no promo card)
+        wrap.addView(buttons, Ui.lp(WRAP, WRAP, t = dp(60)))
         return wrap
-    }
-
-    private fun heroCard(t: Title): View = FrameLayout(this).apply {
-        setBackgroundColor(Ui.CARD)
-        val img = Ui.imageView(context)
-        addView(img, FrameLayout.LayoutParams(MATCH, MATCH))
-        val w = dp(392); val hgt = dp(220)
-        if (t.backdrop != null && !demo) Images.load(context, Tmdb.IMG + "w780" + t.backdrop, img)
-        else img.setImageBitmap(Ui.placeholder(w, hgt, "", t.service.color))
-        addView(View(context).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0xF0000000.toInt(), 0x00000000))
-        }, Ui.flp(MATCH, dp(130), Gravity.BOTTOM))
-        val info = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), 0, dp(16), dp(14)) }
-        info.addView(Ui.text(context, "#1 IN INDIA TODAY", 11f, 0xFFFFD36B.toInt(), Typeface.BOLD, "sans-serif-medium").apply { letterSpacing = 0.12f })
-        info.addView(Ui.text(context, t.name, 22f, Color.WHITE, Typeface.BOLD, "sans-serif-medium").apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END },
-            Ui.lp(WRAP, WRAP, t = dp(4)))
-        info.addView(Ui.badge(context, t.service), Ui.lp(WRAP, WRAP, t = dp(8)))
-        addView(info, Ui.flp(MATCH, WRAP, Gravity.BOTTOM))
-        Ui.round(this, 14)
-        Ui.focusable(this, 14, 1.04f)
-        contentDescription = t.name
-        setOnClickListener { open(t.service.pkg) }
     }
 
     private fun row(title: String, tiles: List<View>, first: Boolean = false) {
