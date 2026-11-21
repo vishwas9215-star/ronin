@@ -322,6 +322,13 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
   Capitalised; stop-words / cities / site names out). Live check 21 Nov: 9560911911 → Airtel, 08067466729 → Swiggy,
   18001034444 → Airtel + "people complained" (shouldianswer / callfilter negative), private mobiles → "नाम नहीं मिला".
   Saved in prefs ronin_phone web_<last10> ("-" = nothing found) + webbad_. Voice naming removed.
+- WhoIs QA (independent, 2 blockers) fixed: a page with the number that talks of fraud / fake / "claiming" / OTP / KYC →
+  no name, row red "web पर धोखेबाज़ बताया" (webfraud_); winner must be on 2+ different sites; DDG ads skipped; more
+  lookup / circle / operator pages skipped; junk words stopped; ties deterministic; HTTP != 200 or an unexpected page
+  = "try again" (not saved); body read capped 600 KB; Throwable caught; number regex with digit boundaries and
+  0 / +91 / 1800 forms (WhoIs.local); short numbers (< 8 digits) never searched; SIM name before the web name, web
+  names shown with 🔍 on ring / call screens; "↻ फिर खोजें" to look again; one look-up at a time per number;
+  screening answers at once when no silencing is on.
 
 ## 3.14.3 (branch `claude/v3.14.3`; NOT published) — owner 21 Nov 11:27–11:31 (calls chat)
 - **Play Protect called Ronin "harmful"** (tablet + phone) since the SMS / call log / accessibility permissions came back

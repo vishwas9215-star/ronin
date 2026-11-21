@@ -68,21 +68,26 @@
     const rows = tab === 'recent' ? ((await ask('recent')) || []) : ((await ask('contacts')) || []);
     const search = h('input', { cls: 'txt', placeholder: L('🔍 नाम या नंबर', '🔍 Name or number'), id: 'search' });
     const list = h('div', { id: 'list' });
+    const looking = new Set(), failed = new Set(); // numbers being looked up now / whose look-up did not answer
     const fill = () => {
       const q = search.value.trim().toLowerCase();
       // a name for a number not in contacts (owner 21 Nov: "Truecaller जैसी पहचान"): the name 🔍 found on the web, the
       // SIM (CNAP) name 📛, a name from a company SMS 🛠; only then the bare number
-      const title = r => r.name || (r.tag ? '🔍 ' + r.tag : r.sim ? '📛 ' + r.sim : r.guess ? '🛠 ' + r.guess : r.number);
+      const title = r => r.name || (r.sim ? '📛 ' + r.sim : r.tag ? '🔍 ' + r.tag : r.guess ? '🛠 ' + r.guess : r.number);
       const named = r => !!(r.name || r.tag || r.sim || r.guess);
       const mine = rows.filter(r => !q || [r.name, r.tag, r.sim, r.guess].some(x => (x || '').toLowerCase().includes(q)) || (r.number || '').includes(q)).slice(0, 300);
       const chip = (txt, id, f) => h('button', { cls: 'chip', 'data-act': id, on: { click: (e) => { e.stopPropagation(); f(); } } }, txt);
       // one tap: Ronin searches only this number on the web and writes the name it finds here (no typing, no speaking)
-      const whoIs = async (r, btn) => {
-        btn.disabled = true; btn.textContent = L('⏳ खोज रहा हूँ…', '⏳ Looking…');
+      const last10 = n => String(n || '').replace(/\D/g, '').slice(-10);
+      const whoIs = async (r) => {
+        const k = last10(r.number); if (looking.has(k)) return;
+        looking.add(k); fill();
         const a = (await ask('whoIs', { number: r.number })) || {};
-        if (!a.ok) { btn.disabled = false; btn.textContent = L('🔍 फिर कोशिश (internet?)', '🔍 Try again (internet?)'); return; }
-        // the same number may be on several rows: all of them get the name
-        rows.forEach(x => { if (x.number === r.number) { x.tag = a.name || ''; x.searched = true; x.complaints = !!a.complaints; } });
+        looking.delete(k);
+        if (!a.ok) failed.add(k); else failed.delete(k);
+        // the same number may be on several rows (in any format): all of them get the answer
+        if (a.ok) rows.forEach(x => { if (last10(x.number) === k) { x.tag = a.name || ''; x.searched = true; x.complaints = !!a.complaints;
+          if (a.fraud) { x.level = 'risk'; x.label = a.label || x.label; x.tag = ''; } } });
         fill();
       };
       // 3.14.3 (owner 21 Nov): red only for a real risk; your order's company / your own call / a 1600 bank line stay calm
@@ -91,11 +96,13 @@
         h('div', { cls: 'avw' }, h('div', { cls: 'av', style: 'background:' + (risk(r) ? '#dc2626' : avColor(r.number || r.name)) }, avText(r.name || r.tag || r.sim || r.guess || r.number, false)), dirChip(r.type)),
         h('div', { cls: 'mid', on: { click: () => window.__roninDial(r.number) } }, // a tap on the name only puts the number on the keypad: only the green 📞 calls (a stray tap once called someone at night)
          h('b', { cls: r.type === 3 ? 'miss' : '' }, title(r)), h('small', {}, dirWord(r.type), (r.type ? ' • ' : '') + (named(r) ? r.number : '') + (r.date ? (named(r) ? ' • ' : '') + when(r.date) : '')), r.label ? h('span', { cls: 'lbl' + (r.level && r.level !== 'risk' ? ' ' + r.level : '') }, r.label) : '',
-         // not a contact: who is it? (one tap: the number searched in Ronin Browser) / say a name once
-         r.complaints ? h('span', { cls: 'lbl' }, L('⚠ web पर लोगों ने इस नंबर की शिकायत की है', '⚠ People complained about this number on the web')) : '',
-         !r.name && r.number && tab === 'recent' && !r.tag ? h('div', { cls: 'chips' }, r.searched
-           ? h('span', { cls: 'chip off' }, L('🔍 web पर नाम नहीं मिला', '🔍 No name on the web'))
-           : (() => { const b = chip(L('🔍 कौन है?', '🔍 Who is it?'), 'who', () => whoIs(r, b)); return b; })()) : ''),
+                  r.complaints ? h('span', { cls: 'lbl' }, L('⚠ web पर लोगों ने इस नंबर की शिकायत की है', '⚠ People complained about this number on the web')) : '',
+         // not a contact, a real number (8+ digits): one tap finds the name; ↻ looks again (a wrong / old name)
+         !r.name && r.number && tab === 'recent' && r.number.replace(/\D/g, '').length >= 8 ? h('div', { cls: 'chips' },
+           looking.has(last10(r.number)) ? h('span', { cls: 'chip off', 'data-act': 'looking' }, L('⏳ खोज रहा हूँ…', '⏳ Looking…'))
+           : r.tag ? chip(L('↻ फिर खोजें', '↻ Look again'), 'again', () => whoIs(r))
+           : r.searched ? [h('span', { cls: 'chip off' }, L('🔍 web पर नाम नहीं मिला', '🔍 No name on the web')), chip('↻', 'again', () => whoIs(r))]
+           : chip(failed.has(last10(r.number)) ? L('🔍 फिर कोशिश (internet?)', '🔍 Try again (internet?)') : L('🔍 कौन है?', '🔍 Who is it?'), 'who', () => whoIs(r))) : ''),
         h('button', { cls: 'pill', on: { click: () => ask('sms', { number: r.number }) } }, '💬'),
         r.label ? h('button', { cls: 'pill', on: { click: async () => { if (confirm(L(r.number + ' block करें? इनकी calls और SMS नहीं आएँगे।', 'Block ' + r.number + '? Their calls and SMS will stop.'))) alert((await ask('block', { number: r.number })) ? L('🚫 Block कर दिया', '🚫 Blocked') : L('Block नहीं हुआ', 'Could not block')); } } }, '🚫') : '',
         h('button', { cls: 'pill green', on: { click: () => call(r.number) } }, '📞')))

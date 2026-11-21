@@ -471,6 +471,22 @@ class LogicTest {
         val tf = ask("18001034444"); assertEquals("Airtel", tf.name); assertTrue(tf.complaints)
         val p = ask("9198689099"); assertNull(p.name); assertFalse(p.complaints) // a private mobile: no guess
         assertTrue(WhoIs.numberRe("+919560911911").containsMatchIn("call 95609 11911 now"))
+        // QA 21 Nov: a page saying a scammer used the number → no brand name, a fraud warning
+        fun page(u: String, t: String, sn: String) = WhoIs.Result(t, u, sn)
+        val scam = WhoIs.decide("9876543210", listOf(page("https://www.reddit.com/r/india/x", "Got a call from 9876543210 saying my Airtel KYC expires", "asked for the otp, Airtel"),
+            page("https://www.quora.com/x", "someone called from 9876543210 claiming Airtel sim block", "Airtel")))
+        assertNull(scam.name); assertTrue(scam.fraud)
+        // junk never wins: two tweets "Pending" (one site), operator / circle pages, DuckDuckGo ads
+        assertNull(WhoIs.decide("9876543210", listOf(page("https://x.com/a/1", "Pending complaint 9876543210", "Pending"), page("https://x.com/b/2", "Pending 9876543210", "Pending again"))).name)
+        assertNull(WhoIs.decide("9876543210", listOf(page("https://findmobilenumberlocation.com/x", "9876543210 belongs to Reliance Jio", "telecom circle UP East"),
+            page("https://mobilenumberinfo.in/x", "9876543210 Reliance Jio", "Operator: Reliance Jio"))).name)
+        assertEquals(0, WhoIs.parse("<div class=\"result results_links web-result result--ad\"><a class=\"result__a\" href=\"https://duckduckgo.com/y.js\">Truecaller 9876543210</a></div>").size)
+        // numbers: digit boundaries, 0 / +91 / 1800 forms
+        assertFalse(WhoIs.numberRe("9560911911").containsMatchIn("ticket 195609119112"))
+        assertTrue(WhoIs.numberRe("08067466729").containsMatchIn("Mr. Roshan (08067466729)"))
+        assertTrue(WhoIs.numberRe("18001034444").containsMatchIn("call 1800-103-4444 toll free"))
+        assertEquals("8067466729", WhoIs.local("+91 80674 66729")); assertEquals("18001034444", WhoIs.local("18001034444")); assertEquals("8067466729", WhoIs.local("08067466729"))
+        assertNull(WhoIs.lookUp("121")) // short codes are never searched
         assertEquals(6, WhoIs.parse(File("../../tools/uitest/fixtures/whois/9560911911.html").readText()).size)
         assertEquals("https://www.linkedin.com/posts/ankit-goel_airtel", WhoIs.parse(File("../../tools/uitest/fixtures/whois/9560911911.html").readText())[0].url)
     }

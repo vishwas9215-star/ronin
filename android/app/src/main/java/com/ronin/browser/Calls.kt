@@ -53,6 +53,7 @@ object CallInfo {
     /** A short line for a caller not in contacts (3.14.3: smart, see CallerId; red only for a real risk). */
     fun label(ctx: Context, number: String, cnap: String = cnapOf(ctx, number)): String {
         val w = CallerId.judge(number, SmsStore.contactName(ctx, number) != null, cnap, CallerId.known(ctx)) ?: return ""
+        if (webFraud(ctx, number)) return fraudLine()
         if (cnap.isEmpty()) return w.text
         // the judge's own "name from the SIM" line already says it: say the name once
         return L("📛 SIM पर नाम: ", "📛 Name on the SIM: ") + cnap + if (w.text.startsWith("📛")) L(" · contact में नहीं", " · not in contacts") else " · " + w.text
@@ -62,15 +63,19 @@ object CallInfo {
     fun tag(ctx: Context, number: String): String = (prefs(ctx).getString("web_" + digits(number).takeLast(10), "") ?: "").takeIf { it != "-" } ?: ""
     fun searched(ctx: Context, number: String): Boolean = prefs(ctx).contains("web_" + digits(number).takeLast(10))
     fun complained(ctx: Context, number: String): Boolean = prefs(ctx).getBoolean("webbad_" + digits(number).takeLast(10), false)
-    fun setTag(ctx: Context, number: String, name: String?, complaints: Boolean) {
+    /** Web pages say a scammer used this number ("called saying my KYC expires"): red, never a brand name. */
+    fun webFraud(ctx: Context, number: String): Boolean = prefs(ctx).getBoolean("webfraud_" + digits(number).takeLast(10), false)
+    fun setTag(ctx: Context, number: String, name: String?, complaints: Boolean, fraud: Boolean = false) {
         val k = digits(number).takeLast(10); if (k.length < 6) return
-        prefs(ctx).edit().putString("web_$k", name?.trim()?.take(40)?.ifEmpty { null } ?: "-").putBoolean("webbad_$k", complaints).apply()
+        prefs(ctx).edit().putString("web_$k", name?.trim()?.take(40)?.ifEmpty { null } ?: "-").putBoolean("webbad_$k", complaints)
+            .putBoolean("webfraud_$k", fraud).apply()
     }
+    private fun fraudLine() = L("⛔ web पर लोगों ने इस नंबर को धोखेबाज़ बताया है: पैसे / OTP न दें", "⛔ People on the web report this number as a fraud: never give money / OTP")
 
-    /** Who to show for a number: contact, then the name 🔍 found on the web, then the SIM (CNAP) name, then a name from an SMS. */
+    /** Who to show for a number: contact, then the SIM (CNAP, KYC) name, then "🔍 name" found on the web, then a name from an SMS. */
     fun display(ctx: Context, number: String, cnap: String = ""): String? =
-        SmsStore.contactName(ctx, number) ?: tag(ctx, number).ifEmpty { null } ?: cnap.ifEmpty { cnapOf(ctx, number) }.ifEmpty { null }
-            ?: CallerId.known(ctx).people[CallerId.key(number)]
+        SmsStore.contactName(ctx, number) ?: cnap.ifEmpty { cnapOf(ctx, number) }.ifEmpty { null }?.let { "📛 $it" }
+            ?: tag(ctx, number).ifEmpty { null }?.let { "🔍 $it" } ?: CallerId.known(ctx).people[CallerId.key(number)]?.let { "🛠 $it" }
 
     fun prefs(ctx: Context) = ctx.getSharedPreferences("ronin_phone", Context.MODE_PRIVATE)
 
@@ -104,7 +109,7 @@ object CallInfo {
                     val num = c.getString(0) ?: ""
                     val name = c.getString(1) ?: SmsStore.contactName(ctx, num) ?: ""
                     val sim = if (name.isEmpty()) cnapOf(ctx, num) else ""
-                    val w = if (name.isEmpty()) CallerId.judge(num, false, sim, k, c.getLong(2)) else null
+                    val w = if (name.isEmpty()) (if (webFraud(ctx, num)) CallerId.Who("risk", fraudLine()) else CallerId.judge(num, false, sim, k, c.getLong(2))) else null
                     // a name for a number not in contacts: your own name for it, the SIM name, a name from a company SMS
                     val tag = if (name.isEmpty()) tag(ctx, num) else ""
                     val searched = name.isEmpty() && searched(ctx, num); val bad = name.isEmpty() && complained(ctx, num)
@@ -179,10 +184,13 @@ class CallsActivity : PhonePage() {
             // owner 21 Nov 2026 (both hands hurt): say a name for an unknown number once; kept on the phone, not a contact
             // owner 21 Nov 2026: one tap and Ronin itself finds the name on the web (only this number is searched)
             "whoIs" -> bg {
-                val n = a.optString("number")
-                val ans = WhoIs.lookUp(n)
-                if (ans != null) CallInfo.setTag(this, n, ans.name, ans.complaints)
-                done(if (ans == null) JSONObject().put("ok", false) else JSONObject().put("ok", true).put("name", ans.name ?: "").put("complaints", ans.complaints).put("source", ans.source))
+                try {
+                    val n = a.optString("number")
+                    val ans = WhoIs.lookUp(n)
+                    if (ans != null) CallInfo.setTag(this, n, ans.name, ans.complaints, ans.fraud)
+                    done(if (ans == null) JSONObject().put("ok", false) else JSONObject().put("ok", true).put("name", ans.name ?: "").put("complaints", ans.complaints)
+                        .put("fraud", ans.fraud).put("source", ans.source).put("label", if (ans.fraud) CallInfo.label(this, n) else ""))
+                } catch (t: Throwable) { done(JSONObject().put("ok", false)) } // the button never stays on "looking…"
             }
             "set" -> {
                 val k = a.optString("key")
@@ -216,6 +224,9 @@ class RoninCallScreen : CallScreeningService() {
 
     private fun shouldSilence(d: Call.Details): Boolean {
         val num = d.handle?.schemeSpecificPart ?: ""
+        // nothing to silence: answer at once (the phone rings without waiting), then read for the ring screen
+        val pp = CallInfo.prefs(this)
+        if (!pp.getBoolean("silenceUnknown", false) && !pp.getBoolean("silenceForeign", false)) { CallerId.warm(this); return false }
         val p = CallInfo.prefs(this)
         val incoming = Build.VERSION.SDK_INT < 29 || d.callDirection == Call.Details.DIRECTION_INCOMING
         var silence = false
@@ -226,7 +237,6 @@ class RoninCallScreen : CallScreeningService() {
             if (p.getBoolean("silenceUnknown", false) && !CallerId.trusted(CallerId.judge(num, false, "", CallerId.known(this)))) silence = true
             if (p.getBoolean("silenceForeign", false) && dg.startsWith("+") && !dg.startsWith("+91")) silence = true
         }
-        if (num.isNotEmpty()) CallerId.known(this) // warm for the ring screen even when nothing is silenced
         return silence
     }
 }
@@ -568,7 +578,7 @@ class InCallActivity : AppCompatActivity() {
         // the call is over: the call screen leaves Recents too (owner: two cards to swipe away after a call)
         if (c == null) { prox?.let { if (it.isHeld) it.release() }; finishAndRemoveTask(); return }
         val num = CallHub.number(c)
-        who.text = SmsStore.contactName(this, num) ?: CallInfo.tag(this, num).ifEmpty { null }?.let { "$it\n$num" } ?: num.ifEmpty { "Private number" }
+        who.text = SmsStore.contactName(this, num) ?: CallInfo.tag(this, num).ifEmpty { null }?.takeIf { !CallInfo.webFraud(this, num) }?.let { "🔍 $it\n$num" } ?: num.ifEmpty { "Private number" }
         val saved = SmsStore.contactName(this, num) != null
         val sim = if (saved) "" else CallInfo.cnap(c).ifEmpty { CallInfo.cnapOf(this, num) }
         simName.text = L("📛 नेटवर्क से नाम (SIM का KYC): ", "📛 Name from the network (SIM KYC): ") + sim
