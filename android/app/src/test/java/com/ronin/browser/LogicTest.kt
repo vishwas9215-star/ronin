@@ -426,7 +426,14 @@ class LogicTest {
         assertTrue(CallerId.judge("+919876501234", false, "", k, now)!!.text.contains("Airtel"))
         assertEquals("ok", CallerId.judge("1600123456", false, "", k, now)!!.level) // bank 1600 line
         assertEquals("known", CallerId.judge("9984923355", false, "Atal Mishra", k, now)!!.level) // you called them
-        assertTrue(CallerId.judge("9984923355", false, "Atal Mishra", k, now)!!.text.contains("Atal Mishra"))
+        // names next to a number in a company SMS (owner 21 Nov: "Truecaller जैसी पहचान")
+        assertEquals("Ramesh Kumar", CallerId.personIn("Your Airtel technician Ramesh Kumar (9876501234) will visit today"))
+        assertEquals("Suresh", CallerId.personIn("Your delivery partner Suresh, 98765 01234 is on the way"))
+        assertEquals("Ravi", CallerId.personIn("Engineer name: Ravi, mobile 9876501234"))
+        assertNull(CallerId.personIn("Call 9876501234 for help"))
+        assertNull(CallerId.personIn("Your order will be delivered today. Contact 9876501234"))
+        val k2 = CallerId.Known(service = mapOf("9876501234" to "Airtel"), people = mapOf("9876501234" to "Ramesh (Airtel)"))
+        assertTrue(CallerId.judge("9876501234", false, "", k2, now)!!.text.contains("Ramesh (Airtel)"))
         assertEquals("known", CallerId.judge("+918045671234", false, "", k, now)!!.level) // during the Swiggy order
         assertEquals("info", CallerId.judge("+918045671234", false, "", k, now + 8 * 3600_000L)!!.level) // long after it
         assertEquals("info", CallerId.judge("1401234567", false, "", k, now + 8 * 3600_000L)!!.level) // telemarketing: grey

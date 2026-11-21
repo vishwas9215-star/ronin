@@ -51,8 +51,23 @@ object CallInfo {
     fun markEmergency(ctx: Context, n: String) { if (isEmergency(ctx, n)) prefs(ctx).edit().putLong("lastEmergency", System.currentTimeMillis()).apply() }
 
     /** A short line for a caller not in contacts (3.14.3: smart, see CallerId; red only for a real risk). */
-    fun label(ctx: Context, number: String, cnap: String = cnapOf(ctx, number)): String =
-        CallerId.judge(number, SmsStore.contactName(ctx, number) != null, cnap, CallerId.known(ctx))?.text ?: ""
+    fun label(ctx: Context, number: String, cnap: String = cnapOf(ctx, number)): String {
+        val w = CallerId.judge(number, SmsStore.contactName(ctx, number) != null, cnap, CallerId.known(ctx)) ?: return ""
+        return (if (cnap.isNotEmpty()) L("📛 SIM पर नाम: ", "📛 Name on the SIM: ") + cnap + " · " else "") + w.text
+    }
+
+    /** The owner's own name for a number (spoken once, kept on the phone; not a contact). */
+    fun tag(ctx: Context, number: String): String = prefs(ctx).getString("tag_" + digits(number).takeLast(10), "") ?: ""
+    fun setTag(ctx: Context, number: String, name: String) {
+        val k = digits(number).takeLast(10); if (k.length < 6) return
+        val n = name.trim().take(40)
+        prefs(ctx).edit().apply { if (n.isEmpty()) remove("tag_$k") else putString("tag_$k", n) }.apply()
+    }
+
+    /** Who to show for a number: contact, then the owner's own name, then the SIM (CNAP) name, then a name from an SMS. */
+    fun display(ctx: Context, number: String, cnap: String = ""): String? =
+        SmsStore.contactName(ctx, number) ?: tag(ctx, number).ifEmpty { null } ?: cnap.ifEmpty { cnapOf(ctx, number) }.ifEmpty { null }
+            ?: CallerId.known(ctx).people[CallerId.key(number)]
 
     fun prefs(ctx: Context) = ctx.getSharedPreferences("ronin_phone", Context.MODE_PRIVATE)
 
@@ -85,9 +100,13 @@ object CallInfo {
                 while (c.moveToNext()) {
                     val num = c.getString(0) ?: ""
                     val name = c.getString(1) ?: SmsStore.contactName(ctx, num) ?: ""
-                    val w = if (name.isEmpty()) CallerId.judge(num, false, cnapOf(ctx, num), k, c.getLong(2)) else null
+                    val sim = if (name.isEmpty()) cnapOf(ctx, num) else ""
+                    val w = if (name.isEmpty()) CallerId.judge(num, false, sim, k, c.getLong(2)) else null
+                    // a name for a number not in contacts: your own name for it, the SIM name, a name from a company SMS
+                    val tag = if (name.isEmpty()) tag(ctx, num) else ""
+                    val guess = if (name.isEmpty()) k.people[CallerId.key(num)] ?: "" else ""
                     out.put(JSONObject().put("number", num).put("name", name).put("date", c.getLong(2)).put("type", c.getInt(3)).put("dur", c.getLong(4))
-                        .put("label", w?.text ?: "").put("level", w?.level ?: ""))
+                        .put("label", w?.text ?: "").put("level", w?.level ?: "").put("tag", tag).put("sim", sim).put("guess", guess))
                 }
             }
         } catch (e: Exception) { }
@@ -153,6 +172,11 @@ class CallsActivity : PhonePage() {
             } catch (e: Exception) { }; done(true) }
             "block" -> bg { done(SmsStore.block(this, a.optString("number"))) }
             "label" -> bg { done(CallInfo.label(this, a.optString("number"))) }
+            // owner 21 Nov 2026 (both hands hurt): say a name for an unknown number once; kept on the phone, not a contact
+            "nameVoice" -> listen(L("इस नंबर का नाम बोलें", "Say a name for this number")) { text ->
+                if (text != null) CallInfo.setTag(this, a.optString("number"), text); done(text)
+            }
+            "setTag" -> { CallInfo.setTag(this, a.optString("number"), a.optString("name")); done(true) }
             "set" -> {
                 val k = a.optString("key")
                 if (k in setOf("silenceUnknown", "silenceForeign", "recAuto")) CallInfo.prefs(this).edit().putBoolean(k, a.optBoolean("on")).apply()
@@ -318,7 +342,7 @@ object CallHub {
         val screen = PendingIntent.getActivity(ctx, 4, Intent(ctx, InCallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE)
         val end = PendingIntent.getBroadcast(ctx, 5, Intent(ctx, CallActionReceiver::class.java).setAction("hangup"), PendingIntent.FLAG_IMMUTABLE)
         val n = NotificationCompat.Builder(ctx, "ronin_call").setSmallIcon(android.R.drawable.sym_action_call)
-            .setContentTitle("📞 " + (SmsStore.contactName(ctx, num) ?: num)).setContentText(L("Call चल रही है: वापस जाने के लिए दबाएँ", "Call in progress: tap to go back"))
+            .setContentTitle("📞 " + (CallInfo.display(ctx, num) ?: num)).setContentText(L("Call चल रही है: वापस जाने के लिए दबाएँ", "Call in progress: tap to go back"))
             .setOngoing(true).setContentIntent(screen).setCategory(NotificationCompat.CATEGORY_CALL).addAction(0, L("📵 Call काटें", "📵 Hang up"), end).build()
         try { nm.notify(NOTE + 1, n) } catch (e: SecurityException) { }
     }
@@ -330,7 +354,7 @@ object CallHub {
         val nm = ctx.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("ronin_ring", "Incoming calls", NotificationManager.IMPORTANCE_HIGH).apply { setSound(null, null) })
         val num = number(c)
-        val who = SmsStore.contactName(ctx, num) ?: num.ifEmpty { "Private number" }
+        val who = CallInfo.display(ctx, num, CallInfo.cnap(c))?.let { if (SmsStore.contactName(ctx, num) == null) "$it · $num" else it } ?: num.ifEmpty { "Private number" }
         val screen = PendingIntent.getActivity(ctx, 1, Intent(ctx, InCallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE)
         fun act(a: String, code: Int) = PendingIntent.getBroadcast(ctx, code, Intent(ctx, CallActionReceiver::class.java).setAction(a), PendingIntent.FLAG_IMMUTABLE)
         // "Answer" opens the call screen itself (Android 12+ does not let a receiver open a screen)
@@ -524,7 +548,7 @@ class InCallActivity : AppCompatActivity() {
         // the call is over: the call screen leaves Recents too (owner: two cards to swipe away after a call)
         if (c == null) { prox?.let { if (it.isHeld) it.release() }; finishAndRemoveTask(); return }
         val num = CallHub.number(c)
-        who.text = SmsStore.contactName(this, num) ?: num.ifEmpty { "Private number" }
+        who.text = SmsStore.contactName(this, num) ?: CallInfo.tag(this, num).ifEmpty { null }?.let { "$it\n$num" } ?: num.ifEmpty { "Private number" }
         val saved = SmsStore.contactName(this, num) != null
         val sim = if (saved) "" else CallInfo.cnap(c).ifEmpty { CallInfo.cnapOf(this, num) }
         simName.text = L("📛 नेटवर्क से नाम (SIM का KYC): ", "📛 Name from the network (SIM KYC): ") + sim

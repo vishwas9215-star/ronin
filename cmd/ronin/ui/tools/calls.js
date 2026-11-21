@@ -70,13 +70,26 @@
     const list = h('div', { id: 'list' });
     const fill = () => {
       const q = search.value.trim().toLowerCase();
-      const mine = rows.filter(r => !q || (r.name || '').toLowerCase().includes(q) || (r.number || '').includes(q)).slice(0, 300);
+      // a name for a number not in contacts (owner 21 Nov: "Truecaller जैसी पहचान"): your own name for it ✏️, the SIM
+      // (CNAP) name 📛, a name from a company SMS 🛠; only then the bare number
+      const title = r => r.name || (r.tag ? '✏️ ' + r.tag : r.sim ? '📛 ' + r.sim : r.guess ? '🛠 ' + r.guess : r.number);
+      const named = r => !!(r.name || r.tag || r.sim || r.guess);
+      const mine = rows.filter(r => !q || [r.name, r.tag, r.sim, r.guess].some(x => (x || '').toLowerCase().includes(q)) || (r.number || '').includes(q)).slice(0, 300);
+      const chip = (txt, id, f) => h('button', { cls: 'chip', 'data-act': id, on: { click: (e) => { e.stopPropagation(); f(); } } }, txt);
+      const whoIs = r => ask('open', { url: 'https://www.google.com/search?q=' + encodeURIComponent('"' + (r.number.replace(/\D/g, '').length > 10 && r.number.replace(/\D/g, '').startsWith('91') ? r.number.replace(/\D/g, '').slice(-10) : r.number.replace(/\D/g, '')) + '"') });
+      const nameIt = async r => {
+        let n = await ask('nameVoice', { number: r.number });
+        if (n == null) { n = prompt(L('इस नंबर का नाम (जैसे: Airtel वाले भैया)', 'A name for this number (e.g. Airtel technician)'), r.tag || ''); if (n == null) return; await ask('setTag', { number: r.number, name: n }); }
+        r.tag = String(n).trim(); fill();
+      };
       // 3.14.3 (owner 21 Nov): red only for a real risk; your order's company / your own call / a 1600 bank line stay calm
       const risk = (r) => (r.level ? r.level === 'risk' : !!r.label);
       list.replaceChildren(...(mine.length ? mine.map(r => h('div', { cls: 'th' + (risk(r) ? ' flag' : ''), 'data-number': r.number, 'data-level': r.level || '' },
-        h('div', { cls: 'avw' }, h('div', { cls: 'av', style: 'background:' + (risk(r) ? '#dc2626' : avColor(r.number || r.name)) }, avText(r.name || r.number, false)), dirChip(r.type)),
+        h('div', { cls: 'avw' }, h('div', { cls: 'av', style: 'background:' + (risk(r) ? '#dc2626' : avColor(r.number || r.name)) }, avText(r.name || r.tag || r.sim || r.guess || r.number, false)), dirChip(r.type)),
         h('div', { cls: 'mid', on: { click: () => window.__roninDial(r.number) } }, // a tap on the name only puts the number on the keypad: only the green 📞 calls (a stray tap once called someone at night)
-         h('b', { cls: r.type === 3 ? 'miss' : '' }, r.name || r.number), h('small', {}, dirWord(r.type), (r.type ? ' • ' : '') + (r.name ? r.number : '') + (r.date ? (r.name ? ' • ' : '') + when(r.date) : '')), r.label ? h('span', { cls: 'lbl' + (r.level && r.level !== 'risk' ? ' ' + r.level : '') }, r.label) : ''),
+         h('b', { cls: r.type === 3 ? 'miss' : '' }, title(r)), h('small', {}, dirWord(r.type), (r.type ? ' • ' : '') + (named(r) ? r.number : '') + (r.date ? (named(r) ? ' • ' : '') + when(r.date) : '')), r.label ? h('span', { cls: 'lbl' + (r.level && r.level !== 'risk' ? ' ' + r.level : '') }, r.label) : '',
+         // not a contact: who is it? (one tap: the number searched in Ronin Browser) / say a name once
+         !r.name && r.number && tab === 'recent' ? h('div', { cls: 'chips' }, chip(L('🔍 कौन?', '🔍 Who?'), 'who', () => whoIs(r)), chip(L('🎤 नाम', '🎤 Name'), 'name', () => nameIt(r))) : ''),
         h('button', { cls: 'pill', on: { click: () => ask('sms', { number: r.number }) } }, '💬'),
         r.label ? h('button', { cls: 'pill', on: { click: async () => { if (confirm(L(r.number + ' block करें? इनकी calls और SMS नहीं आएँगे।', 'Block ' + r.number + '? Their calls and SMS will stop.'))) alert((await ask('block', { number: r.number })) ? L('🚫 Block कर दिया', '🚫 Blocked') : L('Block नहीं हुआ', 'Could not block')); } } }, '🚫') : '',
         h('button', { cls: 'pill green', on: { click: () => call(r.number) } }, '📞')))

@@ -305,6 +305,11 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Real Sanchar Saathi OTP seen (owner screenshot 13:36): header XX-ISATHI, "Thank you for visiting SancharSaathi Portal.
   OTP for login is 289029 ... -Department of Telecom". The strict rule refused it ("login"): now an ISATHI header, or
   that exact text, is accepted. LogicTest has the real text.
+- Caller names (owner 13:52 "Truecaller जैसी पहचान... बहुत ज़रूरी"; told honestly Truecaller needs a shared contacts
+  database; chose "चारों जोड़ो"): Calls list title = contact > ✏️ own name (prefs ronin_phone tag_<last10>, said by voice
+  via RecognizerIntent hi-IN, prompt() fallback) > 📛 SIM (CNAP) name > 🛠 name next to the number in a company SMS
+  (CallerId.personIn, e.g. "technician Ramesh Kumar (98…)") > number. Chips "🔍 कौन?" (Google search of the number in
+  Ronin Browser, only on tap) and "🎤 नाम". Ringing notice / in-call screen use CallInfo.display / tag.
 
 ## 3.14.3 (branch `claude/v3.14.3`; NOT published) — owner 21 Nov 11:27–11:31 (calls chat)
 - **Play Protect called Ronin "harmful"** (tablet + phone) since the SMS / call log / accessibility permissions came back

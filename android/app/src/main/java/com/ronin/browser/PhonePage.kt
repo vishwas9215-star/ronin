@@ -32,6 +32,17 @@ abstract class PhonePage : AppCompatActivity() {
     private val roleAsk = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         pendingRole?.invoke(r.resultCode == RESULT_OK); pendingRole = null
     }
+    private var pendingSpeech: ((String?) -> Unit)? = null
+    private val speech = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        pendingSpeech?.invoke(r.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim()?.ifEmpty { null }); pendingSpeech = null
+    }
+    /** The phone's own voice typing (Hindi first); null when it is not there or nothing was said. */
+    protected fun listen(prompt: String, then: (String?) -> Unit) {
+        val i = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "hi-IN").putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, prompt)
+        runOnUiThread { try { pendingSpeech = then; speech.launch(i) } catch (e: Exception) { pendingSpeech = null; then(null) } }
+    }
     private var pendingPerm: (() -> Unit)? = null
     private val permAsk = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { pendingPerm?.invoke(); pendingPerm = null }
 

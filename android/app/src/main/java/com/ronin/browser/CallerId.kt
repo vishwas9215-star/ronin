@@ -20,6 +20,7 @@ object CallerId {
         val service: Map<String, String> = emptyMap(),
         val scam: Set<String> = emptySet(),
         val orders: List<Pair<Long, String>> = emptyList(),
+        val people: Map<String, String> = emptyMap(), // number → "Ramesh (Airtel)": the name written next to it in a company SMS
     )
 
     fun key(n: String): String = n.filter { it.isDigit() }.takeLast(10)
@@ -34,6 +35,21 @@ object CallerId {
     private val orderRe = Regex("\\b(order|delivery|deliver(ed|ing)?|out for delivery|rider|delivery (partner|executive|agent|boy)|technician|engineer|installation|install|visit|booking|appointment|executive|field agent|our (agent|team) will call|will call you|pickup|courier|shipment|shipped|dispatched|service request|complaint no)\\b", RegexOption.IGNORE_CASE)
     fun orderLike(body: String): Boolean = orderRe.containsMatchIn(body)
 
+    // "Technician Ramesh Kumar (9876501234)", "delivery partner Suresh, 98765 01234", "Ramesh - 9876501234 will visit"
+    private val roleWord = "(?:technician|engineer|executive|delivery (?:partner|executive|agent|boy)|rider|agent|associate|partner|representative|installer|courier boy|driver|captain)"
+    private val nameRe = Regex("\\b$roleWord\\s*(?:name)?\\s*(?:is|:|-)?\\s*(?:mr\\.?|ms\\.?|shri)?\\s*([A-Z][a-z]{2,15}(?:\\s[A-Z][a-z]{2,15})?)", RegexOption.IGNORE_CASE)
+    private val nameBeforeNum = Regex("\\b([A-Z][a-z]{2,15}(?:\\s[A-Z][a-z]{2,15})?)\\s*[(:,-]?\\s*(?:\\+?91[\\s-]?)?[6-9]\\d{4}[\\s-]?\\d{5}\\b")
+    private val notNames = setOf("Dear", "Your", "Call", "Contact", "Mobile", "Phone", "Number", "Customer", "Order", "Delivery", "Technician", "Engineer", "The", "From", "Team", "Thank", "Thanks", "Please", "Visit", "Will", "Airtel", "Jio", "Swiggy", "Zomato", "Amazon", "Flipkart", "Mr", "Ms", "Shri", "Partner", "Agent", "Rider", "Executive", "Help", "Support", "Care", "Toll", "Free", "Hi", "Hello")
+
+    /** The person's name a company SMS writes next to a number (or null). */
+    fun personIn(body: String): String? {
+        val m = nameRe.find(body) ?: nameBeforeNum.find(body) ?: return null
+        val raw = m.groupValues[1].trim()
+        // IGNORE_CASE also matched "will visit": keep only real capitalised names, not common words
+        val words = raw.split(" ").filter { it.isNotEmpty() && it[0].isUpperCase() && it !in notNames }
+        return words.takeIf { it.isNotEmpty() }?.joinToString(" ")
+    }
+
     /** "AIRTEL", "SWIGGY", "AIRBRD" → "Airtel", "Swiggy", "Airbrd". */
     fun brand(address: String): String = address.trim().uppercase().replace(Regex("^[A-Z]{2}-"), "").replace(Regex("-[A-Z]$"), "")
         .lowercase().replaceFirstChar { it.uppercase() }
@@ -43,16 +59,16 @@ object CallerId {
         if (d.isEmpty()) return Who("risk", L("छुपा हुआ नंबर (private): सावधान", "Hidden number (private): be careful"))
         if (CallInfo.isEmergency(d) || contact) return null
         val n = key(d)
-        val sim = if (cnap.isNotEmpty()) L("📛 SIM पर नाम: ", "📛 Name on the SIM: ") + cnap + " · " else ""
+        val sim = "" // the SIM (CNAP) name is the row's title now (owner 21 Nov: "Truecaller जैसी पहचान"); label() adds it for notices
         if (d.startsWith("+") && !d.startsWith("+91")) return Who("risk", L("🌍 विदेश का नंबर: अनजान हो तो न उठाएँ, पैसे / OTP न दें", "🌍 Foreign number: if you do not know them, do not answer; never give money / OTP"))
         if (n in k.scam) return Who("risk", sim + L("⛔ यह नंबर ठगी वाले SMS में आया था: पैसे / OTP न दें", "⛔ This number was in a scam SMS: never give money / OTP"))
         if (d.removePrefix("+91").removePrefix("0").startsWith("1600")) return Who("ok", L("🏦 बैंक / सरकारी दफ़्तर की असली service line (1600) · फिर भी OTP न बताएँ", "🏦 A real bank / government service line (1600) · still never tell an OTP"))
-        k.service[n]?.let { return Who("ok", sim + L("🛠 आपके $it वाले SMS में यही नंबर था", "🛠 This number was in your $it SMS")) }
+        k.service[n]?.let { b -> val p = k.people[n]; return Who("ok", if (p != null) L("🛠 आपके $b SMS से: $p", "🛠 From your $b SMS: $p") else L("🛠 आपके $b वाले SMS में यही नंबर था", "🛠 This number was in your $b SMS")) }
         if (n in k.called) return Who("known", sim + L("📞 आपने इन्हें पहले call किया था / बात हुई थी", "📞 You called / talked to them before"))
         if (d.removePrefix("+91").startsWith("140")) return Who("info", L("📢 Telemarketing (140 वाला नंबर)", "📢 Telemarketing (a 140 number)"))
         k.orders.lastOrNull { at - it.first in 0..6 * 3600_000L }?.let { return Who("known", sim + L("🛵 ${it.second} के order / service के समय आई call: शायद वही हों · OTP / पैसे न दें", "🛵 Came while your ${it.second} order / service was on: maybe them · never give OTP / money")) }
-        if (sim.isNotEmpty()) return Who("info", sim.removeSuffix(" · ") + L(" · अनजान नंबर", " · not in contacts"))
-        return Who("info", L("👤 अनजान नंबर", "👤 Not in contacts"))
+        if (cnap.isNotEmpty()) return Who("info", L("📛 SIM पर यही नाम है · contact में नहीं", "📛 Name from the SIM · not in contacts"))
+        return Who("info", L("👤 अनजान नंबर · 🔍 से खोजें", "👤 Not in contacts · tap 🔍 to look up"))
     }
 
     @Volatile private var cache: Pair<Long, Known>? = null
@@ -65,6 +81,7 @@ object CallerId {
 
     private fun read(ctx: Context): Known {
         val called = HashSet<String>(); val service = HashMap<String, String>(); val scam = HashSet<String>(); val orders = ArrayList<Pair<Long, String>>()
+        val people = HashMap<String, String>()
         try {
             ctx.contentResolver.query(CallLog.Calls.CONTENT_URI, arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.TYPE, CallLog.Calls.DURATION), null, null, CallLog.Calls.DATE + " DESC LIMIT 500")?.use { c ->
                 while (c.moveToNext()) {
@@ -86,13 +103,16 @@ object CallerId {
                     if (bad) { scam.addAll(nums); key(a).takeIf { it.length == 10 && !header }?.let { scam.add(it) }; continue }
                     if (!header || promo(a)) continue
                     val name = brand(a)
-                    if (now - at < 14 * 86_400_000L) nums.forEach { service.putIfAbsent(it, name) }
+                    if (now - at < 14 * 86_400_000L) {
+                        nums.forEach { service.putIfAbsent(it, name) }
+                        if (nums.size == 1) personIn(b)?.let { p -> people.putIfAbsent(nums[0], "$p ($name)") }
+                    }
                     if (now - at < 24 * 3600_000L && orderLike(b)) orders.add(at to name)
                 }
             }
         } catch (e: Exception) { }
         orders.sortBy { it.first }
-        return Known(called, service, scam, orders)
+        return Known(called, service, scam, orders, people)
     }
 
     /** For call silencing: a number this phone has reason to trust is never silenced as "unknown". */
