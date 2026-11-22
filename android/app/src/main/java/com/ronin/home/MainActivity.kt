@@ -301,11 +301,11 @@ class MainActivity : Activity() {
             // Movies & Shows are for the parents (horror only in the last row). The Kids row has apps only.
             val seen = HashSet<String>()
             fun once(l: List<Title>) = l.filter { seen.add((if (it.isTv) "t" else "m") + it.id) }
-            row(Lang.HOLLYWOOD.title, once(shelf.byLang[Lang.HOLLYWOOD].orEmpty()).map { posterTile(it) })
+            // owner's order: New Releases, Top 10 Movies, Top 10 Shows, Hollywood, Korean, South Indian, Indian, then the rest
             row("New Releases", once(shelf.newReleases).map { posterTile(it) })
-            for (l in Lang.values().drop(1)) row(l.title, once(shelf.byLang[l].orEmpty()).map { posterTile(it) })
             row("Top 10 Movies", shelf.topMovies.mapIndexed { i, t -> rankedTile(t, i + 1) })
             row("Top 10 Shows", shelf.topShows.mapIndexed { i, t -> rankedTile(t, i + 1) })
+            for (l in listOf(Lang.HOLLYWOOD, Lang.KOREAN, Lang.SOUTH, Lang.BOLLYWOOD)) row(l.title, once(shelf.byLang[l].orEmpty()).map { posterTile(it) })
             row("Coming Soon", shelf.comingSoon.map { posterTile(it) })
             row("Horror", shelf.horror.map { posterTile(it) })
         }

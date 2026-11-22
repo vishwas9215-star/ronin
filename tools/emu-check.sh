@@ -23,9 +23,9 @@ adb shell input keyevent DPAD_RIGHT; adb shell input keyevent DPAD_RIGHT; shot 0
 adb shell input keyevent DPAD_DOWN; shot 03-kids-row 1
 adb shell input keyevent DPAD_DOWN; shot 04-new-releases 1
 U=$(ui); echo "$U" | grep -q "★" && pass "info panel shows focused title rating" || fail "info panel shows focused title rating"
-for w in "Hollywood" "Steel Horizon"; do echo "$U" | grep -q "$w" && pass "rows show '$w'" || fail "rows show '$w'"; done
+for w in "New Releases" "Winter Road"; do echo "$U" | grep -q "$w" && pass "rows show '$w'" || fail "rows show '$w'"; done
 adb shell input keyevent DPAD_DOWN; adb shell input keyevent DPAD_DOWN; shot 05-hollywood-bollywood 1
-U=$(ui); for w in "Bollywood"; do echo "$U" | grep -q "$w" && pass "rows show '$w'" || fail "rows show '$w'"; done
+U=$(ui); for w in "Top 10"; do echo "$U" | grep -q "$w" && pass "rows show '$w'" || fail "rows show '$w'"; done
 adb shell input keyevent DPAD_DOWN; adb shell input keyevent DPAD_DOWN; adb shell input keyevent DPAD_DOWN; shot 06-bottom 1
 U=$(ui); echo "$U" | grep -q "Night Market" && pass "horror visible somewhere" || true
 adb shell input keyevent BACK; shot 07-back-to-top 1

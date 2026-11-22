@@ -38,7 +38,7 @@ data class Title(
 
 /** Family taste (owner): Hollywood first; wife also Bollywood, Korean, South Indian. Movies + shows mixed. */
 enum class Lang(val title: String, val codes: String) {
-    HOLLYWOOD("Hollywood", "en"), BOLLYWOOD("Bollywood", "hi"), KOREAN("Korean", "ko"), SOUTH("South Indian", "ta|te|ml|kn")
+    HOLLYWOOD("Hollywood", "en"), BOLLYWOOD("Indian", "hi"), KOREAN("Korean", "ko"), SOUTH("South Indian", "ta|te|ml|kn")
 }
 
 /** Movies & Shows rows (no hero card: owner dropped "#1 in India"). */

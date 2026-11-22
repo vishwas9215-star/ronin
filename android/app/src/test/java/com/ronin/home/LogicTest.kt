@@ -108,7 +108,7 @@ class LogicTest {
     @Test fun languageRows() {
         val u = Tmdb.discoverUrl(true, 8, "top", LocalDate.of(2026, 11, 21), Lang.SOUTH)
         assertTrue(u, u.contains("with_original_language=ta%7Cte%7Cml%7Ckn") && u.contains("/discover/tv?"))
-        assertEquals(listOf("Hollywood", "Bollywood", "Korean", "South Indian"), Lang.values().map { it.title })
+        assertEquals(listOf("Hollywood", "Indian", "Korean", "South Indian"), Lang.values().map { it.title })
     }
 
     @Test fun onlyGoogleHomeMainScreenIsReplaced() {
