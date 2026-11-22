@@ -75,7 +75,9 @@ class HomeKeyService : AccessibilityService() {
         fun isGoogleHomeScreen(pkg: String, cls: String, text: String = ""): Boolean {
             if (pkg !in HOMES) return false
             val c = cls.substringAfterLast('.')
-            return c == "MainActivity" || c == "HomeActivity" || c == "LauncherActivity" || text.trim().equals("Home", ignoreCase = true)
+            val t = text.trim().lowercase()
+            // seen on the family TCL: "Home", "Main user home screen"
+            return c == "MainActivity" || c == "HomeActivity" || c == "LauncherActivity" || t == "home" || t.endsWith("home screen")
         }
     }
 }

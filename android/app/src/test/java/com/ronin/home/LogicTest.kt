@@ -117,6 +117,7 @@ class LogicTest {
         assertFalse(HomeKeyService.isGoogleHomeScreen(Catalog.LAUNCHER_X, "com.google.android.apps.tv.launcherx.details.DetailsActivity"))
         assertFalse(HomeKeyService.isGoogleHomeScreen("com.netflix.ninja", "com.netflix.MainActivity"))
         assertTrue(HomeKeyService.isGoogleHomeScreen(Catalog.LAUNCHER_X, "android.widget.FrameLayout", "Home"))
+        assertTrue(HomeKeyService.isGoogleHomeScreen(Catalog.LAUNCHER_X, "android.widget.FrameLayout", "Main user home screen"))
         assertFalse(HomeKeyService.isGoogleHomeScreen(Catalog.LAUNCHER_X, "android.widget.FrameLayout", "Jailer 2"))
     }
 }
