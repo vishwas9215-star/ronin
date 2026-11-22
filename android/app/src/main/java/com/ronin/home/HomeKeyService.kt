@@ -29,17 +29,19 @@ class HomeKeyService : AccessibilityService() {
     }
 
     private var lastAssistant = 0L
+    private var lastShown = 0L
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
         val cls = event.className?.toString() ?: ""
-        note("window $pkg/$cls")
+        val text = event.text?.joinToString(" ")?.take(60) ?: ""
+        note("window $pkg/$cls '$text'")
         val now = SystemClock.elapsedRealtime()
         if (pkg in ASSISTANT) { lastAssistant = now; return }
         // Some TVs do not hand the HOME button to us: then the Google home screen appears.
         // Replace ONLY its main screen, and never right after Gemini/voice (it may be showing a movie page).
-        if (isGoogleHomeScreen(pkg, cls) && now - lastAssistant > 8_000) showHome("google-home")
+        if (isGoogleHomeScreen(pkg, cls, text) && now - lastAssistant > 20_000 && now - lastShown > 1_500) { lastShown = now; showHome("google-home") }
     }
 
     override fun onInterrupt() {}
@@ -66,10 +68,11 @@ class HomeKeyService : AccessibilityService() {
         private val HOMES = setOf(Catalog.LAUNCHER_X, "com.google.android.tvlauncher")
 
         /** Main screen of the Google home only (not its movie / details / search pages). */
-        fun isGoogleHomeScreen(pkg: String, cls: String): Boolean {
+        /** Google TV's home screen itself: its window is titled "Home" (seen on the family TCL), or a main activity class. */
+        fun isGoogleHomeScreen(pkg: String, cls: String, text: String = ""): Boolean {
             if (pkg !in HOMES) return false
             val c = cls.substringAfterLast('.')
-            return c == "MainActivity" || c == "HomeActivity" || c == "LauncherActivity"
+            return c == "MainActivity" || c == "HomeActivity" || c == "LauncherActivity" || text.trim().equals("Home", ignoreCase = true)
         }
     }
 }

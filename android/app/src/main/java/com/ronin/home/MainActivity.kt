@@ -289,7 +289,11 @@ class MainActivity : Activity() {
         row("My Apps", Catalog.visible(Catalog.myApps, subs, ::installed).map { appTile(it) }, first = true)
         row("Kids", Catalog.visible(Catalog.kidsApps, subs, ::installed).map { appTile(it) })
 
-        if (!demo && store.tmdbKey.isEmpty()) {
+        if (!demo && store.tmdbKey.isNotEmpty() && shelf.topMovies.isEmpty() && shelf.byLang.isEmpty()) {
+            row("Movies & Shows", listOf(infoTile("Loading movies and shows…", "Hollywood, Bollywood, Korean, South Indian and Top 10 appear here in a few seconds") {
+                startActivity(Intent(this, SetupActivity::class.java))
+            }))
+        } else if (!demo && store.tmdbKey.isEmpty()) {
             row("Movies & Shows", listOf(infoTile("Movies & Shows", "Add your free TMDB key to see Hollywood, Bollywood, Korean, South Indian and Top 10") {
                 startActivity(Intent(this, SetupActivity::class.java))
             }))

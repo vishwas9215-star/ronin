@@ -158,25 +158,24 @@ object Tmdb {
         } finally { c.disconnect() }
     }
 
-    /** Network: all four rows for every service we know (filtered later by the switches). */
+    /** Network: every row for every service, fetched in parallel (6 at a time); filtered later by the switches. */
     fun fetch(key: String, today: LocalDate = LocalDate.now()): Shelf {
         val ids = parseProviders(get("$API/watch/providers/movie?watch_region=IN&language=en-IN", key))
-        val top = mutableListOf<List<Title>>(); val topTv = mutableListOf<List<Title>>()
-        val new = mutableListOf<List<Title>>(); val soon = mutableListOf<List<Title>>()
-        val horror = mutableListOf<List<Title>>()
-        val langs = Lang.values().associateWith { mutableListOf<List<Title>>() }
-        for ((s, id) in ids) {
-            horror += parseDiscover(get(discoverUrl(false, id, "top", today, genre = HORROR), key), false, s)
-            for (l in Lang.values()) for (tv in listOf(false, true))
-                langs.getValue(l) += parseDiscover(get(discoverUrl(tv, id, "top", today, l), key), tv, s)
-            top += parseDiscover(get(discoverUrl(false, id, "top", today), key), false, s)
-            topTv += parseDiscover(get(discoverUrl(true, id, "top", today), key), true, s)
-            new += parseDiscover(get(discoverUrl(false, id, "new", today), key), false, s)
-            new += parseDiscover(get(discoverUrl(true, id, "new", today), key), true, s)
-            soon += parseDiscover(get(discoverUrl(false, id, "soon", today), key), false, s)
-            soon += parseDiscover(get(discoverUrl(true, id, "soon", today), key), true, s)
-        }
-        // keep extra so that switching a service off still leaves 10
-        return Shelf(merge(top, 40), merge(topTv, 40), merge(new, 40), merge(soon, 40), langs.mapValues { merge(it.value, 40) }, merge(horror, 30))
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(6)
+        fun job(tv: Boolean, id: Int, kind: String, s: Service, lang: Lang? = null, genre: Int? = null) =
+            pool.submit<List<Title>> { try { parseDiscover(get(discoverUrl(tv, id, kind, today, lang, genre), key), tv, s) } catch (e: Exception) { emptyList() } }
+        try {
+            val top = ids.map { (s, id) -> job(false, id, "top", s) }
+            val topTv = ids.map { (s, id) -> job(true, id, "top", s) }
+            val new = ids.flatMap { (s, id) -> listOf(job(false, id, "new", s), job(true, id, "new", s)) }
+            val soon = ids.flatMap { (s, id) -> listOf(job(false, id, "soon", s), job(true, id, "soon", s)) }
+            val horror = ids.map { (s, id) -> job(false, id, "top", s, genre = HORROR) }
+            val langs = Lang.values().associateWith { l -> ids.flatMap { (s, id) -> listOf(job(false, id, "top", s, l), job(true, id, "top", s, l)) } }
+            fun all(l: List<java.util.concurrent.Future<List<Title>>>) = l.map { it.get() }
+            val shelf = Shelf(merge(all(top), 40), merge(all(topTv), 40), merge(all(new), 40), merge(all(soon), 40),
+                langs.mapValues { merge(all(it.value), 40) }, merge(all(horror), 30))
+            if (shelf.topMovies.isEmpty() && shelf.byLang.values.all { it.isEmpty() }) throw IllegalStateException("TMDB returned nothing")
+            return shelf
+        } finally { pool.shutdown() }
     }
 }
