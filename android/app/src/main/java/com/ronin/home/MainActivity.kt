@@ -217,7 +217,7 @@ class MainActivity : Activity() {
         val timeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM }
         timeRow.addView(TextClock(this).apply {
             format12Hour = "h:mm"; format24Hour = "HH:mm"; textSize = 64f; setTextColor(Ui.TEXT)
-            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL); includeFontPadding = false; letterSpacing = -0.02f
+            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL); includeFontPadding = true; letterSpacing = -0.02f
             translationX = -dp(3).toFloat()   // optical alignment with the 48 dp edge
         })
         timeRow.addView(TextClock(this).apply {
@@ -227,7 +227,7 @@ class MainActivity : Activity() {
         clock.addView(timeRow)
         clock.addView(TextClock(this).apply {
             format12Hour = "EEEE, d MMMM"; format24Hour = "EEEE, d MMMM"; textSize = 16f; setTextColor(Ui.SUB)
-        }, Ui.lp(WRAP, WRAP, t = dp(2)))
+        }, Ui.lp(WRAP, WRAP, t = -dp(6)))
         clockBlock = clock
         stage.addView(clock, Ui.flp(WRAP, WRAP, Gravity.BOTTOM or Gravity.START))
         // focused title info (shown when a poster has focus)
