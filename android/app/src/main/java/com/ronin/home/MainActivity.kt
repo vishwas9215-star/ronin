@@ -90,11 +90,12 @@ class MainActivity : Activity() {
         page.addView(header(), LinearLayout.LayoutParams(MATCH, WRAP))
         column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(48), 0, dp(48), dp(300))
+            setPadding(dp(48), dp(2), dp(48), dp(300))
             clipChildren = false; clipToPadding = false
         }
         scroll = ScrollView(this).apply {
-            isVerticalScrollBarEnabled = false; clipChildren = false; isSmoothScrollingEnabled = true
+            // clip: rows must never slide over the fixed top area
+            isVerticalScrollBarEnabled = false; clipChildren = true; clipToPadding = true; isSmoothScrollingEnabled = true
             addView(column, FrameLayout.LayoutParams(MATCH, WRAP))
         }
         page.addView(scroll, LinearLayout.LayoutParams(MATCH, 0, 1f))
