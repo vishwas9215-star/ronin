@@ -71,20 +71,22 @@ class MainActivity : Activity() {
                 setGradientCenter(0.1f, 0f); colors = intArrayOf(Ui.GLOW, Ui.BG_TOP)
             }
         }, FrameLayout.LayoutParams(MATCH, MATCH))
-        // backdrop of the focused title (top-right), softly blurred, faded into the background
+        // backdrop of the focused title (top-right): one box = picture + left and bottom fades, so no hard edges
+        val bd = FrameLayout(this).apply { alpha = 0f }
         backdrop = ImageView(this).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP; alpha = 0f
-            if (Build.VERSION.SDK_INT >= 31) setRenderEffect(RenderEffect.createBlurEffect(dp(6).toFloat(), dp(6).toFloat(), Shader.TileMode.CLAMP))
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            if (Build.VERSION.SDK_INT >= 31) setRenderEffect(RenderEffect.createBlurEffect(dp(5).toFloat(), dp(5).toFloat(), Shader.TileMode.DECAL))
         }
-        root.addView(backdrop, Ui.flp(dp(620), dp(350), Gravity.TOP or Gravity.END))
-        backdropScrim = View(this).apply {
-            alpha = 0f
-            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF0B0F17.toInt(), 0xD90B0F17.toInt(), 0x400B0F17))
-        }
-        root.addView(backdropScrim, Ui.flp(dp(620), dp(350), Gravity.TOP or Gravity.END))
-        root.addView(View(this).apply {
+        bd.addView(backdrop, FrameLayout.LayoutParams(MATCH, MATCH))
+        bd.addView(View(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF0B0F17.toInt(), 0xB30B0F17.toInt(), 0x000B0F17))
+        }, FrameLayout.LayoutParams(MATCH, MATCH))
+        bd.addView(View(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0xFF0B0F17.toInt(), 0x000B0F17))
-        }, Ui.flp(MATCH, dp(120), Gravity.TOP).apply { topMargin = dp(232) })
+        }, Ui.flp(MATCH, dp(150), Gravity.BOTTOM))
+        bd.addView(View(this).apply { setBackgroundColor(0x330B0F17) }, FrameLayout.LayoutParams(MATCH, MATCH))
+        backdropScrim = bd
+        root.addView(bd, Ui.flp(dp(640), dp(330), Gravity.TOP or Gravity.END))
 
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false }
         page.addView(header(), LinearLayout.LayoutParams(MATCH, WRAP))
@@ -252,7 +254,7 @@ class MainActivity : Activity() {
         if (t == null) {
             clockBlock.animate().alpha(1f).setDuration(200).start()
             infoBlock.animate().alpha(0f).setDuration(160).start()
-            backdrop.animate().alpha(0f).setDuration(300).start(); backdropScrim.animate().alpha(0f).setDuration(300).start()
+            backdropScrim.animate().alpha(0f).setDuration(300).start()
             return
         }
         infoTitle.text = t.name
@@ -263,10 +265,10 @@ class MainActivity : Activity() {
         clockBlock.animate().alpha(0f).setDuration(160).start()
         infoBlock.alpha = 0f; infoBlock.animate().alpha(1f).setDuration(240).start()
         // owner: no scary picture in the background, so horror never changes it
-        if (t.horror) { backdrop.animate().alpha(0f).setDuration(200).start(); backdropScrim.animate().alpha(0f).setDuration(200).start(); return }
+        if (t.horror) { backdropScrim.animate().alpha(0f).setDuration(200).start(); return }
         if (t.backdrop != null && !demo) Images.load(this, Tmdb.IMG + "w780" + t.backdrop, backdrop)
         else backdrop.setImageBitmap(Ui.placeholder(dp(310), dp(175), "", Demo.color(t.name)))
-        backdrop.animate().alpha(0.55f).setDuration(400).start(); backdropScrim.animate().alpha(1f).setDuration(400).start()
+        backdropScrim.animate().alpha(0.8f).setDuration(400).start()
     }
 
     // ---------- rows ----------
