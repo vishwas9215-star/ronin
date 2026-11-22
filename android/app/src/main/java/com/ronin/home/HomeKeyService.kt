@@ -24,6 +24,7 @@ class HomeKeyService : AccessibilityService() {
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
         if (event.keyCode != KeyEvent.KEYCODE_HOME) return false
+        suppressUntil = 0
         if (event.action == KeyEvent.ACTION_UP) showHome("home-key")
         return true
     }
@@ -41,7 +42,7 @@ class HomeKeyService : AccessibilityService() {
         if (pkg in ASSISTANT) { lastAssistant = now; return }
         // Some TVs do not hand the HOME button to us: then the Google home screen appears.
         // Replace ONLY its main screen, and never right after Gemini/voice (it may be showing a movie page).
-        if (isGoogleHomeScreen(pkg, cls, text) && now - lastAssistant > 20_000 && now - lastShown > 1_500) { lastShown = now; showHome("google-home") }
+        if (isGoogleHomeScreen(pkg, cls, text) && now > suppressUntil && now - lastAssistant > 20_000 && now - lastShown > 1_500) { lastShown = now; showHome("google-home") }
     }
 
     override fun onInterrupt() {}
@@ -64,6 +65,8 @@ class HomeKeyService : AccessibilityService() {
 
     companion object {
         const val TAG = "RoninHome"
+        /** Ronin Home itself opened a Google TV page (poster fallback): leave it alone until then. */
+        @Volatile var suppressUntil = 0L
         val ASSISTANT = setOf("com.google.android.katniss", "com.google.android.apps.bard", "com.google.android.googlequicksearchbox")
         private val HOMES = setOf(Catalog.LAUNCHER_X, "com.google.android.tvlauncher")
 

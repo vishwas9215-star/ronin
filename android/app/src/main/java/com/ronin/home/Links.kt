@@ -46,8 +46,9 @@ object Links {
             val v = r.optJSONObject("val")?.optString("value") ?: continue
             val fmt = r.optJSONObject("fmt")?.optString("value")
             val url = when {
-                // Wikidata's Prime pattern points to amazon.com; the Prime Video TV app opens primevideo.com links
-                service == Service.PRIME -> "https://www.primevideo.com/detail/$v"
+                // the TV apps only accept their own hosts (checked on the family TCL: app.primevideo.com, www.hotstar.com)
+                service == Service.PRIME -> if (v.startsWith("amzn1.")) "https://app.primevideo.com/detail?gti=$v" else "https://app.primevideo.com/detail?asin=$v"
+                service == Service.JIOHOTSTAR && v.all { it.isDigit() } -> "https://www.hotstar.com/in/movies/watch/$v"
                 fmt != null && fmt.contains("$1") -> fmt.replace("$1", v)
                 service == Service.NETFLIX -> "https://www.netflix.com/title/$v"
                 else -> null
@@ -92,12 +93,11 @@ object Links {
             if (go(i)) return "deep-link"
         }
         val q = searchText(t)
-        for (pkg in listOf("com.google.android.katniss", null)) {
-            val s = Intent(Intent.ACTION_SEARCH).putExtra(SearchManager.QUERY, q)
-            if (pkg != null) s.setPackage(pkg)
-            if (go(s)) return "google-search"
-        }
-        if (go(Intent("android.search.action.GLOBAL_SEARCH").putExtra(SearchManager.QUERY, q))) return "global-search"
+        // Google TV's own title page / search (same as Gemini). Don't let the Home helper cover it.
+        HomeKeyService.suppressUntil = android.os.SystemClock.elapsedRealtime() + 90_000
+        if (go(Intent("android.search.action.GLOBAL_SEARCH").setPackage("com.google.android.katniss").putExtra(SearchManager.QUERY, q))) return "google-search"
+        if (go(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=" + Uri.encode(q))).setPackage(Catalog.LAUNCHER_X))) return "google-tv-search"
+        HomeKeyService.suppressUntil = 0
         val home = ctx.packageManager.getLeanbackLaunchIntentForPackage(t.service.pkg)
             ?: ctx.packageManager.getLaunchIntentForPackage(t.service.pkg)
         if (home != null && go(home)) return "app-home"
