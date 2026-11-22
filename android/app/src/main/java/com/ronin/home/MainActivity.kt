@@ -75,18 +75,18 @@ class MainActivity : Activity() {
         val bd = FrameLayout(this).apply { alpha = 0f }
         backdrop = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            if (Build.VERSION.SDK_INT >= 31) setRenderEffect(RenderEffect.createBlurEffect(dp(5).toFloat(), dp(5).toFloat(), Shader.TileMode.DECAL))
+            if (Build.VERSION.SDK_INT >= 31) setRenderEffect(RenderEffect.createBlurEffect(dp(10).toFloat(), dp(10).toFloat(), Shader.TileMode.DECAL))
         }
         bd.addView(backdrop, FrameLayout.LayoutParams(MATCH, MATCH))
         bd.addView(View(this).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF0B0F17.toInt(), 0xB30B0F17.toInt(), 0x000B0F17))
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF0B0F17.toInt(), 0xE60B0F17.toInt(), 0x800B0F17.toInt(), 0x000B0F17))
         }, FrameLayout.LayoutParams(MATCH, MATCH))
         bd.addView(View(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0xFF0B0F17.toInt(), 0x000B0F17))
         }, Ui.flp(MATCH, dp(150), Gravity.BOTTOM))
         bd.addView(View(this).apply { setBackgroundColor(0x330B0F17) }, FrameLayout.LayoutParams(MATCH, MATCH))
         backdropScrim = bd
-        root.addView(bd, Ui.flp(dp(640), dp(330), Gravity.TOP or Gravity.END))
+        root.addView(bd, Ui.flp(dp(660), dp(300), Gravity.TOP or Gravity.END))
 
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false }
         page.addView(header(), LinearLayout.LayoutParams(MATCH, WRAP))
@@ -104,6 +104,10 @@ class MainActivity : Activity() {
         // hard clip (elevated, zoomed tiles otherwise escape the scroll area and cover the top area)
         scroll.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> v.clipBounds = android.graphics.Rect(0, 0, v.width, v.height) }
         root.addView(page, FrameLayout.LayoutParams(MATCH, MATCH))
+        root.addView(View(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0xFF0B0F17.toInt(), 0x000B0F17))
+            isFocusable = false
+        }, Ui.flp(MATCH, dp(48), Gravity.BOTTOM))
         setContentView(root)
 
         root.viewTreeObserver.addOnGlobalFocusChangeListener { _, now -> onFocusMoved(now) }
@@ -200,6 +204,9 @@ class MainActivity : Activity() {
         val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; clipChildren = false }
         bar.addView(Ui.pill(this, "Family", 0x1FFFFFFF, Ui.TEXT, 13f).apply { setPadding(dp(14), dp(6), dp(14), dp(6)) })
         bar.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        // quiet hint that the remote's voice button (Gemini) works everywhere
+        bar.addView(ImageView(this).apply { setImageResource(R.drawable.ic_mic); alpha = 0.8f }, Ui.lp(dp(18), dp(18), r = dp(4)))
+        bar.addView(Ui.text(this, "Ask Gemini", 13f, Ui.SUB), Ui.lp(WRAP, WRAP, r = dp(18)))
         bar.addView(Ui.button(this, "Castle") { open(Service.CASTLE.pkg) })
         bar.addView(Ui.button(this, "My subscriptions") { startActivity(Intent(this, SubscriptionsActivity::class.java)) }, Ui.lp(WRAP, WRAP, l = dp(12)))
         box.addView(bar)
@@ -211,6 +218,7 @@ class MainActivity : Activity() {
         timeRow.addView(TextClock(this).apply {
             format12Hour = "h:mm"; format24Hour = "HH:mm"; textSize = 64f; setTextColor(Ui.TEXT)
             typeface = Typeface.create("sans-serif-light", Typeface.NORMAL); includeFontPadding = false; letterSpacing = -0.02f
+            translationX = -dp(3).toFloat()   // optical alignment with the 48 dp edge
         })
         timeRow.addView(TextClock(this).apply {
             format12Hour = "a"; format24Hour = ""; textSize = 16f; setTextColor(Ui.SUB)
@@ -219,19 +227,20 @@ class MainActivity : Activity() {
         clock.addView(timeRow)
         clock.addView(TextClock(this).apply {
             format12Hour = "EEEE, d MMMM"; format24Hour = "EEEE, d MMMM"; textSize = 16f; setTextColor(Ui.SUB)
-        }, Ui.lp(WRAP, WRAP, t = dp(6)))
+        }, Ui.lp(WRAP, WRAP, t = dp(2)))
         clockBlock = clock
         stage.addView(clock, Ui.flp(WRAP, WRAP, Gravity.BOTTOM or Gravity.START))
         // focused title info (shown when a poster has focus)
         infoBlock = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; alpha = 0f }
-        infoTitle = Ui.text(this, "", 28f, Color.WHITE, Typeface.BOLD, "sans-serif-medium").apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
-        infoMeta = Ui.text(this, "", 14f, Ui.SUB)
-        infoText = Ui.text(this, "", 14f, 0xFFC9CFDA.toInt()).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END; setLineSpacing(0f, 1.15f) }
+        infoTitle = Ui.text(this, "", 30f, Color.WHITE, Typeface.BOLD, "sans-serif-medium").apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+        infoMeta = Ui.text(this, "", 15f, 0xFFB8C0CC.toInt())
+        infoText = Ui.text(this, "", 16f, 0xFFAEB6C4.toInt()).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END; setLineSpacing(0f, 1.3f) }
         infoBlock.addView(infoTitle)
         infoBlock.addView(infoMeta, Ui.lp(WRAP, WRAP, t = dp(6)))
-        infoBlock.addView(infoText, Ui.lp(dp(520), WRAP, t = dp(8)))
-        stage.addView(infoBlock, Ui.flp(dp(560), WRAP, Gravity.BOTTOM or Gravity.START))
-        box.addView(stage, Ui.lp(MATCH, dp(118), t = dp(8)))
+        infoBlock.addView(infoText, Ui.lp(dp(540), WRAP, t = dp(8)))
+        stage.addView(infoBlock, Ui.flp(dp(580), WRAP, Gravity.BOTTOM or Gravity.START))
+        // fixed height for both states, so rows never jump
+        box.addView(stage, Ui.lp(MATCH, dp(140), t = dp(6), b = dp(10)))
         return box
     }
 
@@ -268,7 +277,7 @@ class MainActivity : Activity() {
         if (t.horror) { backdropScrim.animate().alpha(0f).setDuration(200).start(); return }
         if (t.backdrop != null && !demo) Images.load(this, Tmdb.IMG + "w780" + t.backdrop, backdrop)
         else backdrop.setImageBitmap(Ui.placeholder(dp(310), dp(175), "", Demo.color(t.name)))
-        backdropScrim.animate().alpha(0.8f).setDuration(400).start()
+        backdropScrim.animate().alpha(0.6f).setDuration(400).start()
     }
 
     // ---------- rows ----------
@@ -302,8 +311,8 @@ class MainActivity : Activity() {
 
     private fun row(title: String, tiles: List<View>, first: Boolean = false) {
         if (tiles.isEmpty()) return
-        val label = Ui.text(this, title, 18f, 0xFFE6E9F0.toInt(), Typeface.BOLD, "sans-serif-medium")
-        column.addView(label, Ui.lp(WRAP, WRAP, t = if (column.childCount == 0) dp(14) else dp(22), b = dp(2)))
+        val label = Ui.text(this, title, 18f, 0xFFE2E8F0.toInt(), Typeface.NORMAL, "sans-serif-medium").apply { letterSpacing = 0.01f }
+        column.addView(label, Ui.lp(WRAP, WRAP, t = if (column.childCount == 0) dp(8) else dp(24), b = dp(0)))
         val line = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false
             gravity = Gravity.BOTTOM
@@ -335,10 +344,10 @@ class MainActivity : Activity() {
             }, Ui.flp(MATCH, dp(44), Gravity.BOTTOM))
             f.addView(Ui.text(this, e.label, 13f, Color.WHITE, Typeface.NORMAL, "sans-serif-medium"),
                 Ui.flp(WRAP, WRAP, Gravity.BOTTOM or Gravity.START).apply { setMargins(dp(10), 0, 0, dp(8)) })
-            f.addView(Ui.text(this, "KIDS", 10f, 0xFFFFD166.toInt(), Typeface.BOLD, "sans-serif-medium").apply {
+            f.addView(Ui.text(this, "KIDS", 10f, 0xFFF2F4F7.toInt(), Typeface.BOLD, "sans-serif-medium").apply {
                 letterSpacing = 0.12f
                 setPadding(dp(7), dp(2), dp(7), dp(2))
-                background = GradientDrawable().apply { cornerRadius = dp(4).toFloat(); setColor(0x40FFD166) }
+                background = GradientDrawable().apply { cornerRadius = dp(4).toFloat(); setColor(0x73000000) }
             }, Ui.flp(WRAP, WRAP, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(8), dp(8), 0) })
         }
         Ui.round(f, 10)
@@ -395,17 +404,18 @@ class MainActivity : Activity() {
         val box = FrameLayout(this).apply { clipChildren = false }
         val num = object : TextView(this) {
             override fun onDraw(c: Canvas) {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = dp(2).toFloat()
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = dp(3).toFloat()
                 super.onDraw(c)
             }
         }.apply {
-            text = rank.toString(); textSize = 84f; setTextColor(0xFF6B7486.toInt()); typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
+            text = rank.toString(); textSize = 108f; setTextColor(0xCC8792A6.toInt()); typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
             includeFontPadding = false; letterSpacing = -0.06f
         }
-        box.addView(num, Ui.flp(WRAP, WRAP, Gravity.BOTTOM or Gravity.START).apply { bottomMargin = -dp(10) })
+        // numeral sits on the poster's baseline, tucked 12 dp behind its left edge
+        box.addView(num, Ui.flp(WRAP, WRAP, Gravity.BOTTOM or Gravity.START).apply { bottomMargin = -dp(14) })
         val poster = posterTile(t)
         box.addView(poster, Ui.flp(dp(132), dp(198), Gravity.END))
-        box.layoutParams = Ui.lp(dp(if (rank >= 10) 214 else 184), dp(198))
+        box.layoutParams = Ui.lp(dp(if (rank >= 10) 236 else 186), dp(198))
         return box
     }
 

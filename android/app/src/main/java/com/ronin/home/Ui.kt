@@ -47,7 +47,7 @@ object Ui {
     }
 
     fun ring(ctx: Context, radiusDp: Int): Drawable = GradientDrawable().apply {
-        cornerRadius = ctx.dp(radiusDp).toFloat(); setStroke(ctx.dp(2), 0xE6F5F7FA.toInt()); setColor(Color.TRANSPARENT)
+        cornerRadius = ctx.dp(radiusDp).toFloat(); setStroke(ctx.dp(2), 0xD9F2F4F8.toInt()); setColor(Color.TRANSPARENT)
     }
 
     private val ease = android.view.animation.DecelerateInterpolator(2f)
@@ -72,18 +72,24 @@ object Ui {
             background = GradientDrawable().apply { cornerRadius = ctx.dp(40).toFloat(); setColor(bg) }
         }
 
-    /** A button that looks like a pill and focuses like a tile. */
+    /** Pill button: on focus it fills light with dark text (TV convention), no ring. */
     fun button(ctx: Context, label: String, onClick: () -> Unit): FrameLayout = FrameLayout(ctx).apply {
-        addView(pill(ctx, label, CONTROL, TEXT, 14f).apply { setPadding(ctx.dp(18), ctx.dp(8), ctx.dp(18), ctx.dp(8)) })
+        val p = pill(ctx, label, CONTROL, TEXT, 14f).apply { setPadding(ctx.dp(18), ctx.dp(8), ctx.dp(18), ctx.dp(8)) }
+        addView(p)
         round(this, 40)
-        focusable(this, 40, 1.06f)
+        isFocusable = true; isClickable = true
+        setOnFocusChangeListener { v, has ->
+            (p.background as GradientDrawable).setColor(if (has) 0xFFF2F4F8.toInt() else CONTROL)
+            p.setTextColor(if (has) 0xFF0B1020.toInt() else TEXT)
+            v.animate().scaleX(if (has) 1.04f else 1f).scaleY(if (has) 1.04f else 1f).setDuration(160).start()
+        }
         setOnClickListener { onClick() }
     }
 
     /** Calm service label: same dark chip for every service (no loud brand blocks). */
     fun badge(ctx: Context, s: Service): TextView = text(ctx, s.label, 11f, 0xFFE6E9F0.toInt(), Typeface.NORMAL, "sans-serif-medium").apply {
         setPadding(ctx.dp(7), ctx.dp(3), ctx.dp(7), ctx.dp(3))
-        background = GradientDrawable().apply { cornerRadius = ctx.dp(4).toFloat(); setColor(0xD9111827.toInt()) }
+        background = GradientDrawable().apply { cornerRadius = ctx.dp(4).toFloat(); setColor(0x8C000000.toInt()) }
     }
 
     /** Coloured dot + name, for the subscriptions screen where colour helps. */

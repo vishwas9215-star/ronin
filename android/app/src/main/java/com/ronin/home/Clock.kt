@@ -37,7 +37,7 @@ class ClockView(ctx: Context) : FrameLayout(ctx) {
         }, LinearLayout.LayoutParams(ctx.dp(640), -2))
         box.addView(TextClock(ctx).apply {
             format12Hour = "EEEE, d MMMM"; format24Hour = "EEEE, d MMMM"; textSize = 26f
-            setTextColor(0xFF8D96A8.toInt()); typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+            setTextColor(0xFF6B7280.toInt()); typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
         }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = ctx.dp(8) })
         addView(box, LayoutParams(ctx.dp(640), -2, Gravity.CENTER))
     }
