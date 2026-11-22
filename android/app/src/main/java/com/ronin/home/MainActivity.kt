@@ -114,6 +114,8 @@ class MainActivity : Activity() {
         setContentView(root)
 
         root.viewTreeObserver.addOnGlobalFocusChangeListener { _, now -> onFocusMoved(now) }
+        // TCL blocks the Home helper at power-on; once Ronin Home is open (process alive) re-connecting works.
+        if (!HomeKeyService.running) BootReceiver.reconnectHelper(this)
     }
 
     override fun onNewIntent(intent: Intent?) {

@@ -17,6 +17,7 @@ class HomeKeyService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        running = true
         note("connected")
         // Just after power-on the Google home shows first: replace it once.
         if (SystemClock.elapsedRealtime() < 3 * 60_000) showHome("boot")
@@ -47,6 +48,8 @@ class HomeKeyService : AccessibilityService() {
 
     override fun onInterrupt() {}
 
+    override fun onDestroy() { running = false; super.onDestroy() }
+
     private fun showHome(why: String) {
         note("show $why")
         try {
@@ -67,6 +70,7 @@ class HomeKeyService : AccessibilityService() {
         const val TAG = "RoninHome"
         /** Ronin Home itself opened a Google TV page (poster fallback): leave it alone until then. */
         @Volatile var suppressUntil = 0L
+        @Volatile var running = false
         val ASSISTANT = setOf("com.google.android.katniss", "com.google.android.apps.bard", "com.google.android.googlequicksearchbox")
         private val HOMES = setOf(Catalog.LAUNCHER_X, "com.google.android.tvlauncher")
 
