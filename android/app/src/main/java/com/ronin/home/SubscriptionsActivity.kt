@@ -49,7 +49,7 @@ class SubscriptionsActivity : Activity() {
             Ui.round(row, 12)
             Ui.focusable(row, 12, 1.03f)
             row.setOnClickListener { store.setSubscribed(s, s !in store.subscribed()); paint() }
-            col.addView(row, Ui.lp(dp(560), dp(64), b = dp(14)))
+            col.addView(row, Ui.lp(dp(560), dp(56), b = dp(10)))
             if (first) { row.post { row.requestFocus() }; first = false }
         }
         // Screensaver choice (this TV: family photos from Google TV, or the Ronin clock)
@@ -79,9 +79,14 @@ class SubscriptionsActivity : Activity() {
                 if (!Screensaver.set(this, comp)) android.widget.Toast.makeText(this, "Needs a one-time setup from the laptop", android.widget.Toast.LENGTH_LONG).show()
                 states.forEach { it() }
             }
-            col.addView(row, Ui.lp(dp(560), dp(60), b = dp(12)))
+            col.addView(row, Ui.lp(dp(560), dp(56), b = dp(10)))
         }
         col.addView(Ui.text(this, "Press Back when done.", 14f, Ui.SUB), Ui.lp(WRAP, WRAP, t = dp(6)))
-        setContentView(col)
+        // scrolls so the Screensaver choice below is reachable with the remote
+        setContentView(android.widget.ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false; isFillViewport = true
+            background = col.background
+            addView(col, FrameLayout.LayoutParams(Ui.MATCH, WRAP))
+        })
     }
 }
