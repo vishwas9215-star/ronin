@@ -34,22 +34,16 @@ class ClockView(ctx: Context) : FrameLayout(ctx) {
             gradientType = android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT; gradientRadius = ctx.dp(700).toFloat()
             colors = intArrayOf(0xFF0A0E1A.toInt(), Color.BLACK)
         }
-        val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM }
-        box.addView(row)
-        row.addView(TextClock(ctx).apply {
-            format12Hour = "h:mm"; format24Hour = "HH:mm"; textSize = 150f
-            isSingleLine = true; gravity = Gravity.END or Gravity.BOTTOM
-            setTextColor(0xFFE6E9EF.toInt()); typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL); includeFontPadding = true
-        }, LinearLayout.LayoutParams(ctx.dp(440), -2))   // fixed width: the time never gets clipped as digits change
-        row.addView(TextClock(ctx).apply {
-            format12Hour = "a"; format24Hour = ""; textSize = 24f; setTextColor(0xFF6B7280.toInt())
-            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
-        }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = ctx.dp(10); bottomMargin = ctx.dp(34) })
         box.addView(TextClock(ctx).apply {
-            format12Hour = "EEEE, d MMMM"; format24Hour = "EEEE, d MMMM"; textSize = 26f
+            format12Hour = "h:mm"; format24Hour = "HH:mm"; textSize = 150f
+            gravity = Gravity.CENTER; isSingleLine = true
+            setTextColor(0xFFE6E9EF.toInt()); typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL); includeFontPadding = true
+        }, LinearLayout.LayoutParams(ctx.dp(640), -2))   // fixed width: the time never gets clipped as digits change
+        box.addView(TextClock(ctx).apply {
+            format12Hour = "a  ·  EEEE, d MMMM"; format24Hour = "EEEE, d MMMM"; textSize = 26f
             setTextColor(0xFF9AA3B2.toInt()); typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
         }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = ctx.dp(8) })
-        addView(box, LayoutParams(-2, -2, Gravity.CENTER))
+        addView(box, LayoutParams(ctx.dp(640), -2, Gravity.CENTER))
     }
 
     override fun onAttachedToWindow() { super.onAttachedToWindow(); h.postDelayed(move, 60_000) }
