@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <!-- granted once from the laptop (adb pm grant) so the screensaver can be switched from Ronin Home -->
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- allowed once from the laptop (appops) so Ronin Home may open itself right after power-on -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
@@ -41,6 +44,13 @@
         <activity android:name=".SetupActivity" android:exported="true" android:screenOrientation="landscape"
             android:windowSoftInputMode="stateHidden" />
         <activity android:name=".ClockPreviewActivity" android:exported="true" android:screenOrientation="landscape" />
+
+        <receiver android:name=".BootReceiver" android:exported="true" android:directBootAware="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <service
             android:name=".ClockDream"
