@@ -192,7 +192,7 @@ class MainActivity : Activity() {
     private fun header(): View {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(48), dp(24), dp(48), dp(4))
+            setPadding(dp(48), dp(12), dp(48), dp(2))
             clipChildren = false
         }
         val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; clipChildren = false }
@@ -211,7 +211,7 @@ class MainActivity : Activity() {
         val clock = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val timeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM }
         timeRow.addView(TextClock(this).apply {
-            format12Hour = "h:mm"; format24Hour = "HH:mm"; textSize = 64f; setTextColor(Ui.TEXT)
+            format12Hour = "h:mm"; format24Hour = "HH:mm"; textSize = 56f; setTextColor(Ui.TEXT)
             typeface = Typeface.create("sans-serif-light", Typeface.NORMAL); includeFontPadding = true; letterSpacing = -0.02f
             translationX = -dp(3).toFloat()   // optical alignment with the 48 dp edge
         })
@@ -227,15 +227,15 @@ class MainActivity : Activity() {
         stage.addView(clock, Ui.flp(WRAP, WRAP, Gravity.BOTTOM or Gravity.START))
         // focused title info (shown when a poster has focus)
         infoBlock = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; alpha = 0f }
-        infoTitle = Ui.text(this, "", 30f, Color.WHITE, Typeface.BOLD, "sans-serif-medium").apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+        infoTitle = Ui.text(this, "", 26f, Color.WHITE, Typeface.BOLD, "sans-serif-medium").apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
         infoMeta = Ui.text(this, "", 15f, 0xFFB8C0CC.toInt())
-        infoText = Ui.text(this, "", 16f, 0xFFAEB6C4.toInt()).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END; setLineSpacing(0f, 1.4f) }
+        infoText = Ui.text(this, "", 15f, 0xFFAEB6C4.toInt()).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END; setLineSpacing(0f, 1.4f) }
         infoBlock.addView(infoTitle)
         infoBlock.addView(infoMeta, Ui.lp(WRAP, WRAP, t = dp(6)))
         infoBlock.addView(infoText, Ui.lp(dp(540), WRAP, t = dp(10)))
         stage.addView(infoBlock, Ui.flp(dp(580), WRAP, Gravity.BOTTOM or Gravity.START))
         // fixed height for both states, so rows never jump
-        box.addView(stage, Ui.lp(MATCH, dp(132), t = dp(2), b = dp(10)))
+        box.addView(stage, Ui.lp(MATCH, dp(112), t = dp(2), b = dp(6)))
         return box
     }
 
@@ -316,11 +316,11 @@ class MainActivity : Activity() {
     private fun row(title: String, tiles: List<View>, first: Boolean = false) {
         if (tiles.isEmpty()) return
         val label = Ui.text(this, title, 18f, 0xFFE2E8F0.toInt(), Typeface.NORMAL, "sans-serif-medium").apply { letterSpacing = 0.01f }
-        column.addView(label, Ui.lp(WRAP, WRAP, t = if (column.childCount == 0) dp(8) else dp(24), b = dp(0)))
+        column.addView(label, Ui.lp(WRAP, WRAP, t = if (column.childCount == 0) dp(4) else dp(16), b = dp(0)))
         val line = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false
             gravity = Gravity.BOTTOM
-            setPadding(dp(6), dp(12), dp(48), dp(14))   // room so the focus zoom + ring never get clipped
+            setPadding(dp(6), dp(10), dp(48), dp(12))   // room so the focus zoom + ring never get clipped
         }
         tiles.forEachIndexed { i, v ->
             if (first && i == 0) v.tag = "first"
@@ -335,7 +335,7 @@ class MainActivity : Activity() {
     }
 
     internal fun appTile(e: AppEntry, small: Boolean = false): View {
-        val w = dp(if (small) 168 else 200); val h = dp(if (small) 94 else 112)
+        val w = dp(if (small) 136 else 150); val h = dp(if (small) 76 else 84)
         val f = FrameLayout(this)
         f.layoutParams = Ui.lp(w, h)
         f.setBackgroundColor(Ui.CARD)
@@ -383,7 +383,7 @@ class MainActivity : Activity() {
     }
 
     private fun posterTile(t: Title): FrameLayout {
-        val w = dp(132); val h = dp(198)
+        val w = dp(116); val h = dp(174)
         val f = FrameLayout(this)
         f.layoutParams = Ui.lp(w, h)
         f.setBackgroundColor(Ui.CARD)
@@ -412,15 +412,15 @@ class MainActivity : Activity() {
                 super.onDraw(c)
             }
         }.apply {
-            text = rank.toString(); textSize = 96f; setTextColor(0xD98792A6.toInt()); typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
+            text = rank.toString(); textSize = 84f; setTextColor(0xD98792A6.toInt()); typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
             includeFontPadding = false; letterSpacing = -0.06f
         }
         // numeral sits on the poster's baseline, tucked 12 dp behind its left edge
         box.addView(num, Ui.flp(WRAP, WRAP, Gravity.BOTTOM or Gravity.START).apply { bottomMargin = -dp(14) })
         val poster = posterTile(t)
-        box.addView(poster, Ui.flp(dp(132), dp(198), Gravity.END))
+        box.addView(poster, Ui.flp(dp(116), dp(174), Gravity.END))
         // numeral gets its own slot; poster overlaps it by only ~10 dp
-        box.layoutParams = Ui.lp(dp(if (rank >= 10) 250 else 196), dp(198))
+        box.layoutParams = Ui.lp(dp(if (rank >= 10) 222 else 174), dp(174))
         return box
     }
 
