@@ -33,7 +33,7 @@ class SubscriptionsActivity : Activity() {
                 setPadding(dp(22), 0, dp(22), 0)
                 background = GradientDrawable().apply { cornerRadius = dp(12).toFloat(); setColor(0x22FFFFFF) }
             }
-            inner.addView(Ui.badge(this, s))
+            inner.addView(Ui.brandBadge(this, s))
             inner.addView(Ui.text(this, s.label, 20f, Ui.TEXT, Typeface.NORMAL, "sans-serif-medium"), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(16) })
             val state = Ui.pill(this, "", 0x33FFFFFF, Ui.TEXT, 14f)
             inner.addView(state)

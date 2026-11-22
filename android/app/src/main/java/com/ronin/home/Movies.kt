@@ -18,16 +18,20 @@ data class Title(
     val date: String,
     val service: Service,
     val horror: Boolean = false,
+    val vote: Double = 0.0,
+    val overview: String = "",
 ) {
+    val year: String get() = date.take(4)
     fun toJson(): JSONObject = JSONObject().put("id", id).put("tv", isTv).put("name", name).put("horror", horror)
         .put("poster", poster ?: "").put("backdrop", backdrop ?: "").put("pop", popularity)
-        .put("date", date).put("svc", service.name)
+        .put("date", date).put("svc", service.name).put("vote", vote).put("ov", overview)
 
     companion object {
         fun fromJson(o: JSONObject) = Title(
             o.getInt("id"), o.getBoolean("tv"), o.getString("name"),
             o.optString("poster").ifEmpty { null }, o.optString("backdrop").ifEmpty { null },
             o.optDouble("pop", 0.0), o.optString("date"), Service.valueOf(o.getString("svc")), o.optBoolean("horror"),
+            o.optDouble("vote", 0.0), o.optString("ov"),
         )
     }
 }
@@ -130,7 +134,7 @@ object Tmdb {
                 o.optString("backdrop_path").takeIf { it.startsWith("/") },
                 o.optDouble("popularity", 0.0),
                 if (tv) o.optString("first_air_date") else o.optString("release_date"),
-                service, horror)
+                service, horror, o.optDouble("vote_average", 0.0), o.optString("overview").take(400))
         }
     }
 

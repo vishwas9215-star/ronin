@@ -15,14 +15,15 @@ adb logcat -c
 adb shell am start -W -n com.ronin.home/.MainActivity --ez demo true
 shot 01-home 5
 U=$(ui)
-for w in "Family" "Castle — New" "My subscriptions" "My Apps" "Kids"; do
+for w in "Family" "My subscriptions" "My Apps" "Kids"; do
   echo "$U" | grep -q "$w" && pass "home shows '$w'" || fail "home shows '$w'"
 done
 echo "$U" | grep -q 'content-desc="Castle"[^>]*focused="true"' && pass "first focus on Castle" || fail "first focus on Castle"
 adb shell input keyevent DPAD_RIGHT; adb shell input keyevent DPAD_RIGHT; shot 02-focus-right 1
 adb shell input keyevent DPAD_DOWN; shot 03-kids-row 1
 adb shell input keyevent DPAD_DOWN; shot 04-new-releases 1
-U=$(ui); for w in "Hollywood" "Steel Horizon"; do echo "$U" | grep -q "$w" && pass "rows show '$w'" || fail "rows show '$w'"; done
+U=$(ui); echo "$U" | grep -q "★" && pass "info panel shows focused title rating" || fail "info panel shows focused title rating"
+for w in "Hollywood" "Steel Horizon"; do echo "$U" | grep -q "$w" && pass "rows show '$w'" || fail "rows show '$w'"; done
 adb shell input keyevent DPAD_DOWN; adb shell input keyevent DPAD_DOWN; shot 05-hollywood-bollywood 1
 U=$(ui); for w in "New Releases" "Bollywood"; do echo "$U" | grep -q "$w" && pass "rows show '$w'" || fail "rows show '$w'"; done
 adb shell input keyevent DPAD_DOWN; adb shell input keyevent DPAD_DOWN; adb shell input keyevent DPAD_DOWN; shot 06-bottom 1

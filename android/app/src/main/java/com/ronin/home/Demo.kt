@@ -10,7 +10,8 @@ object Demo {
         "com.android.tv.settings" to "Settings", "com.ronin.tv" to "Ronin Terminal", "com.google.android.apps.tv.launcherx" to "Google TV")
 
     private fun t(i: Int, name: String, s: Service, tv: Boolean = false, horror: Boolean = false) =
-        Title(i, tv, name, null, null, 1000.0 - i, "2026-11-01", s, horror)
+        Title(i, tv, name, null, null, 1000.0 - i, "2026-11-01", s, horror, 6.5 + (i % 30) / 10.0,
+            "A sample story line for checking the layout on the emulator. Real titles show the TMDB summary here, two lines at most.")
 
     private val n = Service.NETFLIX; private val p = Service.PRIME; private val j = Service.JIOHOTSTAR
     val shelf = Shelf(

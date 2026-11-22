@@ -22,11 +22,13 @@ import android.widget.TextView
 
 /** One look for everything: dark glass, white focus ring, gentle zoom. */
 object Ui {
-    const val BG_TOP = 0xFF0A0E16.toInt()
-    const val BG_BOTTOM = 0xFF111A2B.toInt()
-    const val TEXT = 0xFFF2F5FA.toInt()
-    const val SUB = 0xFFA9B3C6.toInt()
-    const val CARD = 0xFF1A2333.toInt()
+    const val BG_TOP = 0xFF0B0F17.toInt()
+    const val BG_BOTTOM = 0xFF0E1420.toInt()
+    const val GLOW = 0xFF16203A.toInt()
+    const val TEXT = 0xFFF2F4F7.toInt()
+    const val SUB = 0xFFA5ADBB.toInt()
+    const val CARD = 0xFF151A26.toInt()
+    const val CONTROL = 0xFF252D39.toInt()
 
     fun Context.dp(v: Number): Int = (v.toFloat() * resources.displayMetrics.density + 0.5f).toInt()
 
@@ -45,18 +47,21 @@ object Ui {
     }
 
     fun ring(ctx: Context, radiusDp: Int): Drawable = GradientDrawable().apply {
-        cornerRadius = ctx.dp(radiusDp).toFloat(); setStroke(ctx.dp(3), Color.WHITE); setColor(Color.TRANSPARENT)
+        cornerRadius = ctx.dp(radiusDp).toFloat(); setStroke(ctx.dp(2), 0xE6F5F7FA.toInt()); setColor(Color.TRANSPARENT)
     }
 
-    /** Focus: zoom 1.08, white ring, lift. Same for every tile and button. */
-    fun focusable(v: View, radiusDp: Int, zoom: Float = 1.08f) {
+    private val ease = android.view.animation.DecelerateInterpolator(2f)
+
+    /** Focus (5-AI consensus): zoom 1.05, thin white ring, soft shadow, 180 ms decelerate. Same for everything. */
+    fun focusable(v: View, radiusDp: Int, zoom: Float = 1.05f, onFocus: ((Boolean) -> Unit)? = null) {
         v.isFocusable = true
         v.isClickable = true
         val ringD = ring(v.context, radiusDp)
         v.setOnFocusChangeListener { view, has ->
-            view.animate().scaleX(if (has) zoom else 1f).scaleY(if (has) zoom else 1f).translationZ(if (has) view.context.dp(12).toFloat() else 0f)
-                .setDuration(140).start()
+            view.animate().scaleX(if (has) zoom else 1f).scaleY(if (has) zoom else 1f).translationZ(if (has) view.context.dp(16).toFloat() else 0f)
+                .setInterpolator(ease).setDuration(180).start()
             if (view is FrameLayout) view.foreground = if (has) ringD else null
+            onFocus?.invoke(has)
         }
     }
 
@@ -69,13 +74,20 @@ object Ui {
 
     /** A button that looks like a pill and focuses like a tile. */
     fun button(ctx: Context, label: String, onClick: () -> Unit): FrameLayout = FrameLayout(ctx).apply {
-        addView(pill(ctx, label, 0x2EFFFFFF, TEXT, 15f))
+        addView(pill(ctx, label, CONTROL, TEXT, 14f).apply { setPadding(ctx.dp(18), ctx.dp(8), ctx.dp(18), ctx.dp(8)) })
         round(this, 40)
         focusable(this, 40, 1.06f)
         setOnClickListener { onClick() }
     }
 
-    fun badge(ctx: Context, s: Service): TextView = text(ctx, s.badge, 10f, Color.WHITE, Typeface.BOLD, "sans-serif-medium").apply {
+    /** Calm service label: same dark chip for every service (no loud brand blocks). */
+    fun badge(ctx: Context, s: Service): TextView = text(ctx, s.label, 11f, 0xFFE6E9F0.toInt(), Typeface.NORMAL, "sans-serif-medium").apply {
+        setPadding(ctx.dp(7), ctx.dp(3), ctx.dp(7), ctx.dp(3))
+        background = GradientDrawable().apply { cornerRadius = ctx.dp(4).toFloat(); setColor(0xD9111827.toInt()) }
+    }
+
+    /** Coloured dot + name, for the subscriptions screen where colour helps. */
+    fun brandBadge(ctx: Context, s: Service): TextView = text(ctx, s.badge, 10f, Color.WHITE, Typeface.BOLD, "sans-serif-medium").apply {
         letterSpacing = 0.06f
         setPadding(ctx.dp(7), ctx.dp(3), ctx.dp(7), ctx.dp(3))
         background = GradientDrawable().apply { cornerRadius = ctx.dp(4).toFloat(); setColor(s.color) }
@@ -100,6 +112,7 @@ object Ui {
         p.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         p.textSize = h / 7f
         val words = name.split(" ")
+        while (words.any { p.measureText(it) > w * 0.85f } && p.textSize > h / 14f) p.textSize *= 0.9f
         val lines = mutableListOf<String>(); var cur = ""
         for (wd in words) { val t = if (cur.isEmpty()) wd else "$cur $wd"; if (p.measureText(t) > w * 0.85f && cur.isNotEmpty()) { lines += cur; cur = wd } else cur = t }
         if (cur.isNotEmpty()) lines += cur
