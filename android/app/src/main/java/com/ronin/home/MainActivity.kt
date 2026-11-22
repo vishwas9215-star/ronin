@@ -57,6 +57,15 @@ class MainActivity : Activity() {
     private var pendingInfo: Runnable? = null
     private var demo = false
     private var built = ""
+
+    // ---- auto-fit (owner): at least 10 posters and 6 apps across the screen, whatever the TV size ----
+    private val contentDp by lazy { resources.configuration.screenWidthDp - 96 - 6 }
+    private val posterGap = 10
+    private val posterW by lazy { (contentDp - 9 * posterGap) / 10 }            // 10 posters per screen
+    private val posterH by lazy { posterW * 3 / 2 }
+    private val appGap = 12
+    private val appW by lazy { (contentDp - 5 * appGap) / 6 }                    // 6 apps per screen
+    private val appH by lazy { appW * 9 / 16 }
     private var loading = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -315,16 +324,16 @@ class MainActivity : Activity() {
 
     private fun row(title: String, tiles: List<View>, first: Boolean = false) {
         if (tiles.isEmpty()) return
-        val label = Ui.text(this, title, 18f, 0xFFE2E8F0.toInt(), Typeface.NORMAL, "sans-serif-medium").apply { letterSpacing = 0.01f }
-        column.addView(label, Ui.lp(WRAP, WRAP, t = if (column.childCount == 0) dp(4) else dp(16), b = dp(0)))
+        val label = Ui.text(this, title, 16f, 0xFFE2E8F0.toInt(), Typeface.NORMAL, "sans-serif-medium").apply { letterSpacing = 0.01f }
+        column.addView(label, Ui.lp(WRAP, WRAP, t = if (column.childCount == 0) dp(2) else dp(10), b = dp(0)))
         val line = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false
             gravity = Gravity.BOTTOM
-            setPadding(dp(6), dp(10), dp(48), dp(12))   // room so the focus zoom + ring never get clipped
+            setPadding(dp(6), dp(8), dp(48), dp(10))   // room so the focus zoom + ring never get clipped
         }
         tiles.forEachIndexed { i, v ->
             if (first && i == 0) v.tag = "first"
-            line.addView(v, (v.layoutParams as? LinearLayout.LayoutParams ?: Ui.lp(WRAP, WRAP)).apply { if (i > 0) leftMargin = dp(16) })
+            line.addView(v, (v.layoutParams as? LinearLayout.LayoutParams ?: Ui.lp(WRAP, WRAP)).apply { if (i > 0) leftMargin = dp(if (titles.containsKey(v)) posterGap else appGap) })
         }
         val hs = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false; clipChildren = false; clipToPadding = false
@@ -335,7 +344,7 @@ class MainActivity : Activity() {
     }
 
     internal fun appTile(e: AppEntry, small: Boolean = false): View {
-        val w = dp(if (small) 136 else 150); val h = dp(if (small) 76 else 84)
+        val w = dp(appW); val h = dp(appH)
         val f = FrameLayout(this)
         f.layoutParams = Ui.lp(w, h)
         f.setBackgroundColor(Ui.CARD)
@@ -346,8 +355,8 @@ class MainActivity : Activity() {
             f.addView(View(this).apply {
                 background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0xCC000000.toInt(), 0x00000000))
             }, Ui.flp(MATCH, dp(44), Gravity.BOTTOM))
-            f.addView(Ui.text(this, e.label, 13f, Color.WHITE, Typeface.NORMAL, "sans-serif-medium"),
-                Ui.flp(WRAP, WRAP, Gravity.BOTTOM or Gravity.START).apply { setMargins(dp(10), 0, 0, dp(8)) })
+            f.addView(Ui.text(this, e.label, 11f, Color.WHITE, Typeface.NORMAL, "sans-serif-medium"),
+                Ui.flp(WRAP, WRAP, Gravity.BOTTOM or Gravity.START).apply { setMargins(dp(8), 0, 0, dp(6)) })
             f.addView(Ui.text(this, "KIDS", 10f, 0xFFF2F4F7.toInt(), Typeface.BOLD, "sans-serif-medium").apply {
                 letterSpacing = 0.12f
                 setPadding(dp(7), dp(2), dp(7), dp(2))
@@ -383,7 +392,7 @@ class MainActivity : Activity() {
     }
 
     private fun posterTile(t: Title): FrameLayout {
-        val w = dp(116); val h = dp(174)
+        val w = dp(posterW); val h = dp(posterH)
         val f = FrameLayout(this)
         f.layoutParams = Ui.lp(w, h)
         f.setBackgroundColor(Ui.CARD)
@@ -394,34 +403,25 @@ class MainActivity : Activity() {
         f.addView(View(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0x99000000.toInt(), 0x00000000))
         }, Ui.flp(MATCH, dp(24), Gravity.BOTTOM))
-        f.addView(Ui.badge(this, t.service), Ui.flp(WRAP, WRAP, Gravity.BOTTOM or Gravity.START).apply { setMargins(dp(8), 0, 0, dp(8)) })
-        Ui.round(f, 8)
-        Ui.focusable(f, 8)
+        f.addView(Ui.badge(this, t.service).apply { textSize = 9f; setPadding(dp(5), dp(2), dp(5), dp(2)) },
+            Ui.flp(WRAP, WRAP, Gravity.BOTTOM or Gravity.START).apply { setMargins(dp(5), 0, 0, dp(5)) })
+        Ui.round(f, 6)
+        Ui.focusable(f, 6, 1.08f)
         f.contentDescription = t.name
         titles[f] = t
         f.setOnClickListener { openTitle(t) }
         return f
     }
 
-    /** Top 10: big outlined number beside the poster (not on the art). */
+    /** Top 10: compact rank chip in the corner, so all ten fit across one screen (owner: auto-fit). */
     private fun rankedTile(t: Title, rank: Int): View {
-        val box = FrameLayout(this).apply { clipChildren = false }
-        val num = object : TextView(this) {
-            override fun onDraw(c: Canvas) {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = dp(2.5f).toFloat()
-                super.onDraw(c)
-            }
-        }.apply {
-            text = rank.toString(); textSize = 84f; setTextColor(0xD98792A6.toInt()); typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
-            includeFontPadding = false; letterSpacing = -0.06f
-        }
-        // numeral sits on the poster's baseline, tucked 12 dp behind its left edge
-        box.addView(num, Ui.flp(WRAP, WRAP, Gravity.BOTTOM or Gravity.START).apply { bottomMargin = -dp(14) })
         val poster = posterTile(t)
-        box.addView(poster, Ui.flp(dp(116), dp(174), Gravity.END))
-        // numeral gets its own slot; poster overlaps it by only ~10 dp
-        box.layoutParams = Ui.lp(dp(if (rank >= 10) 222 else 174), dp(174))
-        return box
+        poster.addView(Ui.text(this, rank.toString(), 13f, Color.WHITE, Typeface.BOLD, "sans-serif-black").apply {
+            gravity = Gravity.CENTER; minWidth = dp(22)
+            setPadding(dp(5), dp(2), dp(5), dp(2))
+            background = GradientDrawable().apply { cornerRadius = dp(5).toFloat(); setColor(0xD90B0F17.toInt()); setStroke(dp(1), 0x66FFFFFF) }
+        }, Ui.flp(WRAP, WRAP, Gravity.TOP or Gravity.START).apply { setMargins(dp(5), dp(5), 0, 0) })
+        return poster
     }
 
     private fun infoTile(title: String, sub: String, onClick: () -> Unit): View {
