@@ -74,7 +74,7 @@ object Ui {
 
     /** Pill button: on focus it fills light with dark text (TV convention), no ring. */
     fun button(ctx: Context, label: String, onClick: () -> Unit): FrameLayout = FrameLayout(ctx).apply {
-        val p = pill(ctx, label, CONTROL, TEXT, 14f).apply { setPadding(ctx.dp(18), ctx.dp(8), ctx.dp(18), ctx.dp(8)) }
+        val p = pill(ctx, label, CONTROL, TEXT, 14f).apply { setPadding(ctx.dp(18), ctx.dp(9), ctx.dp(18), ctx.dp(9)); minHeight = ctx.dp(36) }
         addView(p)
         round(this, 40)
         isFocusable = true; isClickable = true
@@ -87,7 +87,7 @@ object Ui {
     }
 
     /** Calm service label: same dark chip for every service (no loud brand blocks). */
-    fun badge(ctx: Context, s: Service): TextView = text(ctx, s.label, 11f, 0xFFE6E9F0.toInt(), Typeface.NORMAL, "sans-serif-medium").apply {
+    fun badge(ctx: Context, s: Service): TextView = text(ctx, s.label, 12f, 0xFFE6E9F0.toInt(), Typeface.NORMAL, "sans-serif-medium").apply {
         setPadding(ctx.dp(7), ctx.dp(3), ctx.dp(7), ctx.dp(3))
         background = GradientDrawable().apply { cornerRadius = ctx.dp(4).toFloat(); setColor(0x8C000000.toInt()) }
     }

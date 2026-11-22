@@ -72,18 +72,12 @@ class MainActivity : Activity() {
             }
         }, FrameLayout.LayoutParams(MATCH, MATCH))
         // backdrop of the focused title (top-right): one box = picture + left and bottom fades, so no hard edges
-        val bd = FrameLayout(this).apply { alpha = 0f }
+        val bd = MaskedFrame(this).apply { alpha = 0f }
         backdrop = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
             if (Build.VERSION.SDK_INT >= 31) setRenderEffect(RenderEffect.createBlurEffect(dp(10).toFloat(), dp(10).toFloat(), Shader.TileMode.DECAL))
         }
         bd.addView(backdrop, FrameLayout.LayoutParams(MATCH, MATCH))
-        bd.addView(View(this).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF0B0F17.toInt(), 0xE60B0F17.toInt(), 0x800B0F17.toInt(), 0x000B0F17))
-        }, FrameLayout.LayoutParams(MATCH, MATCH))
-        bd.addView(View(this).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0xFF0B0F17.toInt(), 0x000B0F17))
-        }, Ui.flp(MATCH, dp(150), Gravity.BOTTOM))
         bd.addView(View(this).apply { setBackgroundColor(0x330B0F17) }, FrameLayout.LayoutParams(MATCH, MATCH))
         backdropScrim = bd
         root.addView(bd, Ui.flp(dp(660), dp(300), Gravity.TOP or Gravity.END))
@@ -107,7 +101,7 @@ class MainActivity : Activity() {
         root.addView(View(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0xFF0B0F17.toInt(), 0x000B0F17))
             isFocusable = false
-        }, Ui.flp(MATCH, dp(48), Gravity.BOTTOM))
+        }, Ui.flp(MATCH, dp(24), Gravity.BOTTOM))
         setContentView(root)
 
         root.viewTreeObserver.addOnGlobalFocusChangeListener { _, now -> onFocusMoved(now) }
@@ -202,11 +196,11 @@ class MainActivity : Activity() {
             clipChildren = false
         }
         val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; clipChildren = false }
-        bar.addView(Ui.pill(this, "Family", 0x1FFFFFFF, Ui.TEXT, 13f).apply { setPadding(dp(14), dp(6), dp(14), dp(6)) })
+        bar.addView(Ui.pill(this, "Family", 0x1FFFFFFF, Ui.TEXT, 14f).apply { setPadding(dp(16), dp(8), dp(16), dp(8)) })
         bar.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         // quiet hint that the remote's voice button (Gemini) works everywhere
-        bar.addView(ImageView(this).apply { setImageResource(R.drawable.ic_mic); alpha = 0.8f }, Ui.lp(dp(18), dp(18), r = dp(4)))
-        bar.addView(Ui.text(this, "Ask Gemini", 13f, Ui.SUB), Ui.lp(WRAP, WRAP, r = dp(18)))
+        bar.addView(ImageView(this).apply { setImageResource(R.drawable.ic_mic) }, Ui.lp(dp(20), dp(20), r = dp(4)))
+        bar.addView(Ui.text(this, "Ask Gemini", 14f, 0xFFA7B0C0.toInt(), Typeface.NORMAL, "sans-serif-medium"), Ui.lp(WRAP, WRAP, r = dp(20)))
         bar.addView(Ui.button(this, "Castle") { open(Service.CASTLE.pkg) })
         bar.addView(Ui.button(this, "My subscriptions") { startActivity(Intent(this, SubscriptionsActivity::class.java)) }, Ui.lp(WRAP, WRAP, l = dp(12)))
         box.addView(bar)
@@ -234,13 +228,13 @@ class MainActivity : Activity() {
         infoBlock = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; alpha = 0f }
         infoTitle = Ui.text(this, "", 30f, Color.WHITE, Typeface.BOLD, "sans-serif-medium").apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
         infoMeta = Ui.text(this, "", 15f, 0xFFB8C0CC.toInt())
-        infoText = Ui.text(this, "", 16f, 0xFFAEB6C4.toInt()).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END; setLineSpacing(0f, 1.3f) }
+        infoText = Ui.text(this, "", 16f, 0xFFAEB6C4.toInt()).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END; setLineSpacing(0f, 1.4f) }
         infoBlock.addView(infoTitle)
         infoBlock.addView(infoMeta, Ui.lp(WRAP, WRAP, t = dp(6)))
-        infoBlock.addView(infoText, Ui.lp(dp(540), WRAP, t = dp(8)))
+        infoBlock.addView(infoText, Ui.lp(dp(540), WRAP, t = dp(10)))
         stage.addView(infoBlock, Ui.flp(dp(580), WRAP, Gravity.BOTTOM or Gravity.START))
         // fixed height for both states, so rows never jump
-        box.addView(stage, Ui.lp(MATCH, dp(140), t = dp(6), b = dp(10)))
+        box.addView(stage, Ui.lp(MATCH, dp(132), t = dp(2), b = dp(10)))
         return box
     }
 
@@ -267,8 +261,14 @@ class MainActivity : Activity() {
             return
         }
         infoTitle.text = t.name
-        infoMeta.text = listOfNotNull(t.year.ifBlank { null }, if (t.vote > 0) "★ %.1f".format(t.vote) else null,
-            if (t.isTv) "Series" else "Movie", t.service.label).joinToString("  ·  ")
+        val parts = listOfNotNull(t.year.ifBlank { null }, if (t.vote > 0) "★ %.1f".format(t.vote) else null,
+            if (t.isTv) "Series" else "Movie", t.service.label)
+        val sb = android.text.SpannableStringBuilder()
+        parts.forEachIndexed { i, x ->
+            if (i > 0) { val st = sb.length; sb.append("   ·   "); sb.setSpan(android.text.style.ForegroundColorSpan(0x66B8C0CC), st, sb.length, 0) }
+            sb.append(x)
+        }
+        infoMeta.text = sb
         infoText.text = t.overview
         infoText.visibility = if (t.overview.isBlank()) View.GONE else View.VISIBLE
         clockBlock.animate().alpha(0f).setDuration(160).start()
@@ -389,7 +389,7 @@ class MainActivity : Activity() {
         else img.setImageBitmap(Ui.placeholder(w, h, t.name, Demo.color(t.name)))
         f.addView(View(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0x99000000.toInt(), 0x00000000))
-        }, Ui.flp(MATCH, dp(48), Gravity.BOTTOM))
+        }, Ui.flp(MATCH, dp(24), Gravity.BOTTOM))
         f.addView(Ui.badge(this, t.service), Ui.flp(WRAP, WRAP, Gravity.BOTTOM or Gravity.START).apply { setMargins(dp(8), 0, 0, dp(8)) })
         Ui.round(f, 8)
         Ui.focusable(f, 8)
@@ -404,18 +404,19 @@ class MainActivity : Activity() {
         val box = FrameLayout(this).apply { clipChildren = false }
         val num = object : TextView(this) {
             override fun onDraw(c: Canvas) {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = dp(3).toFloat()
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = dp(2.5f).toFloat()
                 super.onDraw(c)
             }
         }.apply {
-            text = rank.toString(); textSize = 108f; setTextColor(0xCC8792A6.toInt()); typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
+            text = rank.toString(); textSize = 96f; setTextColor(0xD98792A6.toInt()); typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
             includeFontPadding = false; letterSpacing = -0.06f
         }
         // numeral sits on the poster's baseline, tucked 12 dp behind its left edge
         box.addView(num, Ui.flp(WRAP, WRAP, Gravity.BOTTOM or Gravity.START).apply { bottomMargin = -dp(14) })
         val poster = posterTile(t)
         box.addView(poster, Ui.flp(dp(132), dp(198), Gravity.END))
-        box.layoutParams = Ui.lp(dp(if (rank >= 10) 236 else 186), dp(198))
+        // numeral gets its own slot; poster overlaps it by only ~10 dp
+        box.layoutParams = Ui.lp(dp(if (rank >= 10) 250 else 196), dp(198))
         return box
     }
 
@@ -431,5 +432,22 @@ class MainActivity : Activity() {
         Ui.focusable(f, 10, 1.03f)
         f.setOnClickListener { onClick() }
         return f
+    }
+}
+
+/** Draws its children, then fades them out to the left and bottom with an alpha mask (no hard edges on any background). */
+class MaskedFrame(ctx: android.content.Context) : FrameLayout(ctx) {
+    private val maskPaint = Paint().apply { xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN) }
+    init { setWillNotDraw(false) }
+    override fun dispatchDraw(c: Canvas) {
+        val w = width.toFloat(); val h = height.toFloat()
+        val save = c.saveLayer(0f, 0f, w, h, null)
+        super.dispatchDraw(c)
+        maskPaint.shader = android.graphics.LinearGradient(0f, 0f, w, 0f, intArrayOf(0x00000000, 0x99000000.toInt(), 0xFF000000.toInt()),
+            floatArrayOf(0f, 0.45f, 1f), Shader.TileMode.CLAMP)
+        c.drawRect(0f, 0f, w, h, maskPaint)
+        maskPaint.shader = android.graphics.LinearGradient(0f, h * 0.45f, 0f, h, 0xFF000000.toInt(), 0x00000000, Shader.TileMode.CLAMP)
+        c.drawRect(0f, 0f, w, h, maskPaint)
+        c.restoreToCount(save)
     }
 }
