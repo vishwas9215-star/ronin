@@ -50,8 +50,18 @@ class ClockView(ctx: Context) : FrameLayout(ctx) {
     override fun onDetachedFromWindow() { h.removeCallbacks(move); super.onDetachedFromWindow() }
 }
 
+/** Switch the TV screensaver (needs WRITE_SECURE_SETTINGS, granted once by adb). null = TV's own (Google TV photos). */
+object Screensaver {
+    private const val KEY = "screensaver_components"
+    fun current(ctx: Context): String? = android.provider.Settings.Secure.getString(ctx.contentResolver, KEY)?.takeIf { it.isNotBlank() && it != "null" }
+    fun set(ctx: Context, comp: String?): Boolean = try {
+        android.provider.Settings.Secure.putString(ctx.contentResolver, KEY, comp); true
+    } catch (e: SecurityException) { false }
+}
+
 /** The screensaver ("Ronin Clock"). */
 class ClockDream : DreamService() {
+    companion object { const val COMPONENT = "com.ronin.home/com.ronin.home.ClockDream" }
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         isInteractive = false; isFullscreen = true; isScreenBright = false

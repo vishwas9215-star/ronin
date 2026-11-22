@@ -201,7 +201,8 @@ class MainActivity : Activity() {
         // quiet hint that the remote's voice button (Gemini) works everywhere
         bar.addView(ImageView(this).apply { setImageResource(R.drawable.ic_mic) }, Ui.lp(dp(20), dp(20), r = dp(4)))
         bar.addView(Ui.text(this, "Ask Gemini", 14f, 0xFFA7B0C0.toInt(), Typeface.NORMAL, "sans-serif-medium"), Ui.lp(WRAP, WRAP, r = dp(20)))
-        bar.addView(Ui.button(this, "Castle") { open(Service.CASTLE.pkg) })
+        bar.addView(Ui.button(this, "Kids") { startActivity(Intent(this, KidsActivity::class.java).putExtra("demo", demo)) })
+        bar.addView(Ui.button(this, "Castle") { open(Service.CASTLE.pkg) }, Ui.lp(WRAP, WRAP, l = dp(12)))
         bar.addView(Ui.button(this, "My subscriptions") { startActivity(Intent(this, SubscriptionsActivity::class.java)) }, Ui.lp(WRAP, WRAP, l = dp(12)))
         box.addView(bar)
 
@@ -287,7 +288,6 @@ class MainActivity : Activity() {
         titles.clear()
         val subs = store.subscribed()
         row("My Apps", Catalog.visible(Catalog.myApps, subs, ::installed).map { appTile(it) }, first = true)
-        row("Kids", Catalog.visible(Catalog.kidsApps, subs, ::installed).map { appTile(it) })
 
         if (!demo && store.tmdbKey.isNotEmpty() && shelf.topMovies.isEmpty() && shelf.byLang.isEmpty()) {
             row("Movies & Shows", listOf(infoTile("Loading movies and shows…", "Hollywood, Bollywood, Korean, South Indian and Top 10 appear here in a few seconds") {
@@ -334,7 +334,7 @@ class MainActivity : Activity() {
         column.addView(hs, Ui.lp(MATCH, WRAP, l = -dp(6)))
     }
 
-    private fun appTile(e: AppEntry, small: Boolean = false): View {
+    internal fun appTile(e: AppEntry, small: Boolean = false): View {
         val w = dp(if (small) 168 else 200); val h = dp(if (small) 94 else 112)
         val f = FrameLayout(this)
         f.layoutParams = Ui.lp(w, h)

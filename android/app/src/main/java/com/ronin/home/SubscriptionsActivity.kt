@@ -22,6 +22,7 @@ class SubscriptionsActivity : Activity() {
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Ui.BG_TOP, Ui.BG_BOTTOM))
             clipChildren = false
         }
+        col.setPadding(dp(96), dp(36), dp(96), dp(24))
         col.addView(Ui.text(this, "My subscriptions", 32f, Ui.TEXT, Typeface.NORMAL, "sans-serif-light"))
         col.addView(Ui.text(this, "Turn off a service you no longer pay for. Its app and its movies disappear from Home and Kids.", 16f, Ui.SUB),
             Ui.lp(WRAP, WRAP, t = dp(10), b = dp(26)))
@@ -51,7 +52,36 @@ class SubscriptionsActivity : Activity() {
             col.addView(row, Ui.lp(dp(560), dp(64), b = dp(14)))
             if (first) { row.post { row.requestFocus() }; first = false }
         }
-        col.addView(Ui.text(this, "Press Back when done.", 14f, Ui.SUB), Ui.lp(WRAP, WRAP, t = dp(10)))
+        // Screensaver choice (this TV: family photos from Google TV, or the Ronin clock)
+        col.addView(Ui.text(this, "Screensaver", 24f, Ui.TEXT, Typeface.NORMAL, "sans-serif-light"), Ui.lp(WRAP, WRAP, t = dp(22), b = dp(12)))
+        val states = mutableListOf<() -> Unit>()
+        for ((label, comp) in listOf("Family photos (Google TV)" to null, "Ronin Clock" to ClockDream.COMPONENT)) {
+            val row = FrameLayout(this)
+            val inner = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(22), 0, dp(22), 0)
+                background = GradientDrawable().apply { cornerRadius = dp(12).toFloat(); setColor(0x22FFFFFF) }
+            }
+            inner.addView(Ui.text(this, label, 20f, Ui.TEXT, Typeface.NORMAL, "sans-serif-medium"), LinearLayout.LayoutParams(0, WRAP, 1f))
+            val state = Ui.pill(this, "", 0x33FFFFFF, Ui.TEXT, 14f)
+            inner.addView(state)
+            row.addView(inner, FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH))
+            val paint = {
+                val on = Screensaver.current(this) == comp
+                state.text = if (on) "ON" else "Choose"
+                (state.background as GradientDrawable).setColor(if (on) 0xFF2F9E44.toInt() else 0x33FFFFFF)
+                row.contentDescription = "$label ${state.text}"
+            }
+            states += paint
+            paint()
+            Ui.round(row, 12)
+            Ui.focusable(row, 12, 1.03f)
+            row.setOnClickListener {
+                if (!Screensaver.set(this, comp)) android.widget.Toast.makeText(this, "Needs a one-time setup from the laptop", android.widget.Toast.LENGTH_LONG).show()
+                states.forEach { it() }
+            }
+            col.addView(row, Ui.lp(dp(560), dp(60), b = dp(12)))
+        }
+        col.addView(Ui.text(this, "Press Back when done.", 14f, Ui.SUB), Ui.lp(WRAP, WRAP, t = dp(6)))
         setContentView(col)
     }
 }
