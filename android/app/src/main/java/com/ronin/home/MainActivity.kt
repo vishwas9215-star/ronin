@@ -99,6 +99,8 @@ class MainActivity : Activity() {
             addView(column, FrameLayout.LayoutParams(MATCH, WRAP))
         }
         page.addView(scroll, LinearLayout.LayoutParams(MATCH, 0, 1f))
+        // hard clip (elevated, zoomed tiles otherwise escape the scroll area and cover the top area)
+        scroll.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> v.clipBounds = android.graphics.Rect(0, 0, v.width, v.height) }
         root.addView(page, FrameLayout.LayoutParams(MATCH, MATCH))
         setContentView(root)
 
