@@ -20,10 +20,10 @@ class CarMusicService : MediaBrowserServiceCompat() {
         session = MediaSessionCompat(this, "RoninMusicCar").apply {
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlay() { SitePlayer.play(this@CarMusicService, "resume") }
-                override fun onPause() { PlayerBridge.control?.invoke("pause") }
-                override fun onSkipToNext() { SitePlayer.page(this@CarMusicService); PlayerBridge.control?.invoke("nexttrack") }
-                override fun onSkipToPrevious() { SitePlayer.page(this@CarMusicService); PlayerBridge.control?.invoke("previoustrack") }
-                override fun onStop() { PlayerBridge.control?.invoke("pause") }
+                override fun onPause() { SitePlayer.command("pause") }
+                override fun onSkipToNext() { SitePlayer.page(this@CarMusicService); SitePlayer.command("nexttrack") }
+                override fun onSkipToPrevious() { SitePlayer.page(this@CarMusicService); SitePlayer.command("previoustrack") }
+                override fun onStop() { SitePlayer.command("pause") }
                 override fun onPlayFromMediaId(id: String?, extras: Bundle?) {
                     val item = ITEMS.firstOrNull { it.first == id } ?: return
                     SitePlayer.play(this@CarMusicService, item.third)

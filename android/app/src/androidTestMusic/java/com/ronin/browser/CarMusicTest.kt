@@ -43,6 +43,22 @@ class CarMusicTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             assertTrue("the page did not start in the background", SitePlayer.hasPage)
         }
+        // bug 25-Nov: the page stopped in the background and next/previous had no page buttons -> must be set up
+        val bg = CountDownLatch(1); var r: String? = null
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            SitePlayer.eval("String(window.__roninBG === 1 && typeof window.__roninMS === 'object' && document.hidden === false)") { r = it; bg.countDown() }
+        }
+        assertTrue(bg.await(10, TimeUnit.SECONDS))
+        assertEquals("\"true\"", r)
+        // bug 25-Nov: car play/pause showed late -> the car sees the new state at once
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { SitePlayer.command("play") }
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { assertTrue(SitePlayer.isPlaying) }
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { SitePlayer.command("pause") }
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { assertTrue(!SitePlayer.isPlaying) }
+        // bug 25-Nov: grey flash between songs -> blank poster
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            assertTrue(SitePlayer.siteCommand("previoustrack").contains("currentTime = 0"))
+        }
         InstrumentationRegistry.getInstrumentation().runOnMainSync { browser.disconnect() }
     }
 }

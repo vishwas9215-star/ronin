@@ -50,9 +50,12 @@ object SitePlayer {
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(w, true)
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            WebViewCompat.addDocumentStartJavaScript(w, TvActivity.NO_ADS_JS + HIDE_AD_SLOTS, setOf("https://m.youtube.com", "https://www.youtube.com", "https://music.youtube.com"))
+            WebViewCompat.addDocumentStartJavaScript(w, PageScripts.BACKGROUND_PLAY + TvActivity.NO_ADS_JS + HIDE_AD_SLOTS, setOf("https://m.youtube.com", "https://www.youtube.com", "https://music.youtube.com"))
         }
-        w.webChromeClient = WebChromeClient()
+        w.webChromeClient = object : WebChromeClient() {
+            // no grey "play" picture flashing between songs (WebView's own placeholder)
+            override fun getDefaultVideoPoster(): android.graphics.Bitmap = BLANK
+        }
         w.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? {
                 val u = req.url.toString()
@@ -64,7 +67,7 @@ object SitePlayer {
             // YouTube / Google sign-in stay inside; any other link (an advert page) is not opened
             override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest) = !hostOk(req.url.host ?: "")
             override fun onPageFinished(view: WebView, url: String?) {
-                if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) view.evaluateJavascript(TvActivity.NO_ADS_JS + HIDE_AD_SLOTS, null)
+                if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) view.evaluateJavascript(PageScripts.BACKGROUND_PLAY + TvActivity.NO_ADS_JS + HIDE_AD_SLOTS, null)
             }
             // no internet yet (phone just woke up / Wi-Fi switching): try again by itself, no error page left on screen
             override fun onReceivedError(view: WebView, req: WebResourceRequest, err: android.webkit.WebResourceError) {
@@ -81,7 +84,7 @@ object SitePlayer {
         }
         w.loadUrl(start(app))
         web = w
-        PlayerBridge.control = { a -> ui.post { web?.evaluateJavascript(PageScripts.mediaCommand(if (a == "stop") "pause" else a), null) } }
+        PlayerBridge.control = { a -> ui.post { command(if (a == "stop") "pause" else a) } }
         PlayerBridge.playId = { id -> ui.post { play(app, CarMusicService.ITEMS.firstOrNull { it.first == id }?.third ?: id) } }
         ui.removeCallbacks(poll); ui.postDelayed(poll, 1000)
         return w
@@ -90,9 +93,35 @@ object SitePlayer {
     /** Car / list item: open that list and let it play. */
     fun play(ctx: Context, url: String) {
         val w = page(ctx)
-        if (url == "resume") w.evaluateJavascript(PageScripts.mediaCommand("play"), null)
-        else if (w.url != url) w.loadUrl(url) else w.evaluateJavascript(PageScripts.mediaCommand("play"), null)
+        if (url == "resume" || w.url == url) command("play") else w.loadUrl(url)
     }
+
+    /**
+     * Play / pause / next / previous from the car, the notification or the lock screen.
+     * The page's own buttons first (YouTube Music knows its queue); the car shows the new state at once
+     * instead of waiting for the next check; "previous" always goes to the previous song, never restarts it.
+     */
+    fun command(a: String) {
+        val w = web ?: return
+        if (a == "play" || a == "pause") {
+            val p = a == "play"
+            if (p != playing) { playing = p; MediaPlaybackService.update(w.context, title.ifBlank { w.context.getString(R.string.ronin_site_name) }, artist, p); onState?.invoke(title, artist, p) }
+        }
+        w.evaluateJavascript(siteCommand(a), null)
+        ui.removeCallbacks(poll); ui.postDelayed(poll, 400)
+    }
+
+    fun siteCommand(a: String): String = """
+(function(a){
+  var v = document.querySelector('video,audio');
+  var h = window.__roninMS && window.__roninMS[a];
+  if (a === 'previoustrack' && v) { try { v.currentTime = 0; } catch (e) {} }
+  if (h) { try { h({action:a}); return 'page'; } catch (e) {} }
+  var sel = {play:'#play-pause-button[aria-label*="Play"]', pause:'#play-pause-button[aria-label*="Pause"]', nexttrack:'.next-button,button[aria-label^="Next"]', previoustrack:'.previous-button,button[aria-label^="Previous"]'}[a];
+  var b = sel && document.querySelector(sel);
+  if (b) { b.click(); return 'button'; }
+  return 'x';
+})(${org.json.JSONObject.quote(a)}) === 'x' && """ + PageScripts.mediaCommand(a)
 
     private val poll = object : Runnable {
         override fun run() {
@@ -116,6 +145,9 @@ object SitePlayer {
     }
 
     val hasPage get() = web != null
+    /** Tests: run a script on the page. */
+    fun eval(js: String, done: (String?) -> Unit) { web?.evaluateJavascript(js, done) ?: done(null) }
+    private val BLANK: android.graphics.Bitmap by lazy { android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888) }
     val isPlaying get() = playing
     val nowTitle get() = title
     val nowArtist get() = artist
