@@ -156,8 +156,8 @@ object SitePlayer {
     val nowArtist get() = artist
 
     /**
-     * Family-safe (owner 25-Nov): YouTube Restricted Mode always on (kept on even if the page changes it) and
-     * no Shorts anywhere - no Shorts row on Home, no Shorts button, a Shorts link opens as a normal video.
+     * Family-safe (owner 25-Nov): YouTube Restricted Mode always on (kept on even if the page changes it).
+     * Shorts stay (owner 16:39: Shorts back, but only filtered ones) - Restricted Mode filters them too.
      */
     const val SAFE_FAMILY = """
 (function(){ if (window.__roninSafe) return; window.__roninSafe = 1;
@@ -178,17 +178,7 @@ object SitePlayer {
     return false;
   };
   if (keepRestricted() && !sessionStorage.__roninRM) { sessionStorage.__roninRM = 1; location.reload(); return; }
-  var css = 'ytm-reel-shelf-renderer,ytm-shorts-lockup-view-model,ytm-shorts-lockup-view-model-v2,ytd-reel-shelf-renderer,ytd-rich-shelf-renderer[is-shorts],grid-shelf-view-model,' +
-    'ytm-rich-section-renderer:has(ytm-shorts-lockup-view-model),ytm-rich-section-renderer:has(ytm-reel-shelf-renderer),ytm-rich-section-renderer:has(a[href^="/shorts/"]),' +
-    'ytm-rich-item-renderer:has(a[href^="/shorts/"]),ytm-video-with-context-renderer:has(a[href^="/shorts/"]),ytm-compact-video-renderer:has(a[href^="/shorts/"]),' +
-    'ytm-pivot-bar-item-renderer:has(.pivot-shorts),ytm-pivot-bar-item-renderer:has(a[href^="/shorts"]),ytm-chip-cloud-chip-renderer:has(a[href*="shorts"]){display:none!important}';
-  var add = function(){ try { if (document.getElementById('ronin-safe')) return; var s = document.createElement('style'); s.id = 'ronin-safe'; s.textContent = css; (document.head||document.documentElement).appendChild(s); } catch(e){} };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', add); else add();
-  setInterval(function(){
-    add(); keepRestricted();
-    var m = location.pathname.match(/^\/shorts\/([\w-]{6,})/);
-    if (m) location.replace('/watch?v=' + m[1]);
-  }, 700);
+  setInterval(keepRestricted, 700);
 })();
 """
 
