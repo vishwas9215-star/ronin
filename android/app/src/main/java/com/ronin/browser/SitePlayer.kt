@@ -25,6 +25,7 @@ object SitePlayer {
     @SuppressLint("StaticFieldLeak") private var web: RoninWebView? = null
     private val ui = Handler(Looper.getMainLooper())
     private var title = ""; private var artist = ""; private var playing = false
+    private var retries = 0
     /** Car screen (Ronin Music): gets every change of song / play state. */
     @Volatile var onState: ((title: String, artist: String, playing: Boolean) -> Unit)? = null
 
@@ -65,6 +66,13 @@ object SitePlayer {
             override fun onPageFinished(view: WebView, url: String?) {
                 if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) view.evaluateJavascript(TvActivity.NO_ADS_JS + HIDE_AD_SLOTS, null)
             }
+            // no internet yet (phone just woke up / Wi-Fi switching): try again by itself, no error page left on screen
+            override fun onReceivedError(view: WebView, req: WebResourceRequest, err: android.webkit.WebResourceError) {
+                if (!req.isForMainFrame) return
+                retries++
+                if (retries <= 20) ui.postDelayed({ if (web === view) view.loadUrl(req.url.toString()) }, (2000L * retries).coerceAtMost(15000L))
+            }
+            override fun onPageCommitVisible(view: WebView, url: String?) { if (url?.startsWith("https://") == true) retries = 0 }
             override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
                 (view.parent as? android.view.ViewGroup)?.removeView(view)
                 view.destroy(); web = null; MediaPlaybackService.stop(app)
