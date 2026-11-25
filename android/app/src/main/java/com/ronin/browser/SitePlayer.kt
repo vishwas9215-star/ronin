@@ -48,9 +48,12 @@ object SitePlayer {
             keepPlaying = true
         }
         CookieManager.getInstance().setAcceptCookie(true)
+        // Restricted Mode from the very first page (YouTube keeps it in the PREF cookie, flag f2=8000000)
+        if (CookieManager.getInstance().getCookie("https://m.youtube.com")?.contains("PREF=") != true)
+            CookieManager.getInstance().setCookie("https://m.youtube.com", "PREF=f2=8000000; Domain=.youtube.com; Path=/; Max-Age=63072000; Secure")
         CookieManager.getInstance().setAcceptThirdPartyCookies(w, true)
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            WebViewCompat.addDocumentStartJavaScript(w, PageScripts.BACKGROUND_PLAY + TvActivity.NO_ADS_JS + HIDE_AD_SLOTS, setOf("https://m.youtube.com", "https://www.youtube.com", "https://music.youtube.com"))
+            WebViewCompat.addDocumentStartJavaScript(w, PageScripts.BACKGROUND_PLAY + TvActivity.NO_ADS_JS + HIDE_AD_SLOTS + SAFE_FAMILY, setOf("https://m.youtube.com", "https://www.youtube.com", "https://music.youtube.com"))
         }
         w.webChromeClient = object : WebChromeClient() {
             // no grey "play" picture flashing between songs (WebView's own placeholder)
@@ -67,7 +70,7 @@ object SitePlayer {
             // YouTube / Google sign-in stay inside; any other link (an advert page) is not opened
             override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest) = !hostOk(req.url.host ?: "")
             override fun onPageFinished(view: WebView, url: String?) {
-                if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) view.evaluateJavascript(PageScripts.BACKGROUND_PLAY + TvActivity.NO_ADS_JS + HIDE_AD_SLOTS, null)
+                if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) view.evaluateJavascript(PageScripts.BACKGROUND_PLAY + TvActivity.NO_ADS_JS + HIDE_AD_SLOTS + SAFE_FAMILY, null)
             }
             // no internet yet (phone just woke up / Wi-Fi switching): try again by itself, no error page left on screen
             override fun onReceivedError(view: WebView, req: WebResourceRequest, err: android.webkit.WebResourceError) {
@@ -151,6 +154,43 @@ object SitePlayer {
     val isPlaying get() = playing
     val nowTitle get() = title
     val nowArtist get() = artist
+
+    /**
+     * Family-safe (owner 25-Nov): YouTube Restricted Mode always on (kept on even if the page changes it) and
+     * no Shorts anywhere - no Shorts row on Home, no Shorts button, a Shorts link opens as a normal video.
+     */
+    const val SAFE_FAMILY = """
+(function(){ if (window.__roninSafe) return; window.__roninSafe = 1;
+  var RM = 0x8000000;
+  var keepRestricted = function(){
+    try {
+      var m = document.cookie.match(/(?:^|; )PREF=([^;]*)/), pref = m ? m[1] : '', parts = pref ? pref.split('&') : [], found = false, changed = false;
+      for (var i = 0; i < parts.length; i++) if (parts[i].indexOf('f2=') === 0) {
+        found = true; var f = parseInt(parts[i].slice(3), 16) || 0;
+        if (!(f & RM)) { parts[i] = 'f2=' + (f | RM).toString(16); changed = true; }
+      }
+      if (!found) { parts.push('f2=8000000'); changed = true; }
+      if (changed) {
+        document.cookie = 'PREF=' + parts.join('&') + '; domain=.youtube.com; path=/; max-age=63072000; secure';
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  };
+  if (keepRestricted() && !sessionStorage.__roninRM) { sessionStorage.__roninRM = 1; location.reload(); return; }
+  var css = 'ytm-reel-shelf-renderer,ytm-shorts-lockup-view-model,ytm-shorts-lockup-view-model-v2,ytd-reel-shelf-renderer,ytd-rich-shelf-renderer[is-shorts],grid-shelf-view-model,' +
+    'ytm-rich-section-renderer:has(ytm-shorts-lockup-view-model),ytm-rich-section-renderer:has(ytm-reel-shelf-renderer),ytm-rich-section-renderer:has(a[href^="/shorts/"]),' +
+    'ytm-rich-item-renderer:has(a[href^="/shorts/"]),ytm-video-with-context-renderer:has(a[href^="/shorts/"]),ytm-compact-video-renderer:has(a[href^="/shorts/"]),' +
+    'ytm-pivot-bar-item-renderer:has(.pivot-shorts),ytm-pivot-bar-item-renderer:has(a[href^="/shorts"]),ytm-chip-cloud-chip-renderer:has(a[href*="shorts"]){display:none!important}';
+  var add = function(){ try { if (document.getElementById('ronin-safe')) return; var s = document.createElement('style'); s.id = 'ronin-safe'; s.textContent = css; (document.head||document.documentElement).appendChild(s); } catch(e){} };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', add); else add();
+  setInterval(function(){
+    add(); keepRestricted();
+    var m = location.pathname.match(/^\/shorts\/([\w-]{6,})/);
+    if (m) location.replace('/watch?v=' + m[1]);
+  }, 700);
+})();
+"""
 
     /** Advert boxes on the phone pages are hidden (the player itself is never touched). */
     private const val HIDE_AD_SLOTS = """

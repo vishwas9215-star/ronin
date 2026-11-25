@@ -78,6 +78,8 @@ jobs:
             bash tools/media/emu-check.sh
             adb uninstall com.ronin.music >/dev/null 2>&1 || true
             cd android && (timeout 15m ./gradlew --no-daemon connectedMusicDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ronin.browser.CarMusicTest && echo "PASS car (Android Auto) list + play from car" >> ../qa/results.txt || echo "FAIL car (Android Auto) test" >> ../qa/results.txt)
+            adb uninstall com.ronin.youtube >/dev/null 2>&1 || true
+            cd android && (timeout 15m ./gradlew --no-daemon connectedYoutubeDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ronin.browser.SafeYoutubeTest && echo "PASS youtube restricted mode + no shorts" >> ../qa/results.txt || echo "FAIL youtube safe test" >> ../qa/results.txt)
       - name: Publish (prerelease ronin-media)
         if: always()
         env:
