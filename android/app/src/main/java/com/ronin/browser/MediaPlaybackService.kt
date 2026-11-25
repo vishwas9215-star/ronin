@@ -21,6 +21,8 @@ import androidx.media.app.NotificationCompat.MediaStyle
 object PlayerBridge {
     /** Set by MainActivity: runs "play", "pause", "nexttrack", "previoustrack" or "stop" on the page. */
     @Volatile var control: ((String) -> Unit)? = null
+    /** Ronin Music: a list chosen in the car or by voice (an address to play). */
+    @Volatile var playId: ((String) -> Unit)? = null
 }
 
 /**
@@ -49,6 +51,7 @@ class MediaPlaybackService : Service() {
                 override fun onSkipToNext() = send("nexttrack")
                 override fun onSkipToPrevious() = send("previoustrack")
                 override fun onStop() = send("stop")
+                override fun onPlayFromMediaId(mediaId: String?, extras: android.os.Bundle?) { mediaId?.let { PlayerBridge.playId?.invoke(it) } }
             })
             setSessionActivity(openApp())
             isActive = true
@@ -80,7 +83,7 @@ class MediaPlaybackService : Service() {
     }
 
     private fun openApp(): PendingIntent = PendingIntent.getActivity(
-        this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        this, 0, (packageManager.getLaunchIntentForPackage(packageName) ?: Intent(this, MainActivity::class.java)).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
 

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Ronin YouTube / Ronin Music (src/youtube, src/music) set their own -->
+    <string name="ronin_site_url" translatable="false">https://m.youtube.com/</string>
+    <string name="ronin_site_name" translatable="false">Ronin YouTube</string>
+</resources>

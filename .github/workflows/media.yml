@@ -1,0 +1,89 @@
+# Ronin YouTube + Ronin Music (phone; Music also Android Auto). Branch ronin-media only - Ronin Browser releases are untouched.
+# Result: prerelease "ronin-media" (RoninYouTube.apk, RoninMusic.apk, qa-*.png, qa-results.txt).
+name: ronin-media
+on:
+  push:
+    branches: [ronin-media]
+  workflow_dispatch:
+    inputs:
+      size: { description: "phone screen, e.g. 1220x2712", required: false, default: "" }
+      density: { description: "phone density, e.g. 480", required: false, default: "" }
+permissions:
+  contents: write
+concurrency:
+  group: ronin-media
+  cancel-in-progress: true
+jobs:
+  apks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Signing key
+        env:
+          RONIN_KEYS_PASS: ${{ secrets.RONIN_KEYS_PASS }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          printf '%s' "$RONIN_KEYS_PASS" > "$RUNNER_TEMP/keys/pass"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in keys/ronin-keys.tar.enc -pass "file:$RUNNER_TEMP/keys/pass" | tar -xf - -C "$RUNNER_TEMP/keys"
+          echo "RONIN_KEYSTORE=$RUNNER_TEMP/keys/ronin-android.p12" >> "$GITHUB_ENV"
+          echo "::add-mask::$RONIN_KEYS_PASS"
+          echo "RONIN_KEYSTORE_PASS=$RONIN_KEYS_PASS" >> "$GITHUB_ENV"
+      - name: APKs
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew --no-daemon assembleYoutubeRelease assembleMusicRelease
+      - name: Collect
+        run: |
+          cp android/app/build/outputs/apk/youtube/release/*.apk RoninYouTube.apk
+          cp android/app/build/outputs/apk/music/release/*.apk RoninMusic.apk
+          ls -l *.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: apks, path: "*.apk" }
+
+  phone-emulator:
+    needs: apks
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/download-artifact@v4
+        with: { name: apks }
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Phone emulator check + car test
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          PHONE_SIZE: ${{ github.event.inputs.size }}
+          PHONE_DENSITY: ${{ github.event.inputs.density }}
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 4096M
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            bash tools/media/emu-check.sh
+            adb uninstall com.ronin.music >/dev/null 2>&1 || true
+            cd android && (timeout 15m ./gradlew --no-daemon connectedMusicDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.ronin.browser.CarMusicTest && echo "PASS car (Android Auto) list + play from car" >> ../qa/results.txt || echo "FAIL car (Android Auto) test" >> ../qa/results.txt)
+      - name: Publish (prerelease ronin-media)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view ronin-media >/dev/null 2>&1 || gh release create ronin-media --target "$GITHUB_SHA" --prerelease --title "Ronin YouTube + Ronin Music (test builds)" --notes "Phone test builds + emulator screenshots."
+          gh release upload ronin-media RoninYouTube.apk RoninMusic.apk --clobber
+          for f in qa/*; do [ -s "$f" ] && cp "$f" "qa-$(basename "$f")" && gh release upload ronin-media "qa-$(basename "$f")" --clobber; done
+          cat qa/results.txt >> "$GITHUB_STEP_SUMMARY" || true

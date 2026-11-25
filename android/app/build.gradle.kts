@@ -32,6 +32,9 @@ android {
     productFlavors {
         create("browser") { dimension = "app"; applicationId = "com.ronin.browser" }
         create("phone") { dimension = "app"; applicationId = "com.ronin.phone" }
+        // 25 Nov 2026: Ronin YouTube + Ronin Music for the phone (own icons; Music also in the car - Android Auto)
+        create("youtube") { dimension = "app"; applicationId = "com.ronin.youtube" }
+        create("music") { dimension = "app"; applicationId = "com.ronin.music" }
     }
 
     signingConfigs {
