@@ -169,7 +169,9 @@ object AgentRules {
         // only while the owner holds the screen is the guard off (the driver does not call it then)
         if (m != "GET" && m != "HEAD" && m != "OPTIONS" && mode(h, isMoney) == Mode.MONEY) return "$m to money site $h"
         if (m != "GET" && MONEY_PATH.containsMatchIn("$path?$q")) return "$m $path (money / order request)"
-        if (m == "GET" && MONEY_PATH.containsMatchIn(path) && CONFIRM_QUERY.containsMatchIn(q)) return "GET $path?$q (money / order request)"
+        // a GET that does something: money words + a confirm-like word in the path or in a query NAME (not in search text)
+        val keys = q.split('&').joinToString(" ") { it.substringBefore('=') }
+        if (m == "GET" && q.isNotEmpty() && MONEY_PATH.containsMatchIn("$path $keys") && CONFIRM_QUERY.containsMatchIn("$path $keys")) return "GET $path?$q (money / order request)"
         if (claudeInput && mainFrame && taint != null && h != currentHost && registrable(h) != registrable(taint) && (q.length + (u.rawFragment ?: "").length) > 30)
             return "leaving $taint (sensitive data was read) for $h with data in the address"
         return null

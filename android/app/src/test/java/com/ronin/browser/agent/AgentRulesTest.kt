@@ -80,6 +80,9 @@ class AgentRulesTest {
         assertNotNull(AgentRules.guard("POST", "https://web.dhan.co/api/v3/exec?m=1", true, false, noMoney, null, "web.dhan.co"))
         assertNotNull(AgentRules.guard("PUT", "https://api.zerodha.com/x", false, false, noMoney, null, "kite.zerodha.com"))
         assertNull(AgentRules.guard("GET", "https://web.dhan.co/holdings", true, false, noMoney, null, "web.dhan.co"))
+        assertNotNull("pay in the query", AgentRules.guard("GET", "https://shop.example.com/execute?pay=1", true, false, noMoney, null, "shop.example.com"))
+        assertNull("searching about payments is fine", AgentRules.guard("GET", "https://www.google.com/search?q=how+to+pay+upi+confirm", true, false, noMoney, null, "www.google.com"))
+        assertNull("a page about payments is fine", AgentRules.guard("GET", "https://help.example.com/payments/faq", true, false, noMoney, null, "help.example.com"))
         assertNotNull("empty host is refused", AgentRules.guard("GET", "http:///x", true, false, noMoney, null, ""))
         assertNull("data: never leaves the device", AgentRules.guard("GET", "data:text/plain,hi", false, false, noMoney, null, ""))
     }

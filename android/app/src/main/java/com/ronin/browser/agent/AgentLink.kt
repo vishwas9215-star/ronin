@@ -91,6 +91,7 @@ class AgentLink(
     }
 
     companion object {
+        val PEER_NAMES = setOf("phone", "tablet")
         fun pemToKey(pem: String): PublicKey {
             val b64 = pem.lines().filter { !it.startsWith("-----") }.joinToString("")
             return KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(Base64.decode(b64, Base64.DEFAULT)))
@@ -131,7 +132,7 @@ class AgentLink(
         if (code != 200) { log("pair refused ($code)"); return false }
         val got = JSONObject(text).optString("relay_pub")
         if (got.trim() != relayPubPem.trim()) { log("pair: NOT our relay"); return false }
-        JSONObject(text).optJSONObject("peers")?.let { p -> for (n in p.keys()) if (n != name && prefs.getString("peer_$n", null) == null) rememberPeer(n, p.getString(n)) }
+        JSONObject(text).optJSONObject("peers")?.let { p -> for (n in p.keys()) if (n != name && n in PEER_NAMES && prefs.getString("peer_$n", null) == null) rememberPeer(n, p.getString(n)) }
         prefs.edit().putBoolean("paired", true).commit()
         return true
     }
@@ -149,7 +150,9 @@ class AgentLink(
         val ka = KeyAgreement.getInstance("ECDH").apply { init(eph.private); doPhase(fromRaw(Base64.decode(theirs, Base64.DEFAULT), eph.public as ECPublicKey), true) }
         val key = java.security.MessageDigest.getInstance("SHA-256").digest(ka.generateSecret() + nonce.toByteArray())
         // other devices: a NEW name is learnt only while the owner has "Claude जोड़ें" open here; a known one never changes
-        m.optJSONObject("peers")?.let { p -> for (n in p.keys()) if (n != name && prefs.getString("peer_$n", null) == null && now() < connectUntil) { rememberPeer(n, p.getString(n)); log("learnt peer $n") } }
+        // (pilot: only "phone" / "tablet" exist; a "laptop" is learnt once the Windows agent ships, so a stranger who
+        // paired that name while pairing was open is never trusted)
+        m.optJSONObject("peers")?.let { p -> for (n in p.keys()) if (n != name && n in PEER_NAMES && prefs.getString("peer_$n", null) == null && now() < connectUntil) { rememberPeer(n, p.getString(n)); log("learnt peer $n") } }
         // a "Disconnect Claude" pressed on another device while this one was offline
         m.optJSONObject("epoch")?.let { applyEpoch(it.optString("by"), it.optLong("epoch"), it.optString("sig")) }
         synchronized(lock) {
