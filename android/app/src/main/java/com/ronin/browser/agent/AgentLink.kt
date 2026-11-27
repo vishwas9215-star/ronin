@@ -262,7 +262,13 @@ class AgentLink(
 
     /** A new epoch, signed by one of the owner's devices (this one or a known peer): grants older than it are dead. */
     private fun applyEpoch(by: String, e: Long, sig: String): Boolean {
-        val pub = if (by == name) publicPem() else prefs.getString("peer_$by", null) ?: return false
+        val pub = if (by == name) publicPem() else prefs.getString("peer_$by", null)
+        if (pub == null) {
+            // a "Disconnect Claude" from a device this one does not know: obeyed as a revocation anyway (the worst a
+            // hostile relay can do with it is make the owner connect again); reported as unknown
+            if (e > prefs.getLong("epoch", 0)) { prefs.edit().putLong("epoch", e).commit(); log("epoch $e from unknown $by: obeyed") }
+            return false
+        }
         if (!verify(pub, "epoch|$e", sig)) return false
         if (e > prefs.getLong("epoch", 0)) { prefs.edit().putLong("epoch", e).commit(); log("epoch $e from $by") }
         return true

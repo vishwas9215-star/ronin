@@ -93,7 +93,11 @@ func (p *cdpPage) world() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	ctx := int(w["executionContextId"].(float64))
+	cf, ok := w["executionContextId"].(float64)
+	if !ok {
+		return 0, errors.New("no isolated world")
+	}
+	ctx := int(cf)
 	if _, err := p.eval(ctx, agentcore.AgentJS); err != nil {
 		return 0, err
 	}
@@ -223,26 +227,28 @@ func (p *cdpPage) Key(name string) error {
 	return err
 }
 
-func (p *cdpPage) ReplaceText(text string, slow bool) error {
-	// select everything in the box (Ctrl+A), then type over it
+func (p *cdpPage) SelectAll() error {
 	if _, err := p.cdp("Input.dispatchKeyEvent", map[string]any{"type": "rawKeyDown", "key": "a", "code": "KeyA", "windowsVirtualKeyCode": 65, "modifiers": 2, "commands": []string{"selectAll"}}); err != nil {
 		return err
 	}
-	p.cdp("Input.dispatchKeyEvent", map[string]any{"type": "keyUp", "key": "a", "code": "KeyA", "windowsVirtualKeyCode": 65, "modifiers": 2})
+	_, err := p.cdp("Input.dispatchKeyEvent", map[string]any{"type": "keyUp", "key": "a", "code": "KeyA", "windowsVirtualKeyCode": 65, "modifiers": 2})
+	if err != nil {
+		return err
+	}
+	// a page that swallows Ctrl+A: select the box's text directly (isolated world, the real element)
+	if ctx, err := p.world(); err == nil {
+		p.eval(ctx, `(function(){var a=document.activeElement;while(a&&a.shadowRoot&&a.shadowRoot.activeElement)a=a.shadowRoot.activeElement;
+if(a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA')){try{a.select()}catch(e){}}})()`)
+	}
+	return nil
+}
+
+func (p *cdpPage) Insert(text string) error {
 	if text == "" {
 		return p.Key("backspace")
 	}
-	if !slow {
-		_, err := p.cdp("Input.insertText", map[string]any{"text": text})
-		return err
-	}
-	for _, r := range text {
-		if _, err := p.cdp("Input.insertText", map[string]any{"text": string(r)}); err != nil {
-			return err
-		}
-		time.Sleep(time.Duration(60+rand.Intn(90)) * time.Millisecond)
-	}
-	return nil
+	_, err := p.cdp("Input.insertText", map[string]any{"text": text})
+	return err
 }
 
 func (p *cdpPage) Scroll(up bool) error {
@@ -267,13 +273,19 @@ func (p *cdpPage) Screenshot() ([]byte, error) {
 	return base64.StdEncoding.DecodeString(d)
 }
 
-// FocusedSecret: what the focused box really is, read in the isolated world (the page can not fake it there).
-const focusedJS = `(function(){var a=document.activeElement;if(!a||a===document.body||a===document.documentElement)return 'unknown';
-if(a.tagName==='IFRAME'||a.tagName==='FRAME')return 'unknown';
-if(a.tagName==='INPUT'&&String(a.type).toLowerCase()==='password')return 'secret';
+// focusedJS: what the focused box really is, read in the isolated world (the page can not fake it there),
+// through shadow roots. Only a confirmed plain text box is "normal"; anything not understood is "unknown".
+const focusedJS = `(function(){var a=document.activeElement;
+while(a&&a.shadowRoot&&a.shadowRoot.activeElement)a=a.shadowRoot.activeElement;
+if(!a||a===document.body||a===document.documentElement)return 'unknown';
+var tag=a.tagName;if(tag==='IFRAME'||tag==='FRAME'||tag==='OBJECT'||tag==='EMBED')return 'unknown';
 var ac=String(a.getAttribute('autocomplete')||'').toLowerCase();if(/current-password|new-password|one-time-code/.test(ac))return 'secret';
 var s=getComputedStyle(a);var ts=s.webkitTextSecurity||s.getPropertyValue('-webkit-text-security');if(ts&&ts!=='none')return 'secret';
-return 'normal'})()`
+if(tag==='INPUT'){var t=String(a.type).toLowerCase();if(t==='password')return 'secret';
+ return ['text','search','email','tel','url','number','date','datetime-local','month','week','time',''].indexOf(t)>=0?'normal':'unknown';}
+if(tag==='TEXTAREA')return 'normal';
+if(a.isContentEditable||String(a.getAttribute('role')||'').toLowerCase()==='textbox')return 'normal';
+return 'unknown'})()`
 
 func (p *cdpPage) FocusedSecret() string {
 	ctx, err := p.world()
@@ -285,4 +297,16 @@ func (p *cdpPage) FocusedSecret() string {
 		return s
 	}
 	return "unknown"
+}
+
+// FocusedText: the focused element's label / text (Enter or Space would press it).
+func (p *cdpPage) FocusedText() string {
+	ctx, err := p.world()
+	if err != nil {
+		return ""
+	}
+	v, _ := p.eval(ctx, `(function(){var a=document.activeElement;while(a&&a.shadowRoot&&a.shadowRoot.activeElement)a=a.shadowRoot.activeElement;
+if(!a)return '';return String(a.getAttribute('aria-label')||a.value||a.innerText||a.textContent||'').trim().slice(0,80)})()`)
+	s, _ := v.(string)
+	return s
 }

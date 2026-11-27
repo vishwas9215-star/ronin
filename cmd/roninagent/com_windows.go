@@ -100,7 +100,7 @@ func addEvent(obj uintptr, idx int, h *handler) {
 
 // hookPageEvents: pop-ups open in the same Claude tab (through the same guard); other apps are never launched;
 // downloads are cancelled in the pilot.
-func hookPageEvents(core uintptr, navigateSame func(string)) {
+func hookPageEvents(core uintptr, navigateSame func(string), ownData func() bool) {
 	addEvent(core, wvAddNewWindowRequested, newHandler(func(_, args uintptr) uintptr {
 		uri := comString(args, nwUri)
 		comCall(args, nwSetHandled, 1)
@@ -111,7 +111,10 @@ func hookPageEvents(core uintptr, navigateSame func(string)) {
 	}))
 	addEvent(core, wvAddNavigationStarting, newHandler(func(_, args uintptr) uintptr {
 		uri := strings.ToLower(comString(args, nsUri))
-		if !(strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") || strings.HasPrefix(uri, "about:") || strings.HasPrefix(uri, "data:")) {
+		if strings.HasPrefix(uri, "data:") && ownData() {
+			return 0 // Ronin's own start page
+		}
+		if !(strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") || uri == "about:blank") {
 			comCall(args, nsSetCancel, 1)
 			logf("blocked: opening another app (%s)", trim(strings.SplitN(uri, ":", 2)[0], 20))
 		}

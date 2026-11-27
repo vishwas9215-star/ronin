@@ -22,12 +22,14 @@ type Page interface {
 	Navigate(url string) error // returns when the page has loaded (or after 30 s)
 	URL() string
 	Back() error
-	Tap(x, y float64, slow bool) error        // CSS pixels of the viewport; a real press + release
-	ReplaceText(text string, slow bool) error // select all in the focused box, then type the text
-	Key(name string) error                    // enter, tab, escape, pagedown, pageup, arrow*, backspace, space
+	Tap(x, y float64, slow bool) error // CSS pixels of the viewport; a real press + release
+	SelectAll() error                  // select everything in the focused box
+	Insert(text string) error          // type text at the cursor (real text input)
+	Key(name string) error             // enter, tab, escape, pagedown, pageup, arrow*, backspace, space
 	Scroll(up bool) error
 	Screenshot() ([]byte, error) // JPEG
 	FocusedSecret() string       // "secret" / "normal" / "unknown": checked outside the page's own JavaScript
+	FocusedText() string         // the label / text of the focused element (for Enter / Space)
 }
 
 // Driver carries out Claude's tools with every rule enforced on the device. One command at a time.
@@ -50,11 +52,13 @@ type Driver struct {
 	ReadPages    map[string]map[string]bool
 	AllowIDs     map[string]bool
 	blockedActs  map[string]bool
-	privateCache map[string]bool
+	privateCache map[string]privEntry
 	checks       map[string][]time.Time
 	done         map[string]map[string]any
 	doneOrder    []string
 	OnOwnerAsked func(reason string)
+	curID        string
+	recovered    bool
 	Resolve      func(host string) ([]net.IP, error) // DNS; nil = net.LookupIP
 }
 
@@ -66,7 +70,7 @@ var (
 
 func (d *Driver) init() {
 	if d.idHosts == nil {
-		d.idHosts, d.blockedActs, d.privateCache, d.checks, d.done = map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string][]time.Time{}, map[string]map[string]any{}
+		d.idHosts, d.blockedActs, d.privateCache, d.checks, d.done = map[string]bool{}, map[string]bool{}, map[string]privEntry{}, map[string][]time.Time{}, map[string]map[string]any{}
 		if d.ReadPages == nil {
 			d.ReadPages = map[string]map[string]bool{}
 		}
@@ -146,8 +150,16 @@ func (d *Driver) PrivateKnown(h string) (private, known bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.init()
-	v, ok := d.privateCache[h]
-	return v, ok
+	c, ok := d.privateCache[h]
+	if !ok || time.Now().After(c.until) {
+		return false, false
+	}
+	return c.private, true
+}
+
+type privEntry struct {
+	private bool
+	until   time.Time // a name is asked again after a minute (its address may change)
 }
 
 // Block records a blocked request (the click / key that caused it reports it to Claude).
@@ -166,11 +178,7 @@ func (d *Driver) IsPrivate(h string) bool {
 	if IsPrivateHost(h) {
 		return true
 	}
-	d.mu.Lock()
-	d.init()
-	v, ok := d.privateCache[h]
-	d.mu.Unlock()
-	if ok {
+	if v, known := d.PrivateKnown(h); known {
 		return v
 	}
 	res := d.Resolve
@@ -178,16 +186,17 @@ func (d *Driver) IsPrivate(h string) bool {
 		res = net.LookupIP
 	}
 	ips, err := res(h)
-	v = false
-	if err == nil {
-		for _, ip := range ips {
-			if PrivateAddress(ip) {
-				v = true
-			}
+	if err != nil || len(ips) == 0 {
+		return true // not answered = not allowed (not kept: asked again next time)
+	}
+	v := false
+	for _, ip := range ips {
+		if PrivateAddress(ip) {
+			v = true
 		}
 	}
 	d.mu.Lock()
-	d.privateCache[h] = v
+	d.privateCache[h] = privEntry{private: v, until: time.Now().Add(time.Minute)}
 	d.mu.Unlock()
 	return v
 }
@@ -204,8 +213,16 @@ func (d *Driver) OwnerStop() {
 	d.ownerResult, d.OwnerHolding, d.Stopped = "stop", false, true
 	d.mu.Unlock()
 }
-func (d *Driver) Resume()  { d.mu.Lock(); d.Paused, d.Stopped = false, false; d.mu.Unlock() }
-func (d *Driver) Checked() { d.mu.Lock(); d.blockedActs = map[string]bool{}; d.mu.Unlock() }
+func (d *Driver) Resume() { d.mu.Lock(); d.Paused, d.Stopped = false, false; d.mu.Unlock() }
+
+// Checked: the owner looked at the page: interrupted actions may be tried again, and the "sensitive page was read"
+// mark is cleared (the next site may receive data again).
+func (d *Driver) Checked() {
+	d.mu.Lock()
+	d.blockedActs = map[string]bool{}
+	d.Taint = ""
+	d.mu.Unlock()
+}
 func (d *Driver) OwnerTouched() {
 	d.mu.Lock()
 	if !d.OwnerHolding && !d.Paused {
@@ -220,6 +237,7 @@ func (d *Driver) OwnerTouched() {
 type journal struct {
 	State      map[string]string          `json:"state"`  // id -> started / done
 	Result     map[string]json.RawMessage `json:"result"` // id -> answer
+	Target     map[string]string          `json:"target"` // id -> what it pressed (blocked until CHECKED if cut off)
 	IDs        []string                   `json:"ids"`
 	LastTarget string                     `json:"lastTarget"`
 }
@@ -238,23 +256,72 @@ func (d *Driver) readJournal() *journal {
 	if j.Result == nil {
 		j.Result = map[string]json.RawMessage{}
 	}
+	if j.Target == nil {
+		j.Target = map[string]string{}
+	}
 	return j
 }
 
-func (d *Driver) writeJournal(j *journal) {
+func (d *Driver) writeJournal(j *journal) error {
 	if d.Journal == "" {
-		return
+		return nil
 	}
-	b, _ := json.Marshal(j)
+	b, err := json.Marshal(j)
+	if err != nil {
+		return err
+	}
 	tmp := d.Journal + ".tmp"
 	os.MkdirAll(filepath.Dir(d.Journal), 0o700)
-	if f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600); err == nil {
-		f.Write(b)
-		f.Sync() // on disk BEFORE the tap
-		f.Close()
-		os.Rename(tmp, d.Journal)
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
 	}
+	if _, err = f.Write(b); err == nil {
+		err = f.Sync() // on disk BEFORE the input
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	for i := 0; i < 5; i++ { // Windows: a scanner may hold the file for a moment
+		if err = os.Rename(tmp, d.Journal); err == nil {
+			return nil
+		}
+		time.Sleep(time.Duration(50*(i+1)) * time.Millisecond)
+	}
+	return err
 }
+
+// setTarget: what this input is about to press, on disk BEFORE it is pressed.
+func (d *Driver) setTarget(act string) error {
+	d.mu.Lock()
+	id := d.curID
+	bl := d.blockedActs[act]
+	d.mu.Unlock()
+	if bl {
+		return errBlockedAct
+	}
+	j := d.readJournal()
+	j.Target[id], j.LastTarget = act, act
+	return d.writeJournal(j)
+}
+
+var errBlockedAct = errors.New("interrupted earlier")
+
+// halted: the owner took over / pressed STOP while a command was running: no further input.
+func (d *Driver) halted() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.Stopped || d.Paused || d.OwnerHolding
+}
+
+var errHalted = errors.New("the owner took over the window: stopped in the middle")
+
+// IsStopped / IsPaused: read under the lock (for the window).
+func (d *Driver) IsStopped() bool { d.mu.Lock(); defer d.mu.Unlock(); return d.Stopped }
+func (d *Driver) IsPaused() bool  { d.mu.Lock(); defer d.mu.Unlock(); return d.Paused }
 
 // ---------------- one command ----------------
 
@@ -285,16 +352,38 @@ func (d *Driver) Run(id, tool string, args map[string]any) (out map[string]any) 
 		}
 		return map[string]any{"done": "this command already ran (answer kept on the device)"}
 	}
-	if j.State[id] == "started" {
-		if j.LastTarget != "" {
-			d.mu.Lock()
-			d.blockedActs[j.LastTarget] = true
-			d.mu.Unlock()
+	// after a restart: every input that was cut off stays blocked (whatever id Claude uses next) until CHECKED
+	d.mu.Lock()
+	first := !d.recovered
+	d.recovered = true
+	d.mu.Unlock()
+	if first {
+		changed := false
+		for oid, st := range j.State {
+			if st == "started" {
+				if t := j.Target[oid]; t != "" {
+					d.mu.Lock()
+					d.blockedActs[t] = true
+					d.mu.Unlock()
+				}
+				j.State[oid], changed = "interrupted", true
+			}
 		}
+		if changed {
+			d.writeJournal(j)
+		}
+	}
+	if st := j.State[id]; st == "started" || st == "interrupted" {
 		return map[string]any{"uncertain": "the last " + tool + " was interrupted (Ronin restarted). It may or may not have happened. Take a snapshot and check the page; the same action stays blocked until the owner presses CHECKED."}
 	}
-	if inputTools[tool] && Money(d.host(), d.IsMoney) {
-		return e(d.host() + " is READ-ONLY for Claude (money / trading / bank site): no clicks or typing at all. Tell the owner what to press.")
+	if inputTools[tool] {
+		h := d.host()
+		if h == "" {
+			return e("this page has no web address (data: / blank page): Claude does not press anything here")
+		}
+		if Money(h, d.IsMoney) {
+			return e(h + " is READ-ONLY for Claude (money / trading / bank site): no clicks or typing at all. Tell the owner what to press.")
+		}
 	}
 	if !readTools[tool] {
 		if c := d.call("({c: window.__roninAgent.challenge()})"); c["c"] != nil && c["c"] != "" {
@@ -302,19 +391,32 @@ func (d *Driver) Run(id, tool string, args map[string]any) (out map[string]any) 
 		}
 	}
 	if inputTools[tool] {
-		j.State[id], j.LastTarget = "started", ""
-		d.writeJournal(j)
+		j.State[id] = "started"
+		if err := d.writeJournal(j); err != nil { // no durable record = no input
+			return e("could not write the safety journal (" + trim(err.Error(), 80) + "): nothing was pressed")
+		}
 	}
+	d.mu.Lock()
+	d.curID = id
+	d.mu.Unlock()
+	panicked := false
 	func() {
 		defer func() {
 			if p := recover(); p != nil {
-				out = e(trim(fmt.Sprint(p), 200))
+				panicked = true
+				out = map[string]any{"uncertain": "the " + tool + " stopped in the middle (" + trim(fmt.Sprint(p), 120) + "). Take a snapshot and check the page; the same action stays blocked until the owner presses CHECKED."}
 			}
 		}()
 		out = d.tool(tool, args)
 	}()
 	if inputTools[tool] {
 		j = d.readJournal()
+		if panicked && j.Target[id] != "" {
+			d.mu.Lock()
+			d.blockedActs[j.Target[id]] = true
+			d.mu.Unlock()
+		}
+		j.LastTarget = ""
 		b, _ := json.Marshal(out)
 		if len(b) > 4000 {
 			b, _ = json.Marshal(map[string]any{"done": "ran (long answer not kept)"})
@@ -324,6 +426,7 @@ func (d *Driver) Run(id, tool string, args map[string]any) (out map[string]any) 
 		for len(j.IDs) > 300 { // the last 300 inputs are kept
 			delete(j.State, j.IDs[0])
 			delete(j.Result, j.IDs[0])
+			delete(j.Target, j.IDs[0])
 			j.IDs = j.IDs[1:]
 		}
 		d.writeJournal(j)
@@ -365,7 +468,7 @@ func (d *Driver) tool(tool string, a map[string]any) map[string]any {
 		sub, _ := a["submit"].(bool)
 		return d.typeText(str(a, "ref"), str(a, "text"), sub)
 	case "select":
-		return d.call(fmt.Sprintf("window.__roninAgent.selectOption(%s, %s)", q(str(a, "ref")), q(str(a, "option"))))
+		return d.selectOption(str(a, "ref"), str(a, "option"))
 	case "press":
 		return d.press(str(a, "key"))
 	case "scroll":
@@ -406,7 +509,12 @@ func (d *Driver) tool(tool string, a map[string]any) map[string]any {
 
 func q(s string) string { b, _ := json.Marshal(s); return string(b) }
 
-func (d *Driver) allowIDs() bool { d.mu.Lock(); defer d.mu.Unlock(); return d.AllowIDs[d.host()] }
+func (d *Driver) allowIDs() bool {
+	h := d.host() // never ask the browser while holding the lock
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.AllowIDs[h]
+}
 
 // call runs helper code and returns its object.
 func (d *Driver) call(expr string) map[string]any {
@@ -499,11 +607,8 @@ func (d *Driver) snapshot() map[string]any {
 	return s
 }
 
-func (d *Driver) click(ref string) map[string]any {
-	at := d.call("window.__roninAgent.locate(" + q(ref) + ")")
-	if at["error"] != nil {
-		return at
-	}
+// checkTarget: the common checks before anything is pressed on an element (click, type, select).
+func (d *Driver) checkTarget(at map[string]any) map[string]any {
 	name := str(at, "name")
 	switch {
 	case at["captcha"] == true:
@@ -515,16 +620,42 @@ func (d *Driver) click(ref string) map[string]any {
 	case at["covered"] == true:
 		return e(`something else covers "` + name + `" (` + str(at, "coveredBy") + `): refused (possible trick). Take a new snapshot.`)
 	}
-	act := "click|" + d.host() + "|" + str(at, "fp")
-	d.mu.Lock()
-	bl := d.blockedActs[act]
-	d.mu.Unlock()
-	if bl {
-		return e(`"` + name + `" was interrupted earlier and its result is unknown. The owner must check the page and press CHECKED first.`)
+	return nil
+}
+
+// sameTarget: just before the press, the element is still the one that was checked, in the same place
+// (a page that slides another button under the pointer is caught).
+func (d *Driver) sameTarget(ref string, at map[string]any) bool {
+	now := d.call("window.__roninAgent.locate(" + q(ref) + ")")
+	if now["error"] != nil || now["covered"] == true || str(now, "fp") != str(at, "fp") {
+		return false
 	}
-	j := d.readJournal()
-	j.LastTarget = act
-	d.writeJournal(j)
+	dx, dy := num(now["x"])-num(at["x"]), num(now["y"])-num(at["y"])
+	return dx*dx+dy*dy <= 9
+}
+
+func (d *Driver) interrupted(name string) map[string]any {
+	return e(`"` + name + `" was interrupted earlier and its result is unknown. The owner must check the page and press CHECKED first.`)
+}
+
+func (d *Driver) click(ref string) map[string]any {
+	at := d.call("window.__roninAgent.locate(" + q(ref) + ")")
+	if at["error"] != nil {
+		return at
+	}
+	if r := d.checkTarget(at); r != nil {
+		return r
+	}
+	name := str(at, "name")
+	if err := d.setTarget("click|" + d.host() + "|" + str(at, "fp")); err != nil {
+		if err == errBlockedAct {
+			return d.interrupted(name)
+		}
+		return e("could not write the safety journal: nothing was pressed")
+	}
+	if !d.sameTarget(ref, at) {
+		return e(`"` + name + `" moved or changed just before the click: refused (possible trick). Take a new snapshot.`)
+	}
 	b0 := d.nBlocked()
 	if err := d.claudeInput(func() error { return d.tap(num(at["x"]), num(at["y"])) }); err != nil {
 		return e("the click did not go through: " + trim(err.Error(), 100))
@@ -536,6 +667,9 @@ func (d *Driver) click(ref string) map[string]any {
 }
 
 func (d *Driver) tap(x, y float64) error {
+	if d.halted() {
+		return errHalted
+	}
 	err := d.P.Tap(x+rand.Float64()-0.5, y+rand.Float64()-0.5, d.slow())
 	if d.slow() {
 		time.Sleep(700 * time.Millisecond)
@@ -545,9 +679,39 @@ func (d *Driver) tap(x, y float64) error {
 	return err
 }
 
+func (d *Driver) selectOption(ref, option string) map[string]any {
+	at := d.call("window.__roninAgent.locate(" + q(ref) + ")")
+	if at["error"] != nil {
+		return at
+	}
+	if r := d.checkTarget(at); r != nil {
+		return r
+	}
+	if err := d.setTarget("select|" + d.host() + "|" + str(at, "fp")); err != nil {
+		if err == errBlockedAct {
+			return d.interrupted(str(at, "name"))
+		}
+		return e("could not write the safety journal: nothing was chosen")
+	}
+	if d.halted() {
+		return e(errHalted.Error())
+	}
+	b0 := d.nBlocked()
+	var r map[string]any
+	d.claudeInput(func() error {
+		r = d.call(fmt.Sprintf("window.__roninAgent.selectOption(%s, %s)", q(ref), q(option)))
+		return nil
+	})
+	time.Sleep(300 * time.Millisecond)
+	if b := d.blockedSince(b0); b != nil {
+		return e("chose an option, but the page then tried " + strings.Join(b, "; ") + ". BLOCKED.")
+	}
+	return r
+}
+
 func (d *Driver) typeText(ref, text string, submit bool) map[string]any {
-	if len(text) > 20000 {
-		return e("too much text in one go")
+	if len([]rune(text)) > 2000 {
+		return e("too much text in one go (2000 letters at most)")
 	}
 	at := d.call("window.__roninAgent.locate(" + q(ref) + ")")
 	if at["error"] != nil {
@@ -566,23 +730,51 @@ func (d *Driver) typeText(ref, text string, submit bool) map[string]any {
 	case NumberNeedsOwner(name, text, at["otpPage"] == true):
 		return e(fmt.Sprintf(`"%d-digit number" looks like an OTP / PIN (this page asks for one): the owner types it. Call ask_owner.`, len(nonDigit.ReplaceAllString(text, ""))))
 	}
-	if before := d.call("window.__roninAgent.value(" + q(ref) + ")"); before["value"] == text {
+	if before := d.call("window.__roninAgent.value(" + q(ref) + ")"); before["value"] == text && !submit {
 		return map[string]any{"done": `already matched "` + name + `"`}
+	}
+	if err := d.setTarget("type|" + d.host() + "|" + str(at, "fp")); err != nil {
+		if err == errBlockedAct {
+			return d.interrupted(name)
+		}
+		return e("could not write the safety journal: nothing was typed")
 	}
 	native := "unknown"
 	err := d.claudeInput(func() error {
 		if err := d.tap(num(at["x"]), num(at["y"])); err != nil {
 			return err
 		}
-		// checked outside the page's JavaScript: what the engine says about the focused box
+		// checked outside the page's JavaScript: what the focused box really is. Only a box known to be a normal
+		// text box gets text; "unknown" (another frame, nothing focused...) is refused too.
 		native = d.P.FocusedSecret()
-		if native == "secret" {
+		if native != "normal" {
 			return errSecret
 		}
-		return d.P.ReplaceText(text, d.slow())
+		if d.halted() {
+			return errHalted
+		}
+		if err := d.P.SelectAll(); err != nil {
+			return err
+		}
+		if !d.slow() {
+			return d.P.Insert(text)
+		}
+		for _, r := range text { // slow: letter by letter; the owner's touch / STOP stops it at once
+			if d.halted() {
+				return errHalted
+			}
+			if err := d.P.Insert(string(r)); err != nil {
+				return err
+			}
+			time.Sleep(time.Duration(60+rand.Intn(90)) * time.Millisecond)
+		}
+		return nil
 	})
 	if errors.Is(err, errSecret) {
-		return e(`the engine says "` + name + `" is a password box: only the owner types it.`)
+		if native == "secret" {
+			return e(`the engine says "` + name + `" is a password / code box: only the owner types it.`)
+		}
+		return e(`could not confirm that "` + name + `" is a normal text box (focus went elsewhere): nothing was typed. Take a new snapshot.`)
 	}
 	if err != nil {
 		return e("typing did not go through: " + trim(err.Error(), 100))
@@ -599,23 +791,62 @@ func (d *Driver) typeText(ref, text string, submit bool) map[string]any {
 	case strings.Contains(v, text):
 		check = "verified (box had more text)"
 	}
+	out := map[string]any{"done": `typed into "` + name + `"`, "check": check, "method": "devtools-insert", "editorinfo": native}
 	if submit {
-		d.claudeInput(func() error { return d.P.Key("enter") })
+		if check != "verified" {
+			out["submitted"] = false
+			out["note"] = "not submitted: the box does not show exactly the text. Check it with a snapshot."
+			return out
+		}
+		b0 := d.nBlocked()
+		kerr := d.claudeInput(func() error {
+			if d.halted() {
+				return errHalted
+			}
+			return d.P.Key("enter")
+		})
+		time.Sleep(300 * time.Millisecond)
+		if b := d.blockedSince(b0); b != nil {
+			return e(`typed into "` + name + `" and pressed Enter, but the page then tried ` + strings.Join(b, "; ") + `. BLOCKED on the device. Tell the owner.`)
+		}
+		if kerr != nil {
+			return e("typed, but Enter did not go through: " + trim(kerr.Error(), 100))
+		}
+		out["submitted"] = true
 	}
-	return map[string]any{"done": `typed into "` + name + `"`, "check": check, "method": "devtools-insert", "editorinfo": native}
+	return out
 }
 
 var errSecret = errors.New("secret box")
 
 var keys = map[string]bool{"enter": true, "tab": true, "escape": true, "pagedown": true, "pageup": true, "arrowdown": true, "arrowup": true, "arrowleft": true, "arrowright": true, "backspace": true, "space": true}
 
+// moneyWord: the same words as the page helper's MONEY_WORD (a focused "Pay now" is never activated by a key).
+var moneyWord = regexp.MustCompile(`(?i)\b(buy|sell|place order|confirm order|modify order|square ?off|exit( all| position)?|pay( now)?|transfer|withdraw|send money|proceed to pay|submit order|checkout|confirm payment|invest now)\b|खरीद|बेच|भुगतान|ऑर्डर|पैसे भेज|निकासी`)
+
 func (d *Driver) press(k string) map[string]any {
 	k = strings.ToLower(k)
 	if !keys[k] {
 		return e("unknown key " + k)
 	}
+	if k == "enter" || k == "space" { // a key can press the focused button: the same money check as a click
+		if t := d.P.FocusedText(); moneyWord.MatchString(t) {
+			return e(`the focused element "` + trim(t, 40) + `" is a money / order action: Claude may not press it. Tell the owner.`)
+		}
+		if err := d.setTarget("press|" + d.host() + "|" + k + "|" + trim(d.P.FocusedText(), 40)); err != nil {
+			if err == errBlockedAct {
+				return d.interrupted(k)
+			}
+			return e("could not write the safety journal: nothing was pressed")
+		}
+	}
 	b0 := d.nBlocked()
-	d.claudeInput(func() error { return d.P.Key(k) })
+	err := d.claudeInput(func() error {
+		if d.halted() {
+			return errHalted
+		}
+		return d.P.Key(k)
+	})
 	if d.slow() {
 		time.Sleep(400 * time.Millisecond)
 	} else {
@@ -624,12 +855,16 @@ func (d *Driver) press(k string) map[string]any {
 	if b := d.blockedSince(b0); b != nil {
 		return e("pressed " + k + ", but the page then tried " + strings.Join(b, "; ") + ". BLOCKED.")
 	}
+	if err != nil {
+		return e("the key did not go through: " + trim(err.Error(), 100))
+	}
 	return map[string]any{"done": "pressed " + k}
 }
 
 func (d *Driver) screenshot() map[string]any {
+	h := d.host()
 	d.mu.Lock()
-	sens := Sensitive(d.host(), d.IsMoney, d.idHosts)
+	sens := Sensitive(h, d.IsMoney, d.idHosts)
 	d.mu.Unlock()
 	if sens {
 		return e("screenshot of a money / government / ID page is refused (pixels cannot be hidden). Use snapshot: ID numbers are hidden there.")

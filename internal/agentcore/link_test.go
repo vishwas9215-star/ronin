@@ -59,11 +59,17 @@ func (p *page) Tap(x, y float64, slow bool) error {
 	}
 	return nil
 }
-func (p *page) ReplaceText(t string, slow bool) error { p.value.Store(t); return nil }
-func (p *page) Key(string) error                      { return nil }
-func (p *page) Scroll(bool) error                     { return nil }
-func (p *page) Screenshot() ([]byte, error)           { return nil, nil }
-func (p *page) FocusedSecret() string                 { return "normal" }
+func (p *page) SelectAll() error { p.value.Store(""); return nil }
+func (p *page) Insert(t string) error {
+	s, _ := p.value.Load().(string)
+	p.value.Store(s + t)
+	return nil
+}
+func (p *page) FocusedText() string         { return "" }
+func (p *page) Key(string) error            { return nil }
+func (p *page) Scroll(bool) error           { return nil }
+func (p *page) Screenshot() ([]byte, error) { return nil, nil }
+func (p *page) FocusedSecret() string       { return "normal" }
 
 func rnd(n int) string {
 	b := make([]byte, n)

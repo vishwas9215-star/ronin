@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -40,20 +41,23 @@ func logf(f string, a ...any) {
 }
 
 type app struct {
-	hwnd      uintptr
-	ui, web   *edge.Chromium
-	page      *cdpPage
-	drv       *agentcore.Driver
-	link      *agentcore.Link
-	cardOpen  bool
-	approveCh chan bool
-	lastInput uint32
-	status    string
-	asked     string
-	testPages map[string]string
-	selftest  bool
-	curX      int32
-	curY      int32
+	hwnd         uintptr
+	ui, web      *edge.Chromium
+	page         *cdpPage
+	drv          *agentcore.Driver
+	link         *agentcore.Link
+	cardOpen     bool
+	approveCh    chan bool
+	lastInput    uint32
+	status       string
+	asked        string
+	testPages    map[string]string
+	selftest     bool
+	proxy        *agentcore.Proxy
+	proxyBlocked atomic.Int32
+	ownNav       int // our own start page (data:) may load; nothing else of that kind
+	curX         int32
+	curY         int32
 }
 
 func main() {
@@ -132,8 +136,17 @@ func (a *app) makeViews(data string) bool {
 	ui.NavigateToString(bannerHTML)
 	a.ui = ui
 
+	// every connection of the Claude tab goes through Ronin's local proxy, which checks the address it really
+	// connects to (no home network / this PC, whatever DNS says, also for WebSockets and service workers)
+	a.proxy = &agentcore.Proxy{Blocked: func(addr string) { a.proxyBlocked.Add(1); logf("blocked: private address (proxy)") }}
+	if err := a.proxy.Start(); err != nil {
+		logf("proxy: %v", err)
+		return false
+	}
 	web := edge.NewChromium()
 	web.DataPath = filepath.Join(data, "profile") // logins stay (cookies) like a normal browser
+	web.AdditionalBrowserArgs = []string{"--proxy-server=http://" + a.proxy.Addr, "--proxy-bypass-list=<-loopback>",
+		"--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--disable-quic"}
 	web.SetErrorCallback(func(err error) { logf("page: %v", err) })
 	web.SetPermission(edge.CoreWebView2PermissionKindNotifications, edge.CoreWebView2PermissionStateDeny)
 	web.SetPermission(edge.CoreWebView2PermissionKindGeolocation, edge.CoreWebView2PermissionStateDeny)
@@ -144,6 +157,7 @@ func (a *app) makeViews(data string) bool {
 	a.web = web
 	a.page = &cdpPage{c: web, loaded: make(chan struct{}, 4)}
 	web.NavigationCompletedCallback = func(_ *edge.ICoreWebView2, _ *edge.ICoreWebView2NavigationCompletedEventArgs) {
+		a.ownNav = 0
 		select {
 		case a.page.loaded <- struct{}{}:
 		default:
@@ -160,9 +174,16 @@ func (a *app) makeViews(data string) bool {
 	}
 	if ctrl := web.GetController(); ctrl != nil {
 		if core, err := ctrl.GetCoreWebView2(); err == nil && core != nil {
-			hookPageEvents(uintptr(unsafe.Pointer(core)), func(u string) { web.Navigate(u) })
+			hookPageEvents(uintptr(unsafe.Pointer(core)), func(u string) { web.Navigate(u) }, func() bool {
+				if a.ownNav > 0 {
+					a.ownNav--
+					return true
+				}
+				return false
+			})
 		}
 	}
+	a.ownNav++
 	web.NavigateToString(`<!doctype html><meta charset="utf-8"><body style="font:18px 'Nirmala UI',sans-serif;padding:40px;color:#333"><h2>Ronin Agent Lab</h2><p>यह window Claude के लिए है। Claude यहाँ काम करेगा; आप ऊपर के बटन से रोक / चालू कर सकते हैं।</p>`)
 	a.layout()
 	return true
@@ -235,12 +256,13 @@ func (a *app) refresh() {
 	}
 	s := "🟢 Claude चालू"
 	switch {
-	case a.drv.Stopped:
+	case a.drv.IsStopped():
 		s = "⛔ STOP: Claude रुका है (RESUME से चालू)"
-	case a.drv.Paused:
+	case a.drv.IsPaused():
 		s = "✋ आपने page छुआ: Claude रुका है। RESUME दबाएँ"
 	case a.drv.Holding():
-		s = "🙋 Claude आपसे कह रहा है: " + a.asked + " — कर लें, फिर DONE"
+		// the real address of the page (from the browser, not the page): check it before typing a password
+		s = "🙋 Claude कह रहा है: " + a.asked + " — कर लें, फिर DONE   |   site: " + siteOf(a.web.Source())
 	case a.link != nil && !a.link.Online():
 		s = "… relay से जुड़ रहा है"
 	}
@@ -310,6 +332,7 @@ func (a *app) approve(text string) bool {
 func (a *app) onRequest(req *edge.ICoreWebView2WebResourceRequest, args *edge.ICoreWebView2WebResourceRequestedEventArgs) {
 	uri, err := req.GetUri()
 	if err != nil || uri == "" || a.drv == nil {
+		a.respond(args, 403, "text/plain", "Blocked by Ronin") // not understood = not allowed
 		return
 	}
 	method, _ := req.GetMethod()
@@ -385,6 +408,15 @@ func (a *app) respond(args *edge.ICoreWebView2WebResourceRequestedEventArgs, cod
 	if err == nil && resp != nil {
 		args.PutResponse(resp)
 	}
+}
+
+// siteOf: the registrable site first (what to check before typing a password), e.g. "gov.in  (epds.up.gov.in)".
+func siteOf(u string) string {
+	h := agentcore.Host(u)
+	if h == "" {
+		return "(no address)"
+	}
+	return agentcore.Registrable(h) + "  (" + h + ")"
 }
 
 func writeResult(data, s string) { os.WriteFile(filepath.Join(data, "selftest.txt"), []byte(s), 0o600) }

@@ -515,7 +515,16 @@ func (l *Link) applyEpoch(by string, ep int64, sig string) bool {
 	if by == l.Name {
 		pub = l.PublicPEM()
 	}
-	if pub == "" || !Verify(pub, fmt.Sprintf("epoch|%d", ep), sig) {
+	if pub == "" {
+		// a "Disconnect Claude" from a device this one does not know yet: obeyed as a revocation anyway (the worst
+		// a hostile relay can do with it is make the owner press Connect again); reported as unknown
+		if ep > l.epoch() {
+			l.Store.Set("epoch", fmt.Sprint(ep))
+			l.log(fmt.Sprintf("epoch %d from unknown %s: obeyed (revocation only)", ep, by))
+		}
+		return false
+	}
+	if !Verify(pub, fmt.Sprintf("epoch|%d", ep), sig) {
 		return false
 	}
 	if ep > l.epoch() {

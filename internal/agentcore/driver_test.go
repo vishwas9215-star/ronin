@@ -21,6 +21,8 @@ type fakePage struct {
 	onTap     func()
 	challenge string
 	text      string
+	onInsert  func()
+	focusText string
 }
 
 func newFake() *fakePage {
@@ -85,13 +87,19 @@ func (p *fakePage) Tap(x, y float64, slow bool) error {
 	}
 	return nil
 }
-func (p *fakePage) ReplaceText(t string, slow bool) error {
+func (p *fakePage) SelectAll() error { p.mu.Lock(); p.values["e1"] = ""; p.mu.Unlock(); return nil }
+func (p *fakePage) Insert(t string) error {
 	p.mu.Lock()
 	p.typed = append(p.typed, t)
-	p.values["e1"] = t
+	p.values["e1"] += t
+	f := p.onInsert
 	p.mu.Unlock()
+	if f != nil {
+		f()
+	}
 	return nil
 }
+func (p *fakePage) FocusedText() string         { p.mu.Lock(); defer p.mu.Unlock(); return p.focusText }
 func (p *fakePage) Key(string) error            { return nil }
 func (p *fakePage) Scroll(bool) error           { return nil }
 func (p *fakePage) Screenshot() ([]byte, error) { return []byte{1, 2}, nil }
@@ -157,16 +165,17 @@ func TestDriverOnceOnlyEvenAfterARestart(t *testing.T) {
 	if r := d2.Run("save-1", "click", map[string]any{"ref": "e3"}); r["done"] == nil || p.taps != 1 {
 		t.Fatal("after restart", r, p.taps)
 	}
-	// cut off in the middle: "uncertain", and the same button stays blocked until CHECKED
+	// cut off in the middle (Ronin died during the press): after the restart the SAME button stays blocked for
+	// ANY new id until CHECKED, and the old id answers "uncertain"
 	j := d2.readJournal()
-	j.State["save-2"], j.LastTarget = "started", "click|epds.example.gov.in|f3"
+	j.State["save-2"], j.Target["save-2"] = "started", "click|epds.example.gov.in|f3"
 	d2.writeJournal(j)
 	d3 := &Driver{P: p, Journal: d.Journal}
+	if r := d3.Run("save-3", "click", map[string]any{"ref": "e3"}); r["error"] == nil || p.taps != 1 {
+		t.Fatal("blocked until CHECKED, whatever the id", r)
+	}
 	if r := d3.Run("save-2", "click", map[string]any{"ref": "e3"}); r["uncertain"] == nil {
 		t.Fatal("uncertain", r)
-	}
-	if r := d3.Run("save-3", "click", map[string]any{"ref": "e3"}); r["error"] == nil {
-		t.Fatal("blocked until CHECKED")
 	}
 	d3.Checked()
 	if r := d3.Run("save-4", "click", map[string]any{"ref": "e3"}); r["error"] != nil {
@@ -211,5 +220,81 @@ func TestDriverOwnerControls(t *testing.T) {
 	p.challenge = "human-check page"
 	if r := d.Run("6", "click", map[string]any{"ref": "e3"}); r["error"] == nil {
 		t.Fatal("no clicks on a human check")
+	}
+}
+
+// Review of the laptop agent (28 Nov): permanent tests.
+func TestOnlyAConfirmedNormalBoxGetsText(t *testing.T) {
+	p := newFake()
+	d := newDriver(t, p)
+	p.secret = "unknown" // focus went into another frame / shadow root the check could not see
+	if r := d.Run("1", "type", map[string]any{"ref": "e1", "text": "abc"}); r["error"] == nil || len(p.typed) != 0 {
+		t.Fatal("unknown must be refused", r, p.typed)
+	}
+}
+
+func TestOwnerTouchStopsSlowTypingAtOnce(t *testing.T) {
+	p := newFake()
+	d := newDriver(t, p)
+	d.Pace = "slow"
+	n := 0
+	p.onInsert = func() {
+		n++
+		if n == 2 {
+			d.OwnerTouched()
+		}
+	}
+	r := d.Run("1", "type", map[string]any{"ref": "e1", "text": "abcdefgh"})
+	if r["error"] == nil || len(p.typed) != 2 {
+		t.Fatal("must stop after the owner's touch", r, p.typed)
+	}
+}
+
+func TestSubmitOnlyWhenVerifiedAndBlockedSubmitIsAnError(t *testing.T) {
+	p := newFake()
+	d := newDriver(t, p)
+	p.onInsert = func() { p.values["e1"] = "something else" }
+	if r := d.Run("1", "type", map[string]any{"ref": "e1", "text": "abc", "submit": true}); r["submitted"] != false {
+		t.Fatal("no blind submit", r)
+	}
+	p.onInsert = nil
+	d.P = &keyBlocker{fakePage: p, d: d}
+	if r := d.Run("2", "type", map[string]any{"ref": "e1", "text": "xyz", "submit": true}); r["error"] == nil || !strings.Contains(r["error"].(string), "BLOCKED") {
+		t.Fatal("a blocked submit is an error", r)
+	}
+}
+
+type keyBlocker struct {
+	*fakePage
+	d *Driver
+}
+
+func (k *keyBlocker) Key(string) error {
+	k.d.GuardRequest("POST", "https://shop.example.com/checkout", true)
+	return nil
+}
+
+func TestEnterOnAFocusedMoneyButtonAndSelectChecks(t *testing.T) {
+	p := newFake()
+	d := newDriver(t, p)
+	p.focusText = "Pay now"
+	if r := d.Run("1", "press", map[string]any{"key": "enter"}); r["error"] == nil {
+		t.Fatal("Enter on Pay now", r)
+	}
+	if r := d.Run("2", "select", map[string]any{"ref": "e5", "option": "x"}); r["error"] == nil {
+		t.Fatal("select on a money element", r)
+	}
+}
+
+func TestCheckedClearsTheSensitiveMark(t *testing.T) {
+	p := newFake()
+	d := newDriver(t, p)
+	d.Run("1", "snapshot", nil) // a .gov.in page: sensitive
+	if d.Taint == "" {
+		t.Fatal("taint")
+	}
+	d.Checked()
+	if d.Taint != "" {
+		t.Fatal("CHECKED clears it")
 	}
 }
