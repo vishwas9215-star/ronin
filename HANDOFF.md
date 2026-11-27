@@ -666,3 +666,14 @@ confirmed - owner's decision. Android developer verification: not in India yet (
 - The LIVE relay is still the old build. Updating it needs the server chat (re-run tools/relay-deploy/install.sh; an
   update keeps data and keeps pairing closed). The new app is safe with the old relay (device refuses a card without
   "Claude जोड़ें"). Never uninstall com.ronin.agentlab on the devices (its Keystore key = its paired identity).
+
+### 28 Nov 2026 (04:00–04:40) — laptop agent built, tested, running
+- `internal/agentcore` (Go, tested on Linux): rules (port of AgentRules + tests), driver, relay link, local proxy that
+  checks the real connect address. `cmd/roninagent` (Windows): separate "Ronin Agent Lab" window, WebView2 driven
+  through DevTools (trusted input, helper in an isolated world), guard on every request + proxy, banner with
+  DONE / RESUME / CHECKED / STOP / Claude जोड़ें / Claude हटाएँ and hold-to-Allow card. Data in `.\data` next to the exe.
+- 5-model review of the laptop agent (scores 4.5–8.5); its valid points fixed (proxy, fail-closed secret check,
+  per-input journal targets, owner touch stops slow typing, no blind submit, money Enter/Space, select checks).
+- Windows CI self-test 17/17 (real window), and on the owner's laptop 17/17. Installed at
+  `C:\Ronin Ecosystem\RoninAgentLab\` (`0-update-and-start.bat` updates: keeps the previous exe as RoninAgentLab-old.exe).
+  Paired as "laptop" with the live relay, online.
