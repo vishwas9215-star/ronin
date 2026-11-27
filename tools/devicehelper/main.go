@@ -66,7 +66,7 @@ func (j Job) Validate() error {
 		}
 		return nil
 	case "uninstall": // ONLY the pilot test app (never Ronin Browser / Ronin Phone or anything else)
-		if j.Pkg != "com.ronin.agentlab" {
+		if j.Pkg != "com.ronin.agentlab" && j.Pkg != "com.ronin.agentlab.test" {
 			return errors.New("only the lab test app may be removed")
 		}
 		return nil
@@ -99,7 +99,7 @@ func (j Job) Args(serial, apkDir string) [][]string {
 	case "install":
 		return [][]string{append(append([]string{}, s...), "install", "-r", "-t", filepath.Join(apkDir, j.APK))}
 	case "uninstall":
-		return [][]string{append(append([]string{}, s...), "uninstall", "com.ronin.agentlab")}
+		return [][]string{append(append([]string{}, s...), "uninstall", j.Pkg)}
 	case "launch":
 		return [][]string{append(append([]string{}, s...), "shell", "monkey", "-p", j.Pkg, "-c", "android.intent.category.LAUNCHER", "1")}
 	case "test":
