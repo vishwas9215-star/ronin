@@ -8,7 +8,7 @@
   const N = {
     qsa: Document.prototype.querySelectorAll, eqsa: Element.prototype.querySelectorAll, rect: Element.prototype.getBoundingClientRect,
     gcs: window.getComputedStyle, attr: Element.prototype.getAttribute, matches: Element.prototype.matches, closest: Element.prototype.closest,
-    efp: Document.prototype.elementFromPoint, contains: Node.prototype.contains,
+    efp: Document.prototype.elementFromPoint, rects: Element.prototype.getClientRects, contains: Node.prototype.contains,
     innerText: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'innerText').get,
     shadow: Object.getOwnPropertyDescriptor(Element.prototype, 'shadowRoot').get,
     value: Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').get,
@@ -112,7 +112,8 @@
     const el = resolve(ref);
     if (!el) return { error: 'ref ' + ref + ' is gone: take a new snapshot' };
     call(N.scroll, el, { block: 'center', inline: 'center' });
-    const r = R(el); let x = r.left + r.width / 2, y = r.top + r.height / 2;
+    // a link that wraps onto two lines: aim at its first line box, not the middle of both
+    const rs = call(N.rects, el); const r = rs && rs.length && rs[0].width > 2 ? rs[0] : R(el); let x = r.left + r.width / 2, y = r.top + r.height / 2;
     const top = call(N.efp, document, x, y);
     const covered = !top || !(top === el || call(N.contains, el, top) || call(N.contains, top, el) && top.tagName === 'LABEL');
     let w = el.ownerDocument.defaultView;

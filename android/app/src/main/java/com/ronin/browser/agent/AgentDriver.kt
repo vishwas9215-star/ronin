@@ -148,8 +148,13 @@ class AgentDriver(
 
     // ================= small helpers =================
     @Suppress("UNCHECKED_CAST")
-    private fun <T> onMain(timeoutMs: Long = 15_000, f: () -> T): T {
-        if (Looper.myLooper() == Looper.getMainLooper()) return f()
+    private fun <T> onMain(timeoutMs: Long = 15_000, f: () -> T): T = onThread(main, timeoutMs, f)
+
+    /** Runs f on the given thread (the page's input connection lives on the engine's own IME thread, not the UI thread). */
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> onThread(handler: Handler, timeoutMs: Long = 15_000, f: () -> T): T {
+        val main = handler
+        if (Looper.myLooper() == handler.looper) return f()
         val latch = CountDownLatch(1)
         var r: Any? = null; var err: Throwable? = null
         main.post { try { r = f() } catch (t: Throwable) { err = t } finally { latch.countDown() } }
@@ -236,13 +241,17 @@ class AgentDriver(
         try {
             val ic = web.connection
             if (ic != null) {
-                val ok = onMain {
-                    ic.beginBatchEdit()
-                    ic.performContextMenuAction(android.R.id.selectAll)
-                    if (!slow()) ic.commitText(text, 1) else ic.commitText("", 1)
-                    ic.endBatchEdit()
-                }
-                if (slow()) for (ch in text) { onMain { ic.commitText(ch.toString(), 1) }; Thread.sleep(60L + (Math.random() * 90).toLong()) }
+                // Chromium's input connection must be called on ITS thread (ic.handler), never the UI thread
+                val h = (if (android.os.Build.VERSION.SDK_INT >= 24) ic.handler else null) ?: main
+                val ok = try {
+                    onThread(h) {
+                        ic.beginBatchEdit()
+                        ic.performContextMenuAction(android.R.id.selectAll)
+                        if (!slow()) ic.commitText(text, 1) else ic.commitText("", 1)
+                        ic.endBatchEdit()
+                    }
+                } catch (t: Throwable) { log("input connection: ${t.javaClass.simpleName}"); false }
+                if (ok && slow()) for (ch in text) { onThread(h) { ic.commitText(ch.toString(), 1) }; Thread.sleep(60L + (Math.random() * 90).toLong()) }
                 if (ok) return "input-connection"
             }
             val events = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD).getEvents(text.toCharArray())
@@ -277,7 +286,7 @@ class AgentDriver(
             if (c.isNotEmpty()) return err("$c: Claude does not solve human checks. Call ask_owner.")
         }
         if (tool in INPUT) journal.edit().putString("j_$id", "started").putString("lastTarget", "").commit() // on disk BEFORE the tap
-        val r = try { doTool(tool, args) } catch (e: Exception) { err((e.message ?: e.javaClass.simpleName).take(200)) }
+        val r = try { doTool(tool, args) } catch (e: Throwable) { err((e.message ?: e.javaClass.simpleName).take(200)) }
         if (tool in INPUT) journal.edit().putString("j_$id", "done").commit()
         if (tool != "ask_owner") synchronized(done) { done[id] = r }
         log("$tool on ${host()}: ${if (r.has("error")) "refused" else "ok"}")
@@ -335,9 +344,9 @@ class AgentDriver(
         if (at.has("error")) return at
         val name = at.optString("name")
         if (at.optBoolean("captcha")) return err("this is a human check: call ask_owner")
-        if (at.optBoolean("covered")) return err("something else covers \"$name\" (${at.optString("coveredBy")}): refused (possible trick). Take a new snapshot.")
-        if (at.optBoolean("money")) return err("\"$name\" is a money / order action: Claude may not press it. Tell the owner.")
         if (at.optString("kind") == "a" && AgentRules.scriptLink(at.optString("href"))) return err("script link: refused")
+        if (at.optBoolean("money")) return err("\"$name\" is a money / order action: Claude may not press it. Tell the owner.")
+        if (at.optBoolean("covered")) return err("something else covers \"$name\" (${at.optString("coveredBy")}): refused (possible trick). Take a new snapshot.")
         val act = "click|${host()}|${at.optString("fp")}"
         if (act in blockedActs) return err("\"$name\" was interrupted earlier and its result is unknown. The owner must check the page and tap CHECKED first.")
         lastTarget = act; journal.edit().putString("lastTarget", act).commit()
