@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -54,6 +55,7 @@ type session struct {
 	id, dev       string
 	k             []byte
 	seqIn, seqOut int64
+	lastMac       string
 	out           chan []byte
 	lastSeen      time.Time
 	info          map[string]any
@@ -107,6 +109,7 @@ type Relay struct {
 	queues   map[string]chan struct{}       // one command at a time per device
 	clients  map[string][]string
 	regAt    map[string]time.Time
+	nonces   map[string]time.Time
 	codes    map[string]map[string]any
 	access   map[string]*token // sha256(token) -> token
 	refresh  map[string]*token
@@ -132,7 +135,7 @@ func New(cfg Config) (*Relay, error) {
 		pend: map[string]map[string]*pending{}, queues: map[string]chan struct{}{}, clients: map[string][]string{},
 		codes: map[string]map[string]any{}, access: map[string]*token{}, refresh: map[string]*token{}, rot: map[string]*rotated{},
 		anchors: map[string][]map[string]any{}, limits: map[string][]time.Time{}, connect: map[string]time.Time{},
-		txns: map[string]*txn{}, used: map[string]usedCode{}, regAt: map[string]time.Time{}}
+		txns: map[string]*txn{}, used: map[string]usedCode{}, regAt: map[string]time.Time{}, nonces: map[string]time.Time{}}
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		return nil, err
 	}
@@ -206,6 +209,9 @@ func (r *Relay) load() {
 	}
 	if s.Clients != nil {
 		r.clients = s.Clients
+		for k := range s.Clients { // after a restart every saved registration gets a fresh hour
+			r.regAt[k] = r.cfg.Now()
+		}
 	}
 	r.epochEv = s.Epoch
 }
@@ -345,8 +351,12 @@ func (r *Relay) Call(dev, tool string, args map[string]any, grant map[string]any
 	}
 	r.mu.Unlock()
 	if tool != "ask_owner" && !strings.HasPrefix(tool, "__") {
-		q <- struct{}{}
-		defer func() { <-q }()
+		select {
+		case q <- struct{}{}:
+			defer func() { <-q }()
+		case <-time.After(30 * time.Second):
+			return map[string]any{"error": fmt.Sprintf("device %q is still busy with the last command: try again", dev)}
+		}
 	}
 	id := rnd(12)
 	p := &pending{tool: tool, args: args, grant: grant, reply: make(chan map[string]any, 1)}
@@ -426,7 +436,8 @@ func (r *Relay) Handler() http.Handler {
 func ip(req *http.Request) string {
 	// behind the server's own HTTPS front (same machine): the LAST address is the one the front saw; the
 	// earlier ones are whatever the caller wrote, so they never count (rate limits cannot be dodged)
-	if f := req.Header.Get("X-Forwarded-For"); f != "" && strings.HasPrefix(req.RemoteAddr, "127.0.0.1") {
+	host, _, _ := net.SplitHostPort(req.RemoteAddr)
+	if f := req.Header.Get("X-Forwarded-For"); f != "" && net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback() {
 		p := strings.Split(f, ",")
 		return strings.TrimSpace(p[len(p)-1])
 	}
@@ -482,6 +493,9 @@ func (r *Relay) register(w http.ResponseWriter, req *http.Request) {
 	// a public form: registrations older than an hour that never got a token are forgotten (Claude's own stays)
 	inUse := map[string]bool{}
 	for _, t := range r.refresh {
+		inUse[t.Client] = true
+	}
+	for _, t := range r.access {
 		inUse[t.Client] = true
 	}
 	for k := range r.clients {
@@ -559,6 +573,20 @@ func (r *Relay) authorize(w http.ResponseWriter, req *http.Request) {
 	}
 	r.mu.Unlock()
 	if on == "" {
+		// a second sign-in while one is waiting for the owner: both are cancelled (a stranger racing his own)
+		busy := false
+		r.mu.Lock()
+		for _, o := range r.txns {
+			if o.loc == "" && !o.cancel && r.cfg.Now().Before(o.exp) {
+				o.cancel, busy = true, true
+			}
+		}
+		r.mu.Unlock()
+		if busy {
+			r.note("oauth", "two sign-ins at once: both cancelled")
+			page(w, "<p>दो sign-in एक साथ आए, दोनों रद्द। Ronin में फिर से Claude जोड़ें दबाएँ / two sign-ins at once: both cancelled, try again.</p>", "")
+			return
+		}
 		r.note("oauth", "sign-in refused: no device has \"Claude जोड़ें\" open")
 		page(w, "<h2>पहले Ronin खोलें</h2><p>Tablet / phone पर Ronin Agent में <b>Claude जोड़ें</b> दबाएँ, फिर यहाँ दोबारा Connect करें.</p><p>Open Ronin on your tablet or phone, tap <b>Claude जोड़ें</b>, then connect again.</p>", "")
 		return
@@ -609,19 +637,26 @@ func (r *Relay) authorizeWait(w http.ResponseWriter, req *http.Request) {
 	t := req.URL.Query().Get("t")
 	r.mu.Lock()
 	tx := r.txns[t]
-	if tx != nil && (tx.loc != "" || r.cfg.Now().After(tx.exp)) {
-		delete(r.txns, t)
+	var loc, code0 string
+	found, late, cancelled := tx != nil, false, false
+	if tx != nil {
+		loc, code0, late, cancelled = tx.loc, tx.code0, r.cfg.Now().After(tx.exp), tx.cancel // copies, read under the lock
+		if loc != "" || late {
+			delete(r.txns, t)
+		}
 	}
 	r.mu.Unlock()
 	switch {
-	case tx == nil:
+	case !found:
 		http.Error(w, "this sign-in is over: connect again", 404)
-	case tx.loc != "":
-		http.Redirect(w, req, tx.loc, http.StatusFound)
-	case r.cfg.Now().After(tx.exp):
+	case loc != "":
+		http.Redirect(w, req, loc, http.StatusFound)
+	case cancelled:
+		page(w, "<p>दो sign-in एक साथ आए, दोनों रद्द। Ronin में फिर से Claude जोड़ें दबाएँ / two sign-ins at once: both cancelled, try again.</p>", "")
+	case late:
 		page(w, "<p>समय खत्म: फिर से Connect करें / time is over, connect again.</p>", "")
 	default:
-		r.waitPage(w, t, tx.code0)
+		r.waitPage(w, t, code0)
 	}
 }
 
@@ -973,6 +1008,21 @@ func (r *Relay) hello(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "not paired", 401)
 		return
 	}
+	r.mu.Lock() // a copied hello can not be played again (it would knock the real device offline)
+	for k, t := range r.nonces {
+		if r.cfg.Now().Sub(t) > 10*time.Minute {
+			delete(r.nonces, k)
+		}
+	}
+	nk := d.Name + "|" + m.Nonce
+	_, seenBefore := r.nonces[nk]
+	r.nonces[nk] = r.cfg.Now()
+	r.mu.Unlock()
+	if seenBefore {
+		r.note(d.Name, "replayed hello refused")
+		http.Error(w, "replayed", 401)
+		return
+	}
 	devPub, err := ecdh.P256().NewPublicKey(raw)
 	if err != nil {
 		http.Error(w, "bad key", 400)
@@ -1060,20 +1110,26 @@ func (r *Relay) out(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "bad frame", 400)
 		return
 	}
+	var m map[string]any
+	if json.Unmarshal([]byte(fr.F), &m) != nil { // a broken frame never uses up a sequence number
+		http.Error(w, "bad frame", 400)
+		return
+	}
 	r.mu.Lock()
-	if fr.Seq <= s.seqIn || !hmac.Equal([]byte(fr.Mac), []byte(mac(s.k, fmt.Sprintf("%d|%s", fr.Seq, fr.F)))) {
+	good := hmac.Equal([]byte(fr.Mac), []byte(mac(s.k, fmt.Sprintf("%d|%s", fr.Seq, fr.F))))
+	if good && fr.Seq == s.seqIn && fr.Mac == s.lastMac { // the same frame again (our 204 was lost): done already
+		r.mu.Unlock()
+		w.WriteHeader(204)
+		return
+	}
+	if !good || fr.Seq <= s.seqIn {
 		r.mu.Unlock()
 		r.note(s.dev, "bad frame from device")
 		http.Error(w, "bad frame", 400)
 		return
 	}
-	s.seqIn = fr.Seq
+	s.seqIn, s.lastMac = fr.Seq, fr.Mac
 	r.mu.Unlock()
-	var m map[string]any
-	if json.Unmarshal([]byte(fr.F), &m) != nil {
-		http.Error(w, "bad frame", 400)
-		return
-	}
 	switch {
 	case m["hello"] != nil:
 		if h, ok := m["hello"].(map[string]any); ok {
@@ -1085,8 +1141,14 @@ func (r *Relay) out(w http.ResponseWriter, req *http.Request) {
 		// the owner tapped "Claude जोड़ें" on this device: for 3 minutes a Claude sign-in may show him the card here
 		r.mu.Lock()
 		r.connect[s.dev] = r.cfg.Now().Add(3 * time.Minute)
+		peers := map[string]string{}
+		for _, o := range r.devices {
+			peers[o.Name] = o.Pub
+		}
 		r.mu.Unlock()
 		r.note(s.dev, "owner opened Connect")
+		writeJSON(w, 200, map[string]any{"peers": peers}) // the device learns NEW peer names only now (owner present)
+		return
 	case m["anchor"] != nil:
 		a, ok := m["anchor"].(map[string]any)
 		if !ok {
@@ -1109,7 +1171,17 @@ func (r *Relay) out(w http.ResponseWriter, req *http.Request) {
 		for _, tx := range r.txns {
 			tx.cancel = true
 		}
-		r.epochEv = map[string]any{"by": s.dev, "epoch": m["epoch"], "sig": m["sig"]}
+		sigS, _ := m["sig"].(string)
+		newE := num(m["epoch"])
+		var pubS string
+		for _, d := range r.devices {
+			if d.Name == s.dev {
+				pubS = d.Pub
+			}
+		}
+		if verifySig(pubS, fmt.Sprintf("epoch|%d", newE), sigS) && (r.epochEv == nil || newE > num(r.epochEv["epoch"])) {
+			r.epochEv = map[string]any{"by": s.dev, "epoch": newE, "sig": sigS}
+		}
 		r.save()
 		var others []string
 		for n := range r.byDev {

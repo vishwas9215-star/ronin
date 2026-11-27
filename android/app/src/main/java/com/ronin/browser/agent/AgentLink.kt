@@ -44,12 +44,13 @@ class AgentLink(
 ) {
     @Volatile var running = false
     @Volatile var online = false
-    private val lock = Any()            // one writer: session, sequence numbers and every POST /agent/out
+    private val lock = Any()            // session key, id and sequence numbers (held only for moments, never over the network)
+    private val postLock = Any()        // one POST /agent/out at a time, in sequence order
     private var sid = ""
     private var k = ByteArray(0)
     private var seqIn = 0L
     private var seqOut = 0L
-    private var generation = 0          // Stop / Start: an old loop sees a new number and ends
+    private val generation = java.util.concurrent.atomic.AtomicInteger(0) // Stop / Start: an old loop sees a new number and ends
     private val alias = "ronin-agent-$name"
     private val worker = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "ronin-agent-work").apply { isDaemon = true } }
     /** "Claude जोड़ें": only while the owner opened it on THIS device (3 minutes) may a Connect card show here. */
@@ -74,7 +75,7 @@ class AgentLink(
             if (strongBox && Build.VERSION.SDK_INT >= 28) spec.setIsStrongBoxBacked(true)
             KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore").apply { initialize(spec.build()) }.generateKeyPair()
         }
-        try { gen(true); prefs.edit().putString("keyProtection", "StrongBox").apply() }
+        try { gen(true); prefs.edit().putString("keyProtection", if (Build.VERSION.SDK_INT >= 28) "StrongBox" else "Keystore").apply() }
         catch (e: Exception) { gen(false); prefs.edit().putString("keyProtection", "TEE").apply() }
         return ks.getKey(alias, null) as PrivateKey
     }
@@ -123,7 +124,9 @@ class AgentLink(
     }
 
     /** Registers this device while the server's owner has opened pairing. The relay must prove it is OURS first. */
-    fun pair(): Boolean {
+    fun pair(): Boolean = try { pairOnce() } catch (e: Exception) { log("pair: ${e.javaClass.simpleName}"); false }
+
+    private fun pairOnce(): Boolean {
         // is this our relay? (its public key is baked into the app) - checked before the device's name tag is sent.
         // A man in the middle could still copy that page; he gains nothing: every hello needs the Keystore signature.
         val (wc, wt) = try { http("GET", "/.well-known/ronin-relay.json", auth = false) } catch (e: Exception) { return false }
@@ -152,44 +155,55 @@ class AgentLink(
         // other devices: a NEW name is learnt only while the owner has "Claude जोड़ें" open here; a known one never changes
         // (pilot: only "phone" / "tablet" exist; a "laptop" is learnt once the Windows agent ships, so a stranger who
         // paired that name while pairing was open is never trusted)
-        m.optJSONObject("peers")?.let { p -> for (n in p.keys()) if (n != name && n in PEER_NAMES && prefs.getString("peer_$n", null) == null && now() < connectUntil) { rememberPeer(n, p.getString(n)); log("learnt peer $n") } }
+        if (now() < connectUntil) learnPeers(text)
         // a "Disconnect Claude" pressed on another device while this one was offline
         m.optJSONObject("epoch")?.let { applyEpoch(it.optString("by"), it.optLong("epoch"), it.optString("sig")) }
         synchronized(lock) {
-            if (gen != generation) return false
+            if (gen != generation.get()) return false
             sid = m.getString("session"); k = key; seqIn = 0; seqOut = 0
         }
-        send(JSONObject().put("hello", JSONObject().put("kind", name).put("app", "Ronin").put("foreground", true).put("rendering", true).put("key", prefs.getString("keyProtection", "?"))))
-        prefs.getString("pendingDisconnect", null)?.let { send(JSONObject(it)); prefs.edit().remove("pendingDisconnect").commit() }
-        if (now() < connectUntil) send(JSONObject().put("connectOpen", true))
+        if (send(JSONObject().put("hello", JSONObject().put("kind", name).put("app", "Ronin").put("foreground", true).put("rendering", true).put("key", prefs.getString("keyProtection", "?")))) == null) return false
+        prefs.getString("pendingDisconnect", null)?.let { if (send(JSONObject(it)) == null) return false; prefs.edit().remove("pendingDisconnect").commit() } // kept until really delivered
+        if (now() < connectUntil) send(JSONObject().put("connectOpen", true))?.let { learnPeers(it) }
         online = true
         log("online")
         return true
     }
 
-    /** One writer: sequence number, MAC and POST under one lock; a failed POST is tried once more on the same session. */
-    private fun send(m: JSONObject): Boolean = synchronized(lock) {
-        val f = m.toString(); seqOut++
-        val body = JSONObject().put("f", f).put("seq", seqOut).put("mac", hmac(k, "$seqOut|$f"))
+    /**
+     * One POST at a time, in sequence order. The number + MAC are taken under [lock] for a moment; the network wait is
+     * outside it, so STOP and frame checks never wait on the network. A failed POST is sent again unchanged (the relay
+     * answers "done already" if the first one did arrive). Returns the relay's reply body, or null.
+     */
+    private fun send(m: JSONObject): String? = synchronized(postLock) {
+        val f = m.toString()
+        val (s, body) = synchronized(lock) { seqOut++; sid to JSONObject().put("f", f).put("seq", seqOut).put("mac", hmac(k, "$seqOut|$f")) }
         for (attempt in 0..1) {
-            try { val (c, _) = http("POST", "/agent/out?s=$sid", body); if (c in 200..299) return@synchronized true; if (c == 401) break } catch (e: Exception) { log("send: ${e.javaClass.simpleName}") }
+            try { val (c, t) = http("POST", "/agent/out?s=$s", body); if (c in 200..299) return@synchronized t; if (c == 401 || c == 400) break } catch (e: Exception) { log("send: ${e.javaClass.simpleName}") }
         }
         online = false
-        false
+        null
+    }
+
+    /** Other devices' keys: a NEW name only while the owner has "Claude जोड़ें" open here; a known one never changes. */
+    private fun learnPeers(reply: String) {
+        if (now() >= connectUntil) return
+        val p = try { JSONObject(reply).optJSONObject("peers") } catch (e: Exception) { null } ?: return
+        for (n in p.keys()) if (n != name && n in PEER_NAMES && prefs.getString("peer_$n", null) == null) { rememberPeer(n, p.getString(n)); log("learnt peer $n") }
     }
 
     // ---------- the loop ----------
     fun start() {
-        val gen = synchronized(lock) { if (running) return; running = true; ++generation }
+        val gen = synchronized(lock) { if (running) return; running = true; generation.incrementAndGet() }
         thread(name = "ronin-agent-link", isDaemon = true) {
             var backoff = 1000L
-            while (running && gen == generation) {
+            while (running && gen == generation.get()) {
                 try {
                     if (!online && !hello(gen)) { Thread.sleep(backoff); backoff = minOf(backoff * 2, 30_000); continue }
                     backoff = 1000
                     val s = synchronized(lock) { sid }
                     val (code, text) = http("GET", "/agent/next?s=$s", null, 35_000)
-                    if (!running || gen != generation) break // STOP pressed while waiting: nothing that arrived runs
+                    if (!running || gen != generation.get()) break // STOP pressed while waiting: nothing that arrived runs
                     when (code) {
                         200 -> handle(JSONObject(text))
                         204 -> {}
@@ -200,12 +214,12 @@ class AgentLink(
         }
     }
 
-    fun stop() { synchronized(lock) { running = false; generation++ } ; online = false }
+    fun stop() { running = false; generation.incrementAndGet(); online = false } // no lock: never waits on the network
 
     /** The owner tapped "Claude जोड़ें" here: for 3 minutes a Claude sign-in may ask him on THIS device. */
     fun openConnectWindow() {
         connectUntil = now() + 180_000
-        if (online) thread { send(JSONObject().put("connectOpen", true)) }
+        if (online) thread { send(JSONObject().put("connectOpen", true))?.let { learnPeers(it) } }
     }
 
     private fun handle(fr: JSONObject) {
@@ -221,7 +235,7 @@ class AgentLink(
         when (tool) {
             // the owner's STOP and a new epoch never wait behind a running command
             "__stop" -> { driver.stopped = true; send(answer(id, JSONObject().put("ok", true))) }
-            "__epoch" -> { applyEpoch(args.optString("by"), args.optLong("epoch"), args.optString("sig")); send(answer(id, JSONObject().put("ok", true))) }
+            "__epoch" -> { val ok = applyEpoch(args.optString("by"), args.optLong("epoch"), args.optString("sig")); send(answer(id, JSONObject().put("ok", ok).also { if (!ok) it.put("error", "unknown or wrong signer: open Claude जोड़ें on this device once") })) }
             "__approve" -> worker.execute { send(answer(id, approveCard(args))) }
             else -> worker.execute {
                 val result = try {
@@ -247,9 +261,11 @@ class AgentLink(
     }
 
     /** A new epoch, signed by one of the owner's devices (this one or a known peer): grants older than it are dead. */
-    private fun applyEpoch(by: String, e: Long, sig: String) {
-        val pub = if (by == name) publicPem() else prefs.getString("peer_$by", null) ?: return
-        if (verify(pub, "epoch|$e", sig) && e > prefs.getLong("epoch", 0)) { prefs.edit().putLong("epoch", e).commit(); log("epoch $e from $by") }
+    private fun applyEpoch(by: String, e: Long, sig: String): Boolean {
+        val pub = if (by == name) publicPem() else prefs.getString("peer_$by", null) ?: return false
+        if (!verify(pub, "epoch|$e", sig)) return false
+        if (e > prefs.getLong("epoch", 0)) { prefs.edit().putLong("epoch", e).commit(); log("epoch $e from $by") }
+        return true
     }
 
     /** The owner's grant: signed by one of HIS paired devices, this device in scope, not revoked by "Disconnect Claude". */
@@ -272,7 +288,7 @@ class AgentLink(
         prefs.edit().putLong("epoch", e).commit()
         val msg = JSONObject().put("disconnectClaude", true).put("epoch", e).put("sig", sign("epoch|$e"))
         prefs.edit().putString("pendingDisconnect", msg.toString()).commit() // sent again at the next hello if this fails
-        thread { if (online && send(msg)) prefs.edit().remove("pendingDisconnect").commit() }
+        thread { if (online && send(msg) != null) prefs.edit().remove("pendingDisconnect").commit() }
     }
 
     fun rememberPeer(dev: String, pem: String) { prefs.edit().putString("peer_$dev", pem).commit() }

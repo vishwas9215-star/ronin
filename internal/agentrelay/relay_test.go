@@ -39,6 +39,7 @@ type fakeDevice struct {
 	handle       func(tool string, args map[string]any) map[string]any
 	forgeApprove bool
 	helloReply   map[string]any
+	slowApprove  chan struct{}
 	stop         chan struct{}
 	wg           sync.WaitGroup
 }
@@ -154,6 +155,9 @@ func (d *fakeDevice) loop() {
 			args, _ := c["args"].(map[string]any)
 			var out map[string]any
 			if tool == "__approve" {
+				if d.slowApprove != nil {
+					<-d.slowApprove
+				}
 				text := strings.Join([]string{"approve", fmt.Sprint(args["nonce"]), fmt.Sprint(args["client"]), fmt.Sprint(args["redirect"]), fmt.Sprint(args["challenge"]), fmt.Sprint(args["scope"]), fmt.Sprint(args["code"]), "0", "1795800000000"}, "|")
 				sig := d.sign(text)
 				if d.forgeApprove {
@@ -218,7 +222,7 @@ func (e *env) openOn(t *testing.T, name string) {
 	e.mu.Lock()
 	d := e.devs[name]
 	e.mu.Unlock()
-	if d == nil || d.send(map[string]any{"connectOpen": true}) != 204 {
+	if d == nil || d.send(map[string]any{"connectOpen": true}) != 200 {
 		t.Fatal("connectOpen")
 	}
 }
@@ -350,8 +354,8 @@ func TestSignInToolsAndSafety(t *testing.T) {
 	if c := tab.send(map[string]any{"hello": map[string]any{}}); c != 204 {
 		t.Fatal("good frame")
 	}
-	tab.seqOut-- // replay the same sequence number
-	if c := tab.send(map[string]any{"hello": map[string]any{}}); c != 400 {
+	tab.seqOut-- // the same sequence number with OTHER content: refused (an exact copy is answered "done already")
+	if c := tab.send(map[string]any{"hello": map[string]any{"x": 1}}); c != 400 {
 		t.Fatal("replayed frame must be refused")
 	}
 	tab.seqOut++
@@ -588,4 +592,92 @@ func TestClaudeRegistrationSurvivesRestart(t *testing.T) {
 	if _, ok := r2.clients[reg["client_id"].(string)]; !ok {
 		t.Fatal("client lost on restart")
 	}
+}
+
+// Review round 2 (28 Nov): permanent tests.
+func TestRetriesReplaysAndRaces(t *testing.T) {
+	e := newEnv(t)
+	e.r.OpenPairing(time.Minute)
+	tab := e.device(t, "tablet")
+	if tab.pairAndHello() != 200 {
+		t.Fatal("pair")
+	}
+	// the same frame twice (the relay's 204 was lost): the second is "done already", not an error
+	f, _ := json.Marshal(map[string]any{"hello": map[string]any{}})
+	tab.seqOut++
+	body := map[string]any{"f": string(f), "seq": tab.seqOut, "mac": mac(tab.k, fmt.Sprintf("%d|%s", tab.seqOut, f))}
+	for i := 0; i < 2; i++ {
+		if res, _ := tab.req("POST", "/agent/out?s="+tab.sid, body); res.StatusCode != 204 {
+			t.Fatalf("retry %d: %d", i, res.StatusCode)
+		}
+	}
+	// a broken inner frame never uses up a number
+	bad := "{not json"
+	if res, _ := tab.req("POST", "/agent/out?s="+tab.sid, map[string]any{"f": bad, "seq": tab.seqOut + 1, "mac": mac(tab.k, fmt.Sprintf("%d|%s", tab.seqOut+1, bad))}); res.StatusCode != 400 {
+		t.Fatal("bad json")
+	}
+	if c := tab.send(map[string]any{"hello": map[string]any{}}); c != 204 {
+		t.Fatalf("next number still free: %d", c)
+	}
+	// a copied hello can not be played again
+	eph, _ := ecdh.P256().GenerateKey(rand.Reader)
+	nonce, my := rnd(16), base64.StdEncoding.EncodeToString(eph.PublicKey().Bytes())
+	h := map[string]string{"nonce": nonce, "ecdh": my, "sig": tab.sign("devhello|" + nonce + "|" + my)}
+	if res, _ := tab.req("POST", "/agent/hello", h); res.StatusCode != 200 {
+		t.Fatal("first hello")
+	}
+	if res, _ := tab.req("POST", "/agent/hello", h); res.StatusCode != 401 {
+		t.Fatal("replayed hello must be refused")
+	}
+	// a forged Disconnect event is not stored
+	tab.hello()
+	tab.send(map[string]any{"disconnectClaude": true, "epoch": 99, "sig": "AAAA"})
+	e.r.mu.Lock()
+	ev := e.r.epochEv
+	e.r.mu.Unlock()
+	if ev != nil {
+		t.Fatal("unsigned epoch stored")
+	}
+}
+
+func TestTwoSignInsAtOnceAreBothCancelled(t *testing.T) {
+	e := newEnv(t)
+	e.r.OpenPairing(time.Minute)
+	tab := e.device(t, "tablet")
+	release := make(chan struct{})
+	tab.slowApprove = release
+	if tab.pairAndHello() != 200 {
+		t.Fatal("pair")
+	}
+	tab.loop()
+	defer tab.close()
+	e.openOn(t, "tablet")
+	res, _ := http.Post(e.srv.URL+"/register", "application/json", strings.NewReader(`{"redirect_uris":["https://claude.ai/api/mcp/auth_callback"]}`))
+	var reg map[string]any
+	json.NewDecoder(res.Body).Decode(&reg)
+	q := url.Values{"response_type": {"code"}, "client_id": {reg["client_id"].(string)}, "redirect_uri": {Redirects[0]}, "code_challenge": {sha(rnd(40))}, "code_challenge_method": {"S256"}}
+	a1, _ := noRedirect().Get(e.srv.URL + "/authorize?" + q.Encode()) // the stranger, first in the window
+	b1, _ := io.ReadAll(a1.Body)
+	a2, _ := noRedirect().Get(e.srv.URL + "/authorize?" + q.Encode()) // the owner's own
+	b2, _ := io.ReadAll(a2.Body)
+	if !strings.Contains(string(b2), "दो sign-in") {
+		t.Fatalf("second sign-in: %s", b2)
+	}
+	close(release) // the owner holds Allow on the (stranger's) card anyway
+	mm := regexp.MustCompile(`url=(/authorize/wait\?t=[^"]+)`).FindStringSubmatch(string(b1))
+	for i := 0; i < 100; i++ {
+		time.Sleep(30 * time.Millisecond)
+		w, _ := noRedirect().Get(e.srv.URL + mm[1])
+		wb, _ := io.ReadAll(w.Body)
+		if w.StatusCode == 302 {
+			if !strings.Contains(w.Header.Get("Location"), "access_denied") {
+				t.Fatal("a cancelled sign-in must never get a code")
+			}
+			return
+		}
+		if strings.Contains(string(wb), "दो sign-in") {
+			return
+		}
+	}
+	t.Fatal("no answer")
 }
