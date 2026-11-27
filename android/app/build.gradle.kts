@@ -38,6 +38,12 @@ android {
     }
 
     signingConfigs {
+        // debug builds (CI emulators, the lab test app on the owner's devices) always use ONE fixed test key, so a new
+        // lab build installs over the last one. Test-only key: never used for Ronin releases.
+        getByName("debug") {
+            storeFile = rootProject.file("lab-debug.keystore")
+            storePassword = "android"; keyAlias = "androiddebugkey"; keyPassword = "android"
+        }
         if (keyFile != null && keyPass != null) {
             create("ronin") {
                 storeFile = file(keyFile)

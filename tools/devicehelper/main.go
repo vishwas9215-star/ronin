@@ -12,6 +12,7 @@
 //   {"id":"t4","do":"screenshot","device":"phone"}
 //   {"id":"t5","do":"log","device":"phone"}           (only Ronin's own "RoninAgent" log lines)
 //   {"id":"t6","do":"launch","device":"tablet","pkg":"com.ronin.browser"}
+//   {"id":"t7","do":"uninstall","device":"tablet","pkg":"com.ronin.agentlab"}  (only the pilot's own test app)
 package main
 
 import (
@@ -64,6 +65,11 @@ func (j Job) Validate() error {
 			return errors.New("bad apk name")
 		}
 		return nil
+	case "uninstall": // ONLY the pilot test app (never Ronin Browser / Ronin Phone or anything else)
+		if j.Pkg != "com.ronin.agentlab" {
+			return errors.New("only the lab test app may be removed")
+		}
+		return nil
 	case "launch":
 		if !pkgs[j.Pkg] {
 			return errors.New("unknown package")
@@ -92,6 +98,8 @@ func (j Job) Args(serial, apkDir string) [][]string {
 		}
 	case "install":
 		return [][]string{append(append([]string{}, s...), "install", "-r", "-t", filepath.Join(apkDir, j.APK))}
+	case "uninstall":
+		return [][]string{append(append([]string{}, s...), "uninstall", "com.ronin.agentlab")}
 	case "launch":
 		return [][]string{append(append([]string{}, s...), "shell", "monkey", "-p", j.Pkg, "-c", "android.intent.category.LAUNCHER", "1")}
 	case "test":

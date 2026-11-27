@@ -1,0 +1,24 @@
+[Unit]
+Description=Ronin Agent Relay (Claude <-> the owner's Ronin apps; no browser, no page content stored)
+After=network-online.target
+
+[Service]
+User=roninrelay
+Group=roninrelay
+ExecStart=/opt/roninrelay/roninrelay -data /var/lib/roninrelay -addr 127.0.0.1:8790 -public ${RELAY_PUBLIC}
+EnvironmentFile=/etc/roninrelay.env
+Restart=always
+RestartSec=3
+# never competes with the trading engine
+MemoryHigh=48M
+MemoryMax=96M
+CPUQuota=25%
+Nice=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/roninrelay
+
+[Install]
+WantedBy=multi-user.target

@@ -16,6 +16,8 @@ func TestOnlyAllowListedJobsRun(t *testing.T) {
 		{ID: "a", Do: "test", Device: "phone", Pkg: "com.android.settings", Class: "com.ronin.X"},
 		{ID: "a", Do: "test", Device: "phone", Pkg: "com.ronin.browser", Class: "com.ronin.X; rm -rf /"},
 		{ID: "a", Do: "launch", Device: "phone", Pkg: "com.whatsapp"},
+		{ID: "a", Do: "uninstall", Device: "phone", Pkg: "com.ronin.browser"},
+		{ID: "a", Do: "uninstall", Device: "phone", Pkg: "com.ronin.phone"},
 	}
 	for _, j := range bad {
 		if j.Validate() == nil {

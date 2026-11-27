@@ -53,7 +53,9 @@ jobs:
           cp android/app/build/outputs/apk/lab/debug/*.apk RoninAgentLab.apk
           cp android/app/build/outputs/apk/androidTest/lab/debug/*.apk RoninAgentLab-test.apk
           gh release view agent-lab >/dev/null 2>&1 || gh release create agent-lab --title "Ronin Agent Lab (pilot test build)" --notes "Pilot test app (com.ronin.agentlab). Not a Ronin release, never offered as an update." --prerelease || true
-          gh release upload agent-lab RoninAgentLab.apk RoninAgentLab-test.apk --clobber
+          for A in amd64 arm64; do CGO_ENABLED=0 GOOS=linux GOARCH=$A go build -trimpath -ldflags "-s -w" -o roninrelay-linux-$A ./cmd/roninrelay; sha256sum roninrelay-linux-$A | cut -d' ' -f1 > roninrelay-linux-$A.sha256; done
+          go test ./internal/agentrelay
+          gh release upload agent-lab RoninAgentLab.apk RoninAgentLab-test.apk roninrelay-linux-amd64 roninrelay-linux-amd64.sha256 roninrelay-linux-arm64 roninrelay-linux-arm64.sha256 --clobber
 
   emulator:
     runs-on: ubuntu-latest

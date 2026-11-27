@@ -199,6 +199,19 @@ func (r *Relay) save() {
 	}
 }
 
+// pairUntil: the later of -pair and the time written in <data>/pair-until (RFC 3339), set by the install script.
+func (r *Relay) pairUntil() time.Time { r.mu.Lock(); defer r.mu.Unlock(); return r.pairUntilLocked() }
+
+func (r *Relay) pairUntilLocked() time.Time {
+	t := r.pairOpen
+	if b, err := os.ReadFile(filepath.Join(r.cfg.DataDir, "pair-until")); err == nil {
+		if f, err := time.Parse(time.RFC3339, strings.TrimSpace(string(b))); err == nil && f.After(t) {
+			t = f
+		}
+	}
+	return t
+}
+
 // OpenPairing lets new devices register for d (the server's owner runs "roninrelay -pair 10m").
 func (r *Relay) OpenPairing(d time.Duration) {
 	r.mu.Lock()
@@ -367,6 +380,10 @@ func (r *Relay) Handler() http.Handler {
 	m.HandleFunc("/token", r.token)
 	m.HandleFunc("/mcp", r.mcp)
 	m.HandleFunc("/agent/pair", r.pair)
+	// the relay's PUBLIC key (Claude reads it once and bakes it into the Ronin apps); nothing secret here
+	m.HandleFunc("/.well-known/ronin-relay.json", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, map[string]any{"pub": r.PublicKeyPEM(), "pairing_open": r.cfg.Now().Before(r.pairUntil())})
+	})
 	m.HandleFunc("/agent/hello", r.hello)
 	m.HandleFunc("/agent/next", r.next)
 	m.HandleFunc("/agent/out", r.out)
@@ -771,7 +788,7 @@ func (r *Relay) pair(w http.ResponseWriter, req *http.Request) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.cfg.Now().After(r.pairOpen) {
+	if r.cfg.Now().After(r.pairUntilLocked()) {
 		http.Error(w, "pairing is closed", 403)
 		return
 	}

@@ -24,19 +24,19 @@ import (
 
 // fakeDevice speaks the device side of the protocol (what the Android / Windows agent does).
 type fakeDevice struct {
-	t           *testing.T
-	base, name  string
-	secret      string
-	key         *ecdsa.PrivateKey
-	relayPub    string
-	sid         string
-	k           []byte
-	seqOut      int64
-	seqIn       int64
-	handle      func(tool string, args map[string]any) map[string]any
+	t            *testing.T
+	base, name   string
+	secret       string
+	key          *ecdsa.PrivateKey
+	relayPub     string
+	sid          string
+	k            []byte
+	seqOut       int64
+	seqIn        int64
+	handle       func(tool string, args map[string]any) map[string]any
 	forgeApprove bool
-	stop        chan struct{}
-	wg          sync.WaitGroup
+	stop         chan struct{}
+	wg           sync.WaitGroup
 }
 
 func newDevice(t *testing.T, base, name string) *fakeDevice {
