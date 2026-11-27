@@ -1,0 +1,378 @@
+//go:build windows
+
+// Ronin Agent Lab for the laptop: a separate Ronin window that Claude can drive (through the owner's relay), with
+// every rule enforced here on the laptop. The owner's own Ronin is not touched. Data (logins, link key, journal)
+// stays next to the exe in .\data.
+package main
+
+import (
+	_ "embed"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+	"unsafe"
+
+	"github.com/wailsapp/go-webview2/pkg/edge"
+
+	"roninbrowser/internal/agentcore"
+)
+
+//go:embed banner.html
+var bannerHTML string
+
+var (
+	logMu   sync.Mutex
+	logFile *os.File
+)
+
+// logf: metadata only (tool, site, ok / refused), never page text or typed text.
+func logf(f string, a ...any) {
+	logMu.Lock()
+	defer logMu.Unlock()
+	if logFile != nil {
+		fmt.Fprintf(logFile, "%s %s\n", time.Now().Format("01-02 15:04:05"), fmt.Sprintf(f, a...))
+	}
+}
+
+type app struct {
+	hwnd      uintptr
+	ui, web   *edge.Chromium
+	page      *cdpPage
+	drv       *agentcore.Driver
+	link      *agentcore.Link
+	cardOpen  bool
+	approveCh chan bool
+	lastInput uint32
+	status    string
+	asked     string
+	testPages map[string]string
+}
+
+func main() {
+	selftest := flag.Bool("selftest", false, "run the built-in checks on made-up pages, write data\\selftest.txt, exit")
+	flag.Parse()
+	exe, _ := os.Executable()
+	data := filepath.Join(filepath.Dir(exe), "data")
+	os.MkdirAll(data, 0o700)
+	logFile, _ = os.OpenFile(filepath.Join(data, "agent-log.txt"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	logf("start (selftest=%v)", *selftest)
+	if err := initWin32(); err != nil {
+		logf("win32: %v", err)
+		return
+	}
+	a := &app{approveCh: make(chan bool, 1)}
+	a.hwnd = createMainWindow("Ronin Agent Lab — Claude (laptop)")
+	onMainMsg = a.msg
+	if *selftest {
+		pShowWindow.Call(a.hwnd, swShow)
+	} else {
+		pShowWindow.Call(a.hwnd, swShowMaximized)
+	}
+	if !a.makeViews(data) {
+		logf("WebView2 did not start")
+		writeResult(data, "FAIL webview2 did not start\n")
+		return
+	}
+	a.drv = &agentcore.Driver{P: a.page, Journal: filepath.Join(data, "journal.json"), Log: logLine}
+	a.drv.OnOwnerAsked = func(reason string) {
+		runOnUI(func() { a.asked = reason; a.refresh() })
+	}
+	pSetTimer.Call(a.hwnd, 1, 300, 0)
+	if *selftest {
+		a.testPages = selfTestPages()
+		a.drv.Journal = filepath.Join(data, "selftest-journal.json")
+		os.Remove(a.drv.Journal)
+		go a.selfTest(data)
+	} else {
+		url, pub := agentcore.RelayConfig()
+		store := &agentcore.Store{Path: filepath.Join(data, "link.bin"), Seal: dpapiSeal, Open: dpapiOpen}
+		a.link = &agentcore.Link{Base: url, Name: "laptop", RelayPub: pub, Store: store, Driver: a.drv, Approve: a.approve, Log: logLine}
+		go func() {
+			if store.Get("paired") == "" && !a.link.Pair() {
+				runOnUI(func() {
+					a.status = "⚠ relay से जुड़ नहीं पाया (pairing बंद हो सकता है)"
+					a.refresh()
+				})
+			}
+			a.link.Start()
+		}()
+	}
+	runMessageLoop()
+	if a.link != nil {
+		a.link.Stop()
+	}
+}
+
+func (a *app) makeViews(data string) bool {
+	ui := edge.NewChromium()
+	ui.DataPath = filepath.Join(data, "ui")
+	ui.SetErrorCallback(func(err error) { logf("banner: %v", err) })
+	ui.MessageCallback = func(msg string, _ *edge.ICoreWebView2, _ *edge.ICoreWebView2WebMessageReceivedEventArgs) {
+		runOnUI(func() { a.onBanner(msg) })
+	}
+	if !ui.Embed(a.hwnd) || ui.Failed() {
+		return false
+	}
+	if s, err := ui.GetSettings(); err == nil {
+		s.PutAreDevToolsEnabled(false)
+		s.PutAreDefaultContextMenusEnabled(false)
+		s.PutIsStatusBarEnabled(false)
+		s.PutIsZoomControlEnabled(false)
+	}
+	ui.NavigateToString(bannerHTML)
+	a.ui = ui
+
+	web := edge.NewChromium()
+	web.DataPath = filepath.Join(data, "profile") // logins stay (cookies) like a normal browser
+	web.SetErrorCallback(func(err error) { logf("page: %v", err) })
+	web.SetPermission(edge.CoreWebView2PermissionKindNotifications, edge.CoreWebView2PermissionStateDeny)
+	web.SetPermission(edge.CoreWebView2PermissionKindGeolocation, edge.CoreWebView2PermissionStateDeny)
+	web.SetPermission(edge.CoreWebView2PermissionKindClipboardRead, edge.CoreWebView2PermissionStateDeny)
+	if !web.Embed(a.hwnd) || web.Failed() {
+		return false
+	}
+	a.web = web
+	a.page = &cdpPage{c: web, loaded: make(chan struct{}, 4)}
+	web.NavigationCompletedCallback = func(_ *edge.ICoreWebView2, _ *edge.ICoreWebView2NavigationCompletedEventArgs) {
+		select {
+		case a.page.loaded <- struct{}{}:
+		default:
+		}
+		a.page.mu.Lock()
+		a.page.ctxID = 0
+		a.page.mu.Unlock()
+	}
+	web.WebResourceRequestedCallback = a.onRequest
+	web.AddWebResourceRequestedFilter("*", edge.COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL)
+	if s, err := web.GetSettings(); err == nil {
+		s.PutAreDevToolsEnabled(false)
+		s.PutIsStatusBarEnabled(false)
+	}
+	if ctrl := web.GetController(); ctrl != nil {
+		if core, err := ctrl.GetCoreWebView2(); err == nil && core != nil {
+			hookPageEvents(uintptr(unsafe.Pointer(core)), func(u string) { web.Navigate(u) })
+		}
+	}
+	web.NavigateToString(`<!doctype html><meta charset="utf-8"><body style="font:18px 'Nirmala UI',sans-serif;padding:40px;color:#333"><h2>Ronin Agent Lab</h2><p>यह window Claude के लिए है। Claude यहाँ काम करेगा; आप ऊपर के बटन से रोक / चालू कर सकते हैं।</p>`)
+	a.layout()
+	return true
+}
+
+func (a *app) barHeight() int32 {
+	h := int32(48)
+	if a.cardOpen {
+		h += 108
+	}
+	return h * int32(dpiOf(a.hwnd)) / 96
+}
+
+func (a *app) layout() {
+	r := clientRect(a.hwnd)
+	bh := a.barHeight()
+	if a.ui != nil {
+		a.ui.SetSize(edge.Rect{Left: r.Left, Top: r.Top, Right: r.Right, Bottom: r.Top + bh})
+	}
+	if a.web != nil {
+		a.web.SetSize(edge.Rect{Left: r.Left, Top: r.Top + bh, Right: r.Right, Bottom: r.Bottom})
+	}
+}
+
+func (a *app) msg(hwnd, msg, wparam, lparam uintptr) (uintptr, bool) {
+	if hwnd != a.hwnd {
+		return 0, false
+	}
+	switch msg {
+	case wmSize:
+		a.layout()
+		return 0, true
+	case wmTimer:
+		a.watchOwner()
+		return 0, true
+	case wmClose, wmDestroy:
+		pPostQuitMessage.Call(0)
+		return 0, msg == wmDestroy
+	}
+	return 0, false
+}
+
+// watchOwner: the owner used the page (mouse / keys in this window, over the page) -> Claude pauses at once.
+// Claude's own input goes through the browser, not Windows, so it never counts here.
+func (a *app) watchOwner() {
+	t := lastInputTick()
+	if t != a.lastInput {
+		a.lastInput = t
+		fg, _, _ := pGetForegroundWindow.Call()
+		_, y := cursorInClient(a.hwnd)
+		if fg == a.hwnd && y > a.barHeight() && a.drv != nil {
+			a.drv.OwnerTouched()
+		}
+	}
+	a.refresh()
+}
+
+func (a *app) refresh() {
+	if a.ui == nil || a.drv == nil {
+		return
+	}
+	s := "🟢 Claude चालू"
+	switch {
+	case a.drv.Stopped:
+		s = "⛔ STOP: Claude रुका है (RESUME से चालू)"
+	case a.drv.Paused:
+		s = "✋ आपने page छुआ: Claude रुका है। RESUME दबाएँ"
+	case a.drv.Holding():
+		s = "🙋 Claude आपसे कह रहा है: " + a.asked + " — कर लें, फिर DONE"
+	case a.link != nil && !a.link.Online():
+		s = "… relay से जुड़ रहा है"
+	}
+	if a.status != "" {
+		s = a.status
+	}
+	b, _ := json.Marshal(s)
+	a.ui.Eval("setStatus(" + string(b) + ")")
+}
+
+func (a *app) onBanner(m string) {
+	a.status = ""
+	switch m {
+	case "done":
+		a.drv.OwnerDone()
+	case "resume":
+		a.drv.Resume()
+	case "stop":
+		a.drv.OwnerStop()
+	case "checked":
+		a.drv.Checked()
+	case "connect":
+		if a.link != nil {
+			a.link.OpenConnectWindow()
+			a.status = "🔗 3 मिनट: अब Claude में Connect दबाएँ, फिर यहाँ Allow दबाकर रखें"
+		}
+	case "disconnect":
+		if a.link != nil {
+			a.link.DisconnectClaude()
+			a.status = "⛔ Claude हटा दिया गया (सभी devices से)"
+		}
+	case "allow", "deny":
+		if a.cardOpen {
+			a.cardOpen = false
+			a.ui.Eval("hideCard()")
+			a.layout()
+			select {
+			case a.approveCh <- m == "allow":
+			default:
+			}
+		}
+	}
+	a.refresh()
+}
+
+// approve: the one-time Connect card (2 minutes). True only if the owner held Allow.
+func (a *app) approve(text string) bool {
+	for len(a.approveCh) > 0 {
+		<-a.approveCh
+	}
+	b, _ := json.Marshal(text)
+	runOnUI(func() {
+		a.cardOpen = true
+		a.layout()
+		a.ui.Eval("showCard(" + string(b) + ")")
+	})
+	select {
+	case ok := <-a.approveCh:
+		return ok
+	case <-time.After(120 * time.Second):
+		runOnUI(func() { a.cardOpen = false; a.ui.Eval("hideCard()"); a.layout() })
+		return false
+	}
+}
+
+// onRequest: the network guard for every request of the Claude tab (runs on the UI thread, must not wait).
+func (a *app) onRequest(req *edge.ICoreWebView2WebResourceRequest, args *edge.ICoreWebView2WebResourceRequestedEventArgs) {
+	uri, err := req.GetUri()
+	if err != nil || uri == "" || a.drv == nil {
+		return
+	}
+	method, _ := req.GetMethod()
+	ctx, _ := args.GetResourceContext()
+	main := ctx == edge.COREWEBVIEW2_WEB_RESOURCE_CONTEXT_DOCUMENT
+	serve := func() {
+		if a.testPages == nil {
+			return
+		}
+		h := agentcore.Host(uri)
+		path := "/"
+		if i := strings.Index(uri, h); i >= 0 {
+			path = strings.SplitN(strings.SplitN(uri[i+len(h):], "?", 2)[0], "#", 2)[0]
+		}
+		if p, ok := a.testPages[h+path]; ok || a.testPages[h] != "" {
+			if !ok {
+				p = a.testPages[h]
+			}
+			a.respond(args, 200, "text/html; charset=utf-8", p)
+		} else if strings.HasSuffix(h, ".example") || h == "web.dhan.co" {
+			a.respond(args, 200, "application/json", "{}")
+		}
+	}
+	if a.drv.Holding() {
+		serve()
+		return
+	}
+	if why := a.drv.GuardNoDNS(method, uri, main); why != "" {
+		a.respond(args, 403, "text/plain", "Blocked by Ronin")
+		return
+	}
+	h := agentcore.Host(uri)
+	if priv, known := a.drv.PrivateKnown(h); known || a.testPages != nil {
+		if priv {
+			a.drv.Block("private address " + h)
+			a.respond(args, 403, "text/plain", "Blocked by Ronin")
+			return
+		}
+		serve()
+		return
+	}
+	// a name not seen before: the request waits until DNS said where it goes (never the home network)
+	def, err := args.GetDeferral()
+	if err != nil || def == nil {
+		a.respond(args, 403, "text/plain", "Blocked by Ronin")
+		return
+	}
+	args.AddRef()
+	go func() {
+		p := a.drv.IsPrivate(h)
+		runOnUI(func() {
+			if p {
+				a.drv.Block("private address " + h)
+				a.respond(args, 403, "text/plain", "Blocked by Ronin")
+			}
+			def.Complete()
+			def.Release()
+			args.Release()
+		})
+	}()
+}
+
+func (a *app) respond(args *edge.ICoreWebView2WebResourceRequestedEventArgs, code int, ctype, body string) {
+	env := a.web.Environment()
+	if env == nil {
+		return
+	}
+	reason := "OK"
+	if code != 200 {
+		reason = "Blocked"
+	}
+	resp, err := env.CreateWebResourceResponse([]byte(body), code, reason, "Content-Type: "+ctype+"\r\nCache-Control: no-store")
+	if err == nil && resp != nil {
+		args.PutResponse(resp)
+	}
+}
+
+func writeResult(data, s string) { os.WriteFile(filepath.Join(data, "selftest.txt"), []byte(s), 0o600) }
+
+func logLine(s string) { logf("%s", s) }

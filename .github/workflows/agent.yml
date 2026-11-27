@@ -54,8 +54,38 @@ jobs:
           cp android/app/build/outputs/apk/androidTest/lab/debug/*.apk RoninAgentLab-test.apk
           gh release view agent-lab >/dev/null 2>&1 || gh release create agent-lab --title "Ronin Agent Lab (pilot test build)" --notes "Pilot test app (com.ronin.agentlab). Not a Ronin release, never offered as an update." --prerelease || true
           for A in amd64 arm64; do CGO_ENABLED=0 GOOS=linux GOARCH=$A go build -trimpath -ldflags "-s -w" -o roninrelay-linux-$A ./cmd/roninrelay; sha256sum roninrelay-linux-$A | cut -d' ' -f1 > roninrelay-linux-$A.sha256; done
-          go test ./internal/agentrelay
+          go test ./internal/agentrelay ./internal/agentcore
           gh release upload agent-lab RoninAgentLab.apk RoninAgentLab-test.apk roninrelay-linux-amd64 roninrelay-linux-amd64.sha256 roninrelay-linux-arm64 roninrelay-linux-arm64.sha256 --clobber
+
+  # the laptop agent: built and run for real on Windows (WebView2), on made-up pages, before anything ships
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build Ronin Agent Lab (laptop)
+        shell: pwsh
+        run: go build -trimpath -ldflags "-s -w -H windowsgui" -o lab\RoninAgentLab.exe ./cmd/roninagent
+      - name: Self-test in a real window
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath lab\RoninAgentLab.exe -ArgumentList "-selftest" -PassThru
+          if (-not $p.WaitForExit(240000)) { $p.Kill(); "FAIL timeout" | Out-File lab\data\selftest.txt -Append }
+          Get-Content lab\data\selftest.txt -ErrorAction SilentlyContinue
+          Get-Content lab\data\agent-log.txt -ErrorAction SilentlyContinue | Select-Object -Last 60
+          "## laptop self-test" >> $env:GITHUB_STEP_SUMMARY
+          Get-Content lab\data\selftest.txt -ErrorAction SilentlyContinue | ForEach-Object { "- $_" } >> $env:GITHUB_STEP_SUMMARY
+          if (-not (Select-String -Path lab\data\selftest.txt -Pattern "TOTAL \d+ passed, 0 failed" -Quiet)) { exit 1 }
+      - name: Upload (release "agent-lab", test build only)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          (Get-FileHash lab\RoninAgentLab.exe -Algorithm SHA256).Hash.ToLower() | Out-File -NoNewline -Encoding ascii lab\RoninAgentLab.exe.sha256
+          gh release upload agent-lab lab\RoninAgentLab.exe lab\RoninAgentLab.exe.sha256 --clobber
 
   emulator:
     runs-on: ubuntu-latest

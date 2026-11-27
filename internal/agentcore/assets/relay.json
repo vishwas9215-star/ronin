@@ -1,0 +1,5 @@
+{
+ "url": "https://relay-16-4-152-212.sslip.io",
+ "pub": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEolfbV4TsNjX++1G09xvNUG2Xyl2R\nzE4SFHQnQwfupN4OR23aIvaWIWCOZ0RAYE6hZSGBFK6hw7u9Ix7rQ/XY7w==\n-----END PUBLIC KEY-----\n",
+ "note": "The owner's Ronin Agent Relay (installed 27 Nov 2026). Its public key is baked in here: devices refuse any other relay."
+}

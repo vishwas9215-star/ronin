@@ -1,0 +1,46 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  html,body{margin:0;height:100%;background:#095a62;color:#fff;font:15px "Nirmala UI","Segoe UI",sans-serif;user-select:none;overflow:hidden}
+  #bar{display:flex;align-items:center;gap:6px;padding:6px 8px;height:48px;box-sizing:border-box}
+  #status{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px}
+  button{font:inherit;font-size:14px;border:0;border-radius:6px;padding:6px 10px;background:#0d7a85;color:#fff;cursor:pointer}
+  button:hover{background:#10909c}
+  #stop{background:#b3261e}
+  #card{display:none;padding:8px 12px;background:#fff3cd;color:#222;height:108px;box-sizing:border-box}
+  #card p{margin:0 0 8px 0;font-size:15px}
+  #hold{background:#1b7f3a;font-size:16px;padding:10px 18px;position:relative;overflow:hidden}
+  #fill{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(255,255,255,.35)}
+  #deny{background:#666}
+</style></head>
+<body>
+<div id="bar">
+  <div id="status">Ronin Agent</div>
+  <button id="done" title="Claude ने जो माँगा था वह हो गया">DONE</button>
+  <button id="resume">RESUME</button>
+  <button id="checked" title="मैंने page देख लिया">CHECKED</button>
+  <button id="connect">Claude जोड़ें</button>
+  <button id="disconnect">Claude हटाएँ</button>
+  <button id="stop">STOP</button>
+</div>
+<div id="card">
+  <p id="cardtext"></p>
+  <button id="hold"><span id="fill"></span>दबाकर रखें: Allow</button>
+  <button id="deny">Deny</button>
+</div>
+<script>
+  const post = (m) => window.chrome.webview.postMessage(m);
+  for (const id of ['done','resume','checked','connect','disconnect','stop','deny']) document.getElementById(id).onclick = () => post(id);
+  // Allow only after holding the button for 2 seconds (no accidental Allow)
+  const hold = document.getElementById('hold'), fill = document.getElementById('fill');
+  let t0 = 0, timer = null;
+  const stopHold = () => { t0 = 0; fill.style.width = '0'; if (timer) cancelAnimationFrame(timer); timer = null; };
+  const tick = () => { if (!t0) return; const p = Math.min(1, (performance.now() - t0) / 2000); fill.style.width = (p * 100) + '%';
+    if (p >= 1) { stopHold(); post('allow'); } else timer = requestAnimationFrame(tick); };
+  hold.onpointerdown = (e) => { hold.setPointerCapture(e.pointerId); t0 = performance.now(); tick(); };
+  hold.onpointerup = hold.onpointercancel = hold.onpointerleave = stopHold;
+  window.setStatus = (s) => { document.getElementById('status').textContent = s; };
+  window.showCard = (s) => { document.getElementById('cardtext').textContent = s; document.getElementById('card').style.display = 'block'; };
+  window.hideCard = () => { document.getElementById('card').style.display = 'none'; stopHold(); };
+</script>
+</body></html>

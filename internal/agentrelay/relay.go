@@ -1225,3 +1225,6 @@ func (r *Relay) Anchors(dev string) []map[string]any {
 	defer r.mu.Unlock()
 	return append([]map[string]any{}, r.anchors[dev]...)
 }
+
+// SetPublic sets the public address (tests in other packages; call before serving).
+func (r *Relay) SetPublic(p string) { r.cfg.Public = p }
