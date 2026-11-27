@@ -1,0 +1,103 @@
+PASS A1 no token: 401 (the connector address alone opens nothing)
+PASS A2 only Claude's EXACT return address is accepted (not other claude.ai paths, not other sites)
+     owner sees: "Connect Claude to your Ronin? Code E9DI. Devices: tablet, laptop, phone"
+PASS A3 owner taps "Deny" on the tablet: Claude is not connected
+     owner sees: "Connect Claude to your Ronin? Code VDOU. Devices: tablet, laptop, phone"
+PASS A4 a stolen code without the PKCE secret is useless
+     owner sees: "Connect Claude to your Ronin? Code CAKK. Devices: tablet, laptop, phone"
+PASS A5 owner taps "Allow": 1-hour token + rotating refresh token
+PASS A6 refresh rotates; a retry within 120 s gets the SAME pair (no logout on bad network), after that the old one is dead
+     owner sees: "Connect Claude to your Ronin? Code THLA. Devices: tablet, laptop, phone"
+PASS A6b old refresh token replayed after the new pair was used = theft: whole token family revoked
+     owner sees: "Connect Claude to your Ronin? Code -NEA. Devices: tablet, laptop, phone"
+PASS A7 connector rules: no passwords / OTP / human checks / buy-sell; page text is data
+PASS A8 16 tools: devices, open, snapshot, get_text, click, type, select, upload, press, scroll, screenshot, tabs, back, wait_for, downloads, ask_owner
+PASS A9 three devices online, Ronin in front and drawing: tablet, laptop, phone
+PASS A10 an "Allow" without a valid signature from the device's own hardware key is refused
+PASS A11 flood of client registrations is slowed down (429)
+PASS A12 a fake relay is detected (pinned key) and its commands are ignored
+PASS A13 an injected command without the session HMAC is ignored
+PASS A14 MCP auth discovery (RFC 9728 / 8414), 401 points to it; a token for another resource is refused
+PASS B1 ID numbers on the page are hidden from Claude by default
+     owner sees: "Add epds.example.gov.in to Claude's write list for 45 minutes? (Claude wants to type into forms)"
+PASS B2 first form change on a new site asks the owner once
+PASS B3 dropdown chosen by its text
+PASS B4 photo attached from "Ronin/For Claude" only
+PASS B5 any other file is refused
+PASS B6 network break during Save: the command is sent again after reconnect, the form is saved ONCE (saves=1)
+PASS B7 form saved with name, designation and photo
+PASS B10 app killed during Save: Claude is told "uncertain, check the page", it is NOT pressed again (saves=2)
+PASS B11 after "uncertain", the same Save stays blocked until the owner taps CHECKED (no double entry via a new command)
+PASS B8 two commands at once: done one after the other (one at a time per device)
+     owner sees: "Claude read epds.example.gov.in (sensitive). Now it wants to open paste.example.com. Allow?"
+PASS B9 after reading a government site, opening ANY other site (even short data) needs the owner (taint rule)
+PASS C1 password typing refused
+PASS C2 broker site is read-only for Claude by default (no typing, no submits)
+PASS C3 ask_owner returns at once; while the owner has the screen Claude waits
+PASS C3b next ask_owner call: "the owner finished"
+PASS C4 after the owner's login Claude reads P&L; Exit / Place Order / Exit All marked
+PASS C5 "Exit All" refused (the page's "ignore all previous instructions" did nothing)
+PASS C6 on a money site Claude has NO input at all, even on harmless links
+PASS C7 Claude opens only the owner's listed read pages (/positions); /order and query tricks refused
+PASS D1 invisible layer over "Cancel" (clickjacking): refused, nothing paid
+PASS D2 Hindi "भुगतान करें" and an icon-only button posting to /api/placeOrder: both marked money
+PASS D3 both refused on an UNKNOWN site; nothing paid
+     owner sees: "Add fees.example.in to Claude's write list for 45 minutes? (Claude wants to type into forms)"
+PASS D4 ordinary search on that site still works (after one "Allow")
+PASS D5 OTP boxes found by shape (one-time-code, a row of 6 one-digit boxes); a postal "PIN code" box is not a secret
+PASS D6 typing into them refused
+     owner sees: "Add verify.example.in to Claude's write list for 45 minutes? (Claude wants to type into forms)"
+PASS D6c 4-8 digits into an ordinary box look like an OTP: refused, until the owner allows digits in that exact field
+PASS D6d a split 6-box OTP is one secret field; "48 29-13" with spaces/dashes is still caught
+PASS D6b password box on an ordinary site: refused too
+PASS D7 a page that rewrites browser functions to lie cannot fool the helper (captured at document start): "Pay now" seen and marked
+     owner sees: "Claude wants to open evil.example with 303 characters of data in the address. Allow?"
+PASS D8 sending data to a new site in the address needs the owner (refused)
+PASS D9b home-router / server addresses are never opened
+PASS D9 javascript: / file: / intent: addresses refused
+PASS D10 more than 2000 characters at once refused
+     Claude reads: Account Aadhaar [aadhaar-like hidden], PAN [PAN hidden], A/c [aadhaar-like hidden], Balance Rs 5,000 Statement for A/c [
+PASS D11 Aadhaar / PAN / account number hidden, the balance still readable
+PASS D12 get_text goes through the same ID filter: "Statement for A/c [aadhaar-like hidden]"
+     owner sees: "Claude's page wants to download "report.csv". Allow?"
+PASS D13 a download needs the owner's Allow (denied here: blocked (owner did not allow))
+     owner sees: "Claude wants a screenshot of bank.example.in (it may show ID numbers or balances). Allow?"
+PASS D14 screenshot of a bank / government page needs the owner (pixels cannot be redacted)
+     owner sees: "Claude read bank.example.in (sensitive). Now it wants to open renew.example.com. Allow?"
+PASS D15 (the trap) "Continue" looks harmless: no money word, no form
+     owner sees: "Add renew.example.com to Claude's write list for 45 minutes? (Claude wants to press buttons)"
+PASS D15b an UNKNOWN site is read-only: even a plain-looking button needs the owner to add the site
+     owner sees: "Add renew.example.com to Claude's write list for 45 minutes? (Claude wants to press buttons)"
+PASS D16 ...but its hidden POST /api/v2/placeOrder is blocked at the network layer: tapped "Continue", but the page then tried POST /api/v2/placeOrder (money / order request)
+PASS D17 a plain link to /order?confirm=1 is blocked too
+     {"done":"tapped button \"Save note\"","url":"https://renew.example.com/"}
+PASS D18 an ordinary POST (save a note) still works
+PASS D19 an order fired by a 3-second timer AFTER Claude's tap is still blocked
+     owner sees: "Claude read epds.example.gov.in (sensitive). Now it wants to open protected.example.org. Allow?"
+PASS E1 Claude ticking a human check refused
+PASS E2 owner ticks it, Claude continues inside
+     owner sees: "Claude read bank.example.in (sensitive). Now it wants to open protected.example.org. Allow?"
+PASS E3 the same check 3 times: Claude stops and tells the owner (no endless loop)
+PASS F1 owner touches the screen: Claude pauses and STAYS paused (no silent auto-resume)
+PASS F2 ...and continues only after he taps RESUME
+PASS F3 "Stop Claude on the tablet" pressed on the PHONE works
+PASS F4 access switch OFF on a device
+PASS F5 screenshot (16 KB)
+PASS F6 relay audit keeps tool names / sites only, never page text or typed text
+PASS F9 Stop pressed while the network was DOWN still holds (local flag, needs no relay)
+PASS F10 daily action limit per device stops a looping agent
+     owner sees: "Claude read bank.example.in (sensitive). Now it wants to open news.example.com. Allow?"
+     owner sees: "Add news.example.com to Claude's write list for 45 minutes? (Claude wants to follow an action link)"
+PASS D20 unknown site: "Unsubscribe?u=77" link needs the owner, a javascript: link is refused, a plain link works
+PASS D20b an ordinary search link (?q=update+drivers) does not cost the owner a tap
+PASS F16 a grant older than 12 h is refused on the device (max delay if a "Disconnect" is hidden); a clock moved back stops Claude
+PASS F11 "what Claude did" list is hash-chained: 17 lines verify, a changed line is detected
+PASS F11b a fully rewritten list is caught by the heads the relay kept (9 anchors)
+PASS F12 every Claude token is bound to the device that approved it (tablet)
+PASS F13 owner removes the laptop: it is gone, Claude keeps working on the others
+PASS F7 "Disconnect Claude" on a device: all tokens dead at once
+PASS F7b ...and even a hacked relay replaying the old grant is refused by the devices (new signed epoch)
+PASS F8 an unpaired device is refused
+speed (local, not a phone on mobile data): 92 actions, average 99 ms
+
+79 passed, 0 failed

@@ -189,7 +189,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   answers.push(true); r = await tool('type', { device: 'phone', ref: ref(/Search fee type/), text: 'exam', submit: true });
   check(await phone.owner.page.evaluate(() => window.searched === 1), 'D4 ordinary search on that site still works (after one "Allow")');
   await tool('open', { device: 'phone', url: 'https://verify.example.in/' }); s = await tool('snapshot', { device: 'phone' });
-  check(s.elements.filter(l => /OTP: the owner types it/.test(l)).length >= 8, 'D5 OTP boxes found by shape (one-time-code, 6-digit numeric "PIN code"), not by name only');
+  check(s.elements.filter(l => /OTP: the owner types it/.test(l)).length === 7 && !s.elements.some(l => /PIN code/.test(l) && /OTP:/.test(l)), 'D5 OTP boxes found by shape (one-time-code, a row of 6 one-digit boxes); a postal "PIN code" box is not a secret');
   r = await tool('type', { device: 'phone', ref: ref(/Enter code/), text: '123456' }); check(/OTP box/.test(r.error || ''), 'D6 typing into them refused');
   r = await tool('type', { device: 'phone', ref: ref(/Remarks/), text: '482913' });
   const r6c = r; phone.owner.allowDigits('verify.example.in', 'Remarks'); answers.length = 0; answers.push(true);
