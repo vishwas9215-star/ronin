@@ -7,6 +7,7 @@ package main
 // and on the owner's laptop.
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"regexp"
@@ -112,9 +113,16 @@ func (a *app) selfTest(data string) {
 	// a page script opening a WebSocket / fetch to this PC never reaches it (the proxy checks the real address)
 	run("open", map[string]any{"url": "https://epds.ronin.example/"})
 	b0 := a.proxyBlocked.Load()
-	a.page.Call(`(function(){try{new WebSocket('ws://127.0.0.1:9/x')}catch(e){};try{new WebSocket('wss://localhost:9/x')}catch(e){};return {}})()`)
+	a.page.Call(`(function(){try{new WebSocket('wss://127.0.0.1:8443/x')}catch(e){};try{new WebSocket('wss://localhost:8443/x')}catch(e){};return {}})()`)
 	time.Sleep(2 * time.Second)
 	check(a.proxyBlocked.Load() > b0, "WebSocket to this PC refused by the proxy", a.proxyBlocked.Load()-b0)
+	// the proxy also stands alone: a direct check of its refusal (same code the browser goes through)
+	if c, err := a.proxy.Dial(context.Background(), "127.0.0.1:8443"); err == nil {
+		c.Close()
+		check(false, "proxy dial to this PC refused", "connected")
+	} else {
+		check(true, "proxy dial to this PC refused", nil)
+	}
 	r = run("press", map[string]any{"key": "tab"})
 	check(r["error"] == nil, "a key press", r)
 	d.OwnerTouched()
