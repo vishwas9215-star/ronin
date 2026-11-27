@@ -656,3 +656,13 @@ school sites), video download, Kids, study time, sync laptop <-> tablet. TV app 
 Windows code signing ("Unknown publisher"): Microsoft Artifact Signing $9.99/month, India individual eligibility not
 confirmed - owner's decision. Android developer verification: not in India yet (global 2027) - needs his identity.
 - Publish note: the background-song notification device test can flake once on the phone emulator; `gh run rerun <id> --failed` re-runs it and then the release.
+
+### 28 Nov 2026 — 5-model code review, two rounds of fixes
+- Round 1 found real holes (consent phishing, bearer-only device auth, double Save, relay panic under lock, weak
+  home-address check, money POST, postal PIN code refused). Round 2 (after fixes): 6.3 / 7.5 / 8.2 / 8.4 / 9.5; its valid
+  points were fixed too (commit "review round 2 fixes"). Each bug has a permanent test (Go relay_test, AgentRulesTest).
+- New owner buttons in the lab app: "Claude जोड़ें" (3-minute window, ONE Connect card) and "Claude हटाएँ" (Disconnect).
+- CI green (emulators + E2E); real tablet + phone 11/11 and linked to the (old) live relay.
+- The LIVE relay is still the old build. Updating it needs the server chat (re-run tools/relay-deploy/install.sh; an
+  update keeps data and keeps pairing closed). The new app is safe with the old relay (device refuses a card without
+  "Claude जोड़ें"). Never uninstall com.ronin.agentlab on the devices (its Keystore key = its paired identity).
