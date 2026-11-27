@@ -51,6 +51,9 @@ type app struct {
 	status    string
 	asked     string
 	testPages map[string]string
+	selftest  bool
+	curX      int32
+	curY      int32
 }
 
 func main() {
@@ -82,6 +85,8 @@ func main() {
 	a.drv.OnOwnerAsked = func(reason string) {
 		runOnUI(func() { a.asked = reason; a.refresh() })
 	}
+	a.lastInput = lastInputTick() // only input AFTER this moment counts as the owner's
+	a.selftest = *selftest
 	pSetTimer.Call(a.hwnd, 1, 300, 0)
 	if *selftest {
 		a.testPages = selfTestPages()
@@ -200,15 +205,24 @@ func (a *app) msg(hwnd, msg, wparam, lparam uintptr) (uintptr, bool) {
 	return 0, false
 }
 
-// watchOwner: the owner used the page (mouse / keys in this window, over the page) -> Claude pauses at once.
-// Claude's own input goes through the browser, not Windows, so it never counts here.
+// watchOwner: the owner used the page (a click, a key, the wheel in this window, over the page) -> Claude pauses
+// at once. Only moving the mouse across does not count. Claude's own input goes through the browser, not Windows,
+// so it never counts here.
 func (a *app) watchOwner() {
 	t := lastInputTick()
-	if t != a.lastInput {
+	x, y := cursorInClient(a.hwnd)
+	moved := x != a.curX || y != a.curY
+	a.curX, a.curY = x, y
+	clicked := false
+	for _, vk := range []uintptr{1, 2, 4} { // left, right, middle button: pressed since the last look
+		if r, _, _ := pGetAsyncKeyState.Call(vk); r&0x8001 != 0 {
+			clicked = true
+		}
+	}
+	if t != a.lastInput && !a.selftest { // (the self-test presses OwnerTouched itself)
 		a.lastInput = t
 		fg, _, _ := pGetForegroundWindow.Call()
-		_, y := cursorInClient(a.hwnd)
-		if fg == a.hwnd && y > a.barHeight() && a.drv != nil {
+		if fg == a.hwnd && y > a.barHeight() && a.drv != nil && (clicked || !moved) {
 			a.drv.OwnerTouched()
 		}
 	}

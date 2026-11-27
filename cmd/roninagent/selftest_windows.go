@@ -71,7 +71,8 @@ func (a *app) selfTest(data string) {
 	check(r["error"] == nil && strings.Contains(fmt.Sprint(r["title"]), "EPDS"), "open + isolated helper", r)
 	s := run("snapshot", nil)
 	refs := map[string]string{}
-	for _, l := range s["elements"].([]any) {
+	els, _ := s["elements"].([]any)
+	for _, l := range els {
 		if m := refRe.FindStringSubmatch(fmt.Sprint(l)); m != nil {
 			refs[strings.TrimSpace(m[3])] = m[1]
 		}

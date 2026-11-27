@@ -30,6 +30,7 @@ var (
 	pGetLastInputInfo    = user32.NewProc("GetLastInputInfo")
 	pGetForegroundWindow = user32.NewProc("GetForegroundWindow")
 	pGetCursorPos        = user32.NewProc("GetCursorPos")
+	pGetAsyncKeyState    = user32.NewProc("GetAsyncKeyState")
 	pScreenToClient      = user32.NewProc("ScreenToClient")
 	pSetTimer            = user32.NewProc("SetTimer")
 	pGetDpiForWindow     = user32.NewProc("GetDpiForWindow")
