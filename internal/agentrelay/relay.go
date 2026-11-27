@@ -783,7 +783,12 @@ func (r *Relay) pair(w http.ResponseWriter, req *http.Request) {
 	r.devices[sha(m.Key)] = &device{Name: m.Name, KeyHash: sha(m.Key), Pub: m.Pub}
 	r.save()
 	r.note(m.Name, "paired")
-	writeJSON(w, 200, map[string]any{"ok": true, "relay_pub": r.PublicKeyPEM()})
+	peers := map[string]string{}
+	for _, d := range r.devices {
+		peers[d.Name] = d.Pub
+	}
+	// the other devices' public keys are handed out only inside the pairing window the server's owner opened
+	writeJSON(w, 200, map[string]any{"ok": true, "relay_pub": r.PublicKeyPEM(), "peers": peers})
 }
 
 func (r *Relay) deviceOf(req *http.Request) *device {

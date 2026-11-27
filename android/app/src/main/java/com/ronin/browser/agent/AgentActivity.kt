@@ -17,7 +17,7 @@ import android.widget.TextView
  * Keeps the screen on while charging, so a tablet on its stand stays ready all day.
  */
 class AgentActivity : Activity() {
-    companion object { @Volatile var driver: AgentDriver? = null }
+    companion object { @Volatile var driver: AgentDriver? = null; @Volatile var link: AgentLink? = null }
 
     private lateinit var status: TextView
     private lateinit var web: AgentWebView
@@ -57,6 +57,40 @@ class AgentActivity : Activity() {
         driver = dr
         web.loadUrl("about:blank")
         refresh()
+        startLink(dr)
+    }
+
+    /** The link to the owner's relay: address + relay public key baked into the app (assets/agent/relay.json). */
+    private fun startLink(dr: AgentDriver) {
+        val lab = packageName.endsWith(".agentlab") && (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        var url = ""; var pub = ""
+        try { val j = org.json.JSONObject(assets.open("agent/relay.json").bufferedReader().use { it.readText() }); url = j.optString("url"); pub = j.optString("pub") } catch (_: Exception) {}
+        if (lab) { intent.getStringExtra("relayUrl")?.let { url = it }; intent.getStringExtra("relayPub")?.let { pub = it } }
+        if (url.isEmpty() || pub.isEmpty()) return
+        val autoApprove = lab && intent.getBooleanExtra("autoApprove", false) // CI end-to-end test only (debug lab app)
+        val tablet = android.os.Build.MODEL.equals("OPD2415", true) || resources.configuration.smallestScreenWidthDp >= 600
+        val prefs = getSharedPreferences("agent-link", MODE_PRIVATE)
+        val l = AgentLink(url, pub, if (tablet) "tablet" else "phone", prefs, dr) { text -> autoApprove || askApproval(text) }
+        link = l
+        kotlin.concurrent.thread {
+            if (!prefs.getBoolean("paired", false)) l.pair()
+            l.start()
+        }
+    }
+
+    /** The one-time "Connect Claude?" card: a fixed text, PRESS AND HOLD to allow (palm-friendly), 2 minutes to answer. */
+    private fun askApproval(text: String): Boolean {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        var ok = false
+        runOnUiThread {
+            val hold = Button(this).apply { this.text = "दबाकर रखें: Allow"; textSize = 20f; minHeight = (72 * resources.displayMetrics.density).toInt() }
+            val dlg = android.app.AlertDialog.Builder(this).setTitle(text).setView(hold)
+                .setNegativeButton("Deny") { _, _ -> latch.countDown() }.setOnCancelListener { latch.countDown() }.create()
+            hold.setOnLongClickListener { ok = true; dlg.dismiss(); latch.countDown(); true }
+            dlg.show()
+        }
+        latch.await(120, java.util.concurrent.TimeUnit.SECONDS)
+        return ok
     }
 
     private fun refresh() {
@@ -70,5 +104,5 @@ class AgentActivity : Activity() {
     }
 
     override fun onStop() { super.onStop(); CookieManager.getInstance().flush() }
-    override fun onDestroy() { if (driver?.web === web) driver = null; web.destroy(); super.onDestroy() }
+    override fun onDestroy() { if (driver?.web === web) { driver = null; link?.stop(); link = null }; web.destroy(); super.onDestroy() }
 }

@@ -90,6 +90,7 @@ jobs:
           working-directory: android
           script: |
             timeout 25m ./gradlew --no-daemon connectedLabDebugAndroidTest || echo failed > ../agent-tests-failed
+            sh ../tools/agentsim/ci-e2e.sh || echo failed > ../agent-tests-failed
             timeout 60 adb logcat -d -s RoninAgent > ../agent-log.txt || true
             grep -E 'TEST|MECH|blocked|refused|owner' ../agent-log.txt | tail -250 || true
             timeout 60 adb logcat -d -b crash > ../crash.txt || true
