@@ -56,7 +56,6 @@ class AgentDriver(
     @Volatile var taint: String? = null
     val idHosts: MutableSet<String> = ConcurrentHashMap.newKeySet()
     val readPages = ConcurrentHashMap<String, MutableSet<String>>()
-    val digitOk: MutableSet<String> = ConcurrentHashMap.newKeySet()
     val allowIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
     private val blockedActs: MutableSet<String> = ConcurrentHashMap.newKeySet()
     private val privateCache = ConcurrentHashMap<String, Boolean>()
@@ -276,6 +275,9 @@ class AgentDriver(
         if (stopped) return err("the owner pressed STOP on this device. Claude must wait until he turns Claude on again.")
         if ((paused || ownerHolding) && tool != "ask_owner") return err(if (paused) "the owner took over the screen. Claude waits until he taps RESUME." else "the owner is using the screen right now: wait and try again")
         // write-ahead journal: if Ronin died during this command, it is NEVER pressed again blindly
+        // done before (the answer was lost on the way, then the app restarted): the same answer again, never a second tap
+        if (journal.getString("j_$id", null) == "done") return journal.getString("r_$id", null)?.let { try { JSONObject(it) } catch (e: Exception) { null } }
+            ?: JSONObject().put("done", "this command already ran (answer kept on the device)")
         if (journal.getString("j_$id", null) == "started") {
             val t = journal.getString("lastTarget", "") ?: ""
             if (t.isNotEmpty()) blockedActs.add(t)
@@ -288,7 +290,13 @@ class AgentDriver(
         }
         if (tool in INPUT) journal.edit().putString("j_$id", "started").putString("lastTarget", "").commit() // on disk BEFORE the tap
         val r = try { doTool(tool, args) } catch (e: Throwable) { err((e.message ?: e.javaClass.simpleName).take(200)) }
-        if (tool in INPUT) journal.edit().putString("j_$id", "done").commit()
+        if (tool in INPUT) {
+            val ids = (journal.getString("ids", "") ?: "").split(',').filter { it.isNotEmpty() }.toMutableList()
+            ids.add(id)
+            val e = journal.edit().putString("j_$id", "done").putString("r_$id", r.toString().take(4000))
+            while (ids.size > 300) { val old = ids.removeAt(0); e.remove("j_$old").remove("r_$old") } // the last 300 inputs are kept
+            e.putString("ids", ids.joinToString(",")).commit()
+        }
         if (tool != "ask_owner") synchronized(done) { done[id] = r }
         log("$tool on ${host()}: ${if (r.has("error")) "refused" else "ok"}")
         if (slow() && tool in INPUT) Thread.sleep(600)
@@ -368,7 +376,7 @@ class AgentDriver(
         if (at.optBoolean("otp") || AgentRules.secretLabel(name) && AgentRules.looksLikeOtp(text)) return err("OTP box: the owner types the OTP. Call ask_owner.")
         if (at.optBoolean("captcha")) return err("CAPTCHA box: call ask_owner")
         if (at.optBoolean("covered")) return err("\"$name\" is covered by something else: refused")
-        if (AgentRules.looksLikeOtp(text) && "${host()}|$name" !in digitOk) return err("\"${text.length}-digit number\" looks like an OTP / PIN: the owner types it, or he allows digits in \"$name\" on this site.")
+        if (AgentRules.numberNeedsOwner(name, text, at.optBoolean("otpPage"))) return err("\"${text.replace(Regex("\\D"), "").length}-digit number\" looks like an OTP / PIN (this page asks for one): the owner types it. Call ask_owner.")
         val before = call("window.__roninAgent.value(${q(ref)})")
         if (before.optString("value") == text) return JSONObject().put("done", "already matched \"$name\"")
         val t0 = SystemClock.uptimeMillis()

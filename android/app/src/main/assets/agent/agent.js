@@ -44,7 +44,14 @@
     const ml = +A(el, 'maxlength') || 0, im = A(el, 'inputmode') || '';
     // split OTP: a row of 4-8 one-character boxes counts as ONE secret field (any one-time-code member taints all)
     if (ml === 1 && el.parentElement) { const sib = [...call(N.eqsa, el.parentElement, 'input')].filter(x => +A(x, 'maxlength') === 1); if (sib.length >= 4 && sib.length <= 8) return true; }
-    return /otp|one.?time|verification code|ओटीपी/i.test(label(el) + ' ' + (A(el, 'name') || '') + ' ' + (el.id || '')) || ((im === 'numeric' || el.type === 'tel') && ml >= 4 && ml <= 8 && /code|pin/i.test(label(el)));
+    return /otp|one.?time|verification code|ओटीपी/i.test(label(el) + ' ' + (A(el, 'name') || '') + ' ' + (el.id || '')) || ((im === 'numeric' || el.type === 'tel') && ml >= 4 && ml <= 8 && /code|pin/i.test(label(el)) && !POSTAL.test(label(el)));
+  }
+  // in India a "PIN code" is the postal code (EPDS forms have it): not a secret by itself
+  const POSTAL = /pin\s*-?\s*code|pincode|पिन\s*कोड|postal|zip/i;
+  // a page that asks for an OTP: any 4-8 digit number typed anywhere on it is the owner's
+  function otpPage() {
+    for (const el of call(N.qsa, document, 'input')) if (otpBox(el)) return true;
+    return /\botp\b|one.?time (password|code)|ओटीपी|verification code|code (has been |was )?sent/i.test(TXT(document.body || document.documentElement).slice(0, 20000));
   }
   // where the click would send data: the form it submits and that form's address
   function formOf(el) { const f = el.form || (call(N.closest, el, 'form')); return f ? { action: (f.action || ''), method: (f.method || 'get').toLowerCase() } : null; }
@@ -120,7 +127,7 @@
     while (w && w.frameElement) { const fr = R(w.frameElement); x += fr.left; y += fr.top; w = w.parent; }
     const f = formOf(el);
     return { x: Math.round(x), y: Math.round(y), kind: kind(el), name: label(el), fp: fp(el), href: el.tagName === 'A' ? (A(el, 'href') || '') : '', covered, coveredBy: covered && top ? label(top) || top.tagName : '',
-      password: kind(el) === 'input:password', otp: otpBox(el), money: moneyAction(el),
+      password: kind(el) === 'input:password', otp: otpBox(el), otpPage: otpPage(), money: moneyAction(el),
       submits: !!(f && (el.type === 'submit' || el.tagName === 'BUTTON' && (el.type || 'submit') === 'submit')), formAction: f ? f.action : '', formMethod: f ? f.method : '',
       captcha: !!call(N.closest, el, '.cf-turnstile,.g-recaptcha,.h-captcha') || /captcha/i.test(A(el, 'name') || '') };
   }

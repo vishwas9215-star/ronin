@@ -44,17 +44,25 @@ class AgentLink(
 ) {
     @Volatile var running = false
     @Volatile var online = false
+    private val lock = Any()            // one writer: session, sequence numbers and every POST /agent/out
     private var sid = ""
     private var k = ByteArray(0)
     private var seqIn = 0L
     private var seqOut = 0L
+    private var generation = 0          // Stop / Start: an old loop sees a new number and ends
     private val alias = "ronin-agent-$name"
+    private val worker = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "ronin-agent-work").apply { isDaemon = true } }
+    /** "Claude जोड़ें": only while the owner opened it on THIS device (3 minutes) may a Connect card show here. */
+    @Volatile var connectUntil = 0L
 
     private fun log(m: String) = Log.i("RoninAgent", "link: $m")
+    private fun now() = System.currentTimeMillis()
 
     // ---------- keys ----------
+    // the device's name tag at the relay. Not enough on its own: every hello is also signed by the Keystore key.
+    // (allowBackup=false: this file never leaves the device in a backup)
     private val secret: String get() = prefs.getString("deviceKey", null) ?: ByteArray(32).also { SecureRandom().nextBytes(it) }
-        .let { Base64.encodeToString(it, Base64.NO_WRAP or Base64.URL_SAFE) }.also { prefs.edit().putString("deviceKey", it).apply() }
+        .let { Base64.encodeToString(it, Base64.NO_WRAP or Base64.URL_SAFE) }.also { prefs.edit().putString("deviceKey", it).commit() }
 
     private fun signingKey(): PrivateKey {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -102,10 +110,10 @@ class AgentLink(
     }
 
     // ---------- HTTP ----------
-    private fun http(method: String, path: String, body: JSONObject? = null, timeoutMs: Int = 15_000): Pair<Int, String> {
+    private fun http(method: String, path: String, body: JSONObject? = null, timeoutMs: Int = 15_000, auth: Boolean = true): Pair<Int, String> {
         val c = URL(base + path).openConnection() as HttpURLConnection
         c.requestMethod = method; c.connectTimeout = 10_000; c.readTimeout = timeoutMs
-        c.setRequestProperty("Authorization", "Device $secret")
+        if (auth) c.setRequestProperty("Authorization", "Device $secret")
         if (body != null) { c.doOutput = true; c.setRequestProperty("Content-Type", "application/json"); c.outputStream.use { it.write(body.toString().toByteArray()) } }
         val code = c.responseCode
         val text = try { (if (code < 400) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() } ?: "" } catch (e: Exception) { "" }
@@ -113,52 +121,72 @@ class AgentLink(
         return code to text
     }
 
-    /** Registers this device while the server's owner has opened pairing. Saves the other devices' public keys. */
+    /** Registers this device while the server's owner has opened pairing. The relay must prove it is OURS first. */
     fun pair(): Boolean {
+        // is this our relay? (its public key is baked into the app) - checked before the device's name tag is sent.
+        // A man in the middle could still copy that page; he gains nothing: every hello needs the Keystore signature.
+        val (wc, wt) = try { http("GET", "/.well-known/ronin-relay.json", auth = false) } catch (e: Exception) { return false }
+        if (wc != 200 || JSONObject(wt).optString("pub").trim() != relayPubPem.trim()) { log("pair: NOT our relay"); return false }
         val (code, text) = http("POST", "/agent/pair", JSONObject().put("name", name).put("key", secret).put("pub", publicPem()))
         if (code != 200) { log("pair refused ($code)"); return false }
         val got = JSONObject(text).optString("relay_pub")
         if (got.trim() != relayPubPem.trim()) { log("pair: NOT our relay"); return false }
-        JSONObject(text).optJSONObject("peers")?.let { p -> for (n in p.keys()) if (n != name) rememberPeer(n, p.getString(n)) }
-        prefs.edit().putBoolean("paired", true).apply()
+        JSONObject(text).optJSONObject("peers")?.let { p -> for (n in p.keys()) if (n != name && prefs.getString("peer_$n", null) == null) rememberPeer(n, p.getString(n)) }
+        prefs.edit().putBoolean("paired", true).commit()
         return true
     }
 
-    private fun hello(): Boolean {
-        val gen = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1")) }
-        val eph = gen.generateKeyPair()
+    private fun hello(gen: Int): Boolean {
+        val eph = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1")) }.generateKeyPair()
         val nonce = ByteArray(16).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
         val my = Base64.encodeToString(rawPoint(eph.public as ECPublicKey), Base64.NO_WRAP)
-        val (code, text) = http("POST", "/agent/hello", JSONObject().put("nonce", nonce).put("ecdh", my))
+        // the secret names the device; the signature (non-exportable Keystore key) proves it is really this device
+        val (code, text) = http("POST", "/agent/hello", JSONObject().put("nonce", nonce).put("ecdh", my).put("sig", sign("devhello|$nonce|$my")))
         if (code != 200) { log("hello refused ($code)"); return false }
         val m = JSONObject(text)
         val theirs = m.getString("ecdh")
         if (!verify(relayPubPem, "relay|$nonce|$my|$theirs", m.getString("proof"))) { log("FAKE relay: stopping"); running = false; return false }
         val ka = KeyAgreement.getInstance("ECDH").apply { init(eph.private); doPhase(fromRaw(Base64.decode(theirs, Base64.DEFAULT), eph.public as ECPublicKey), true) }
-        k = java.security.MessageDigest.getInstance("SHA-256").digest(ka.generateSecret() + nonce.toByteArray())
-        sid = m.getString("session"); seqIn = 0; seqOut = 0
+        val key = java.security.MessageDigest.getInstance("SHA-256").digest(ka.generateSecret() + nonce.toByteArray())
+        // other devices: a NEW name is learnt only while the owner has "Claude जोड़ें" open here; a known one never changes
+        m.optJSONObject("peers")?.let { p -> for (n in p.keys()) if (n != name && prefs.getString("peer_$n", null) == null && now() < connectUntil) { rememberPeer(n, p.getString(n)); log("learnt peer $n") } }
+        // a "Disconnect Claude" pressed on another device while this one was offline
+        m.optJSONObject("epoch")?.let { applyEpoch(it.optString("by"), it.optLong("epoch"), it.optString("sig")) }
+        synchronized(lock) {
+            if (gen != generation) return false
+            sid = m.getString("session"); k = key; seqIn = 0; seqOut = 0
+        }
         send(JSONObject().put("hello", JSONObject().put("kind", name).put("app", "Ronin").put("foreground", true).put("rendering", true).put("key", prefs.getString("keyProtection", "?"))))
+        prefs.getString("pendingDisconnect", null)?.let { send(JSONObject(it)); prefs.edit().remove("pendingDisconnect").commit() }
+        if (now() < connectUntil) send(JSONObject().put("connectOpen", true))
         online = true
         log("online")
         return true
     }
 
-    private fun send(m: JSONObject) {
+    /** One writer: sequence number, MAC and POST under one lock; a failed POST is tried once more on the same session. */
+    private fun send(m: JSONObject): Boolean = synchronized(lock) {
         val f = m.toString(); seqOut++
-        http("POST", "/agent/out?s=$sid", JSONObject().put("f", f).put("seq", seqOut).put("mac", hmac(k, "$seqOut|$f")))
+        val body = JSONObject().put("f", f).put("seq", seqOut).put("mac", hmac(k, "$seqOut|$f"))
+        for (attempt in 0..1) {
+            try { val (c, _) = http("POST", "/agent/out?s=$sid", body); if (c in 200..299) return@synchronized true; if (c == 401) break } catch (e: Exception) { log("send: ${e.javaClass.simpleName}") }
+        }
+        online = false
+        false
     }
 
     // ---------- the loop ----------
     fun start() {
-        if (running) return
-        running = true
+        val gen = synchronized(lock) { if (running) return; running = true; ++generation }
         thread(name = "ronin-agent-link", isDaemon = true) {
             var backoff = 1000L
-            while (running) {
+            while (running && gen == generation) {
                 try {
-                    if (!online && !hello()) { Thread.sleep(backoff); backoff = minOf(backoff * 2, 30_000); continue }
+                    if (!online && !hello(gen)) { Thread.sleep(backoff); backoff = minOf(backoff * 2, 30_000); continue }
                     backoff = 1000
-                    val (code, text) = http("GET", "/agent/next?s=$sid", null, 35_000)
+                    val s = synchronized(lock) { sid }
+                    val (code, text) = http("GET", "/agent/next?s=$s", null, 35_000)
+                    if (!running || gen != generation) break // STOP pressed while waiting: nothing that arrived runs
                     when (code) {
                         200 -> handle(JSONObject(text))
                         204 -> {}
@@ -169,34 +197,56 @@ class AgentLink(
         }
     }
 
-    fun stop() { running = false }
+    fun stop() { synchronized(lock) { running = false; generation++ } ; online = false }
+
+    /** The owner tapped "Claude जोड़ें" here: for 3 minutes a Claude sign-in may ask him on THIS device. */
+    fun openConnectWindow() {
+        connectUntil = now() + 180_000
+        if (online) thread { send(JSONObject().put("connectOpen", true)) }
+    }
 
     private fun handle(fr: JSONObject) {
-        val f = fr.getString("f"); val seq = fr.getLong("seq")
-        if (seq <= seqIn || fr.getString("mac") != hmac(k, "$seq|$f")) { log("bad frame dropped"); return }
-        seqIn = seq
-        val c = JSONObject(f)
+        val f = fr.optString("f"); val seq = fr.optLong("seq", -1)
+        val c = synchronized(lock) {
+            if (seq <= seqIn || fr.optString("mac") != hmac(k, "$seq|$f")) { log("bad frame dropped"); return }
+            val parsed = try { JSONObject(f) } catch (e: Exception) { null }
+            if (parsed == null || parsed.optString("id").isEmpty() || parsed.optString("tool").isEmpty()) { log("bad command dropped"); return }
+            seqIn = seq // only a well-formed, authentic frame uses up its number
+            parsed
+        }
         val id = c.getString("id"); val tool = c.getString("tool"); val args = c.optJSONObject("args") ?: JSONObject()
-        val result = when (tool) {
-            "__approve" -> {
-                val text = "Connect Claude to your Ronin? Code ${args.optString("code")}. Devices: ${args.optString("scope")}"
-                val epoch = prefs.getLong("epoch", 0); val issued = System.currentTimeMillis()
-                if (!driver.stopped && approve(text)) JSONObject().put("ok", true).put("epoch", epoch).put("issued", issued)
-                    .put("sig", sign(listOf("approve", args.optString("nonce"), args.optString("client"), args.optString("redirect"), args.optString("challenge"), args.optString("scope"), args.optString("code"), epoch, issued).joinToString("|")))
-                else JSONObject().put("ok", false)
-            }
-            "__stop" -> { driver.stopped = true; JSONObject().put("ok", true) }
-            "__epoch" -> {
-                val by = args.optString("by"); val e = args.optLong("epoch"); val pub = prefs.getString("peer_$by", null)
-                if (pub != null && verify(pub, "epoch|$e", args.optString("sig")) && e > prefs.getLong("epoch", 0)) prefs.edit().putLong("epoch", e).apply()
-                JSONObject().put("ok", true)
-            }
-            else -> {
-                val why = grantProblem(c.optJSONObject("grant"))
-                if (why != null) JSONObject().put("error", why) else driver.run(id, tool, args)
+        when (tool) {
+            // the owner's STOP and a new epoch never wait behind a running command
+            "__stop" -> { driver.stopped = true; send(answer(id, JSONObject().put("ok", true))) }
+            "__epoch" -> { applyEpoch(args.optString("by"), args.optLong("epoch"), args.optString("sig")); send(answer(id, JSONObject().put("ok", true))) }
+            "__approve" -> worker.execute { send(answer(id, approveCard(args))) }
+            else -> worker.execute {
+                val result = try {
+                    if (!running) JSONObject().put("error", "the owner stopped Claude on this device")
+                    else grantProblem(c.optJSONObject("grant"))?.let { JSONObject().put("error", it) } ?: driver.run(id, tool, args)
+                } catch (t: Throwable) { JSONObject().put("error", (t.message ?: t.javaClass.simpleName).take(200)) }
+                send(answer(id, result))
             }
         }
-        send(JSONObject().put("id", id).put("result", result))
+    }
+
+    private fun answer(id: String, result: JSONObject) = JSONObject().put("id", id).put("result", result)
+
+    /** The one-time card. Never shown unless the owner opened "Claude जोड़ें" here a moment ago (one card per tap). */
+    private fun approveCard(args: JSONObject): JSONObject {
+        if (driver.stopped || now() >= connectUntil) { log("Connect card refused: \"Claude जोड़ें\" was not open here"); return JSONObject().put("ok", false) }
+        connectUntil = 0
+        val text = "Claude को आपके Ronin से जोड़ें? Code ${args.optString("code")} (Claude के page पर भी यही code होना चाहिए). Devices: ${args.optString("scope")}"
+        val epoch = prefs.getLong("epoch", 0); val issued = now()
+        return if (approve(text)) JSONObject().put("ok", true).put("epoch", epoch).put("issued", issued)
+            .put("sig", sign(listOf("approve", args.optString("nonce"), args.optString("client"), args.optString("redirect"), args.optString("challenge"), args.optString("scope"), args.optString("code"), epoch, issued).joinToString("|")))
+        else JSONObject().put("ok", false)
+    }
+
+    /** A new epoch, signed by one of the owner's devices (this one or a known peer): grants older than it are dead. */
+    private fun applyEpoch(by: String, e: Long, sig: String) {
+        val pub = if (by == name) publicPem() else prefs.getString("peer_$by", null) ?: return
+        if (verify(pub, "epoch|$e", sig) && e > prefs.getLong("epoch", 0)) { prefs.edit().putLong("epoch", e).commit(); log("epoch $e from $by") }
     }
 
     /** The owner's grant: signed by one of HIS paired devices, this device in scope, not revoked by "Disconnect Claude". */
@@ -210,12 +260,17 @@ class AgentLink(
         return if (verify(pub, text, g.optString("sig"))) null else "the grant's signature is wrong"
     }
 
-    /** "Disconnect Claude" pressed on THIS device: new epoch at once (no network needed), told to the others, signed. */
+    /**
+     * "Disconnect Claude" pressed on THIS device: a new epoch at once (no network needed), told to the others, signed.
+     * The epoch is at least the clock time, so it is always above any grant made before it on any device.
+     */
     fun disconnectClaude() {
-        val e = prefs.getLong("epoch", 0) + 1
-        prefs.edit().putLong("epoch", e).apply()
-        thread { try { send(JSONObject().put("disconnectClaude", true).put("epoch", e).put("sig", sign("epoch|$e"))) } catch (_: Exception) {} }
+        val e = maxOf(prefs.getLong("epoch", 0) + 1, now())
+        prefs.edit().putLong("epoch", e).commit()
+        val msg = JSONObject().put("disconnectClaude", true).put("epoch", e).put("sig", sign("epoch|$e"))
+        prefs.edit().putString("pendingDisconnect", msg.toString()).commit() // sent again at the next hello if this fails
+        thread { if (online && send(msg)) prefs.edit().remove("pendingDisconnect").commit() }
     }
 
-    fun rememberPeer(dev: String, pem: String) { prefs.edit().putString("peer_$dev", pem).apply() }
+    fun rememberPeer(dev: String, pem: String) { prefs.edit().putString("peer_$dev", pem).commit() }
 }

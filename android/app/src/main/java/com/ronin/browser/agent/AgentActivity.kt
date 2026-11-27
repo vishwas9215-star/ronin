@@ -44,6 +44,18 @@ class AgentActivity : Activity() {
         bar.addView(btn("RESUME", "agent-resume") { driver?.resume() })
         bar.addView(btn("STOP", "agent-stop") { driver?.ownerStop() })
         root.addView(bar)
+        // the owner's two Claude buttons: "Claude जोड़ें" opens a 3-minute window for ONE Connect card on this device
+        // (a stranger's Claude can never show a card); "Claude हटाएँ" disconnects Claude from all his devices.
+        val bar2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.rgb(9, 90, 98)) }
+        bar2.addView(btn("Claude जोड़ें", "agent-connect") {
+            link?.openConnectWindow()
+            status.post { status.text = "🔗 3 मिनट: अब Claude में Connect दबाएँ, फिर यहाँ Allow दबाकर रखें" }
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        bar2.addView(btn("Claude हटाएँ", "agent-disconnect") {
+            link?.disconnectClaude()
+            status.post { status.text = "⛔ Claude हटा दिया गया (सभी devices से)" }
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        root.addView(bar2)
         web = AgentWebView(this)
         root.addView(web, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
@@ -76,6 +88,7 @@ class AgentActivity : Activity() {
         kotlin.concurrent.thread {
             if (!prefs.getBoolean("paired", false)) l.pair()
             l.start()
+            if (autoApprove) l.openConnectWindow() // CI: the test stands in for the owner's tap
         }
     }
 

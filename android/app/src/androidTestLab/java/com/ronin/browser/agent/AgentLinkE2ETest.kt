@@ -78,14 +78,24 @@ class AgentLinkE2ETest {
             val challenge = b64url(MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray()))
             val q = "response_type=code&client_id=$client&redirect_uri=" + URLEncoder.encode("https://claude.ai/api/mcp/auth_callback", "UTF-8") +
                 "&code_challenge=$challenge&code_challenge_method=S256&state=s1"
-            val (ac, _, loc) = http("GET", "/authorize?$q")
-            assertEquals("authorize redirects back to Claude", 302, ac)
+            // the sign-in page shows the code and refreshes itself until the owner held Allow on the device
+            var (ac, page, loc) = http("GET", "/authorize?$q")
+            var n = 0
+            while (ac == 200 && n < 120) {
+                val next = Regex("url=(/authorize/wait\\?t=[^\"]+)").find(page)?.groupValues?.get(1) ?: break
+                Thread.sleep(500); n++
+                val r = http("GET", next); ac = r.first; page = r.second; loc = r.third
+            }
+            assertEquals("authorize redirects back to Claude: $page", 302, ac)
             val code = Regex("code=([^&]+)").find(loc ?: "")?.groupValues?.get(1)
             assertTrue("the device-signed Allow gave a code: $loc", code != null)
             val form = "grant_type=authorization_code&code=$code&client_id=$client&redirect_uri=" + URLEncoder.encode("https://claude.ai/api/mcp/auth_callback", "UTF-8") + "&code_verifier=$verifier"
             val (tc, tt, _) = http("POST", "/token", form, "application/x-www-form-urlencoded")
             assertEquals(200, tc)
             token = JSONObject(tt).getString("access_token")
+            // a second sign-in (a stranger's Claude, say) gets no card: the owner's tap was used up by the first one
+            val (sc, sp, _) = http("GET", "/authorize?$q")
+            assertTrue("no window = no card: $sp", sc == 200 && sp.contains("Claude जोड़ें") && !sp.contains("authorize/wait"))
 
             // ---- Claude works ----
             assertTrue(mcp("tools/list").second.getJSONObject("result").getJSONArray("tools").length() >= 16)

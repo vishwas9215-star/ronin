@@ -39,7 +39,7 @@ var Redirects = []string{"https://claude.ai/api/mcp/auth_callback", "https://cla
 
 type Config struct {
 	DataDir   string           // relay key, paired devices, tokens (hashed), audit log; mode 0600
-	Public    string           // https://host (no slash); empty = from the Host header
+	Public    string           // https://host (no slash); REQUIRED to serve (issuer, resource and token audience come from it, never from a Host header)
 	Now       func() time.Time // tests
 	ApproveOn []string         // devices asked "Connect Claude?" in this order
 }
@@ -76,11 +76,24 @@ type token struct {
 	Used   bool           `json:"used"`
 }
 
+// an open "Connect Claude" window: the owner tapped "Claude जोड़ें" on that device a moment ago (device-signed frame)
+type txn struct {
+	code0  string
+	exp    time.Time
+	loc    string // where to send the browser back (filled when the device answered)
+	cancel bool
+}
+
 type rotated struct {
 	pair   map[string]any
 	fam    string
 	client string
 	until  time.Time
+}
+
+type usedCode struct {
+	fam string
+	exp time.Time
 }
 
 type Relay struct {
@@ -93,13 +106,18 @@ type Relay struct {
 	pend     map[string]map[string]*pending // device -> id -> command
 	queues   map[string]chan struct{}       // one command at a time per device
 	clients  map[string][]string
+	regAt    map[string]time.Time
 	codes    map[string]map[string]any
 	access   map[string]*token // sha256(token) -> token
 	refresh  map[string]*token
 	rot      map[string]*rotated
 	anchors  map[string][]map[string]any
 	limits   map[string][]time.Time
-	pairOpen time.Time // new devices may register until then (opened by the server's owner only)
+	connect  map[string]time.Time // device -> until: the owner tapped "Claude जोड़ें" there (no window = no Connect card at all)
+	txns     map[string]*txn      // waiting "Connect Claude?" answers (the sign-in page polls them)
+	used     map[string]usedCode  // sha(code) -> family, so a code used twice kills what it gave
+	epochEv  map[string]any       // the latest signed "Disconnect Claude" (given to every device at its next hello)
+	pairOpen time.Time            // new devices may register until then (opened by the server's owner only)
 	audit    *os.File
 }
 
@@ -113,7 +131,8 @@ func New(cfg Config) (*Relay, error) {
 	r := &Relay{cfg: cfg, devices: map[string]*device{}, sessions: map[string]*session{}, byDev: map[string]*session{},
 		pend: map[string]map[string]*pending{}, queues: map[string]chan struct{}{}, clients: map[string][]string{},
 		codes: map[string]map[string]any{}, access: map[string]*token{}, refresh: map[string]*token{}, rot: map[string]*rotated{},
-		anchors: map[string][]map[string]any{}, limits: map[string][]time.Time{}}
+		anchors: map[string][]map[string]any{}, limits: map[string][]time.Time{}, connect: map[string]time.Time{},
+		txns: map[string]*txn{}, used: map[string]usedCode{}, regAt: map[string]time.Time{}}
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		return nil, err
 	}
@@ -160,9 +179,11 @@ func (r *Relay) PublicKeyPEM() string {
 }
 
 type saved struct {
-	Devices []*device         `json:"devices"`
-	Access  map[string]*token `json:"access"`
-	Refresh map[string]*token `json:"refresh"`
+	Devices []*device           `json:"devices"`
+	Access  map[string]*token   `json:"access"`
+	Refresh map[string]*token   `json:"refresh"`
+	Clients map[string][]string `json:"clients"` // Claude's registration survives a relay restart
+	Epoch   map[string]any      `json:"epoch,omitempty"`
 }
 
 func (r *Relay) load() {
@@ -183,11 +204,26 @@ func (r *Relay) load() {
 	if s.Refresh != nil {
 		r.refresh = s.Refresh
 	}
+	if s.Clients != nil {
+		r.clients = s.Clients
+	}
+	r.epochEv = s.Epoch
 }
 
 // save keeps paired devices and (hashed) tokens, so a relay restart never asks the owner again. Caller holds r.mu.
 func (r *Relay) save() {
-	s := saved{Access: r.access, Refresh: r.refresh}
+	now := r.cfg.Now()
+	for k, t := range r.access { // expired tokens are dropped, so the file (and this lock) stay small
+		if now.After(t.Exp) {
+			delete(r.access, k)
+		}
+	}
+	for k, t := range r.refresh {
+		if now.After(t.Exp) {
+			delete(r.refresh, k)
+		}
+	}
+	s := saved{Access: r.access, Refresh: r.refresh, Clients: r.clients, Epoch: r.epochEv}
 	for _, d := range r.devices {
 		s.Devices = append(s.Devices, d)
 	}
@@ -267,12 +303,7 @@ func (r *Relay) hit(key string) {
 	r.mu.Unlock()
 }
 
-func (r *Relay) base(req *http.Request) string {
-	if r.cfg.Public != "" {
-		return r.cfg.Public
-	}
-	return "https://" + req.Host
-}
+func (r *Relay) base(*http.Request) string { return r.cfg.Public }
 
 func verifySig(pubPEM, text, sigB64 string) bool {
 	blk, _ := pem.Decode([]byte(pubPEM))
@@ -377,6 +408,7 @@ func (r *Relay) Handler() http.Handler {
 	m.HandleFunc("/.well-known/oauth-authorization-server", r.asm)
 	m.HandleFunc("/register", r.register)
 	m.HandleFunc("/authorize", r.authorize)
+	m.HandleFunc("/authorize/wait", r.authorizeWait)
 	m.HandleFunc("/token", r.token)
 	m.HandleFunc("/mcp", r.mcp)
 	m.HandleFunc("/agent/pair", r.pair)
@@ -392,8 +424,11 @@ func (r *Relay) Handler() http.Handler {
 }
 
 func ip(req *http.Request) string {
+	// behind the server's own HTTPS front (same machine): the LAST address is the one the front saw; the
+	// earlier ones are whatever the caller wrote, so they never count (rate limits cannot be dodged)
 	if f := req.Header.Get("X-Forwarded-For"); f != "" && strings.HasPrefix(req.RemoteAddr, "127.0.0.1") {
-		return strings.TrimSpace(strings.Split(f, ",")[0])
+		p := strings.Split(f, ",")
+		return strings.TrimSpace(p[len(p)-1])
 	}
 	h := req.RemoteAddr
 	if i := strings.LastIndex(h, ":"); i > 0 {
@@ -438,9 +473,26 @@ func (r *Relay) register(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 	}
+	if len(ok) == 0 {
+		writeJSON(w, 400, map[string]any{"error": "invalid_redirect_uri"})
+		return
+	}
 	id := "c_" + rnd(12)
 	r.mu.Lock()
+	// a public form: registrations older than an hour that never got a token are forgotten (Claude's own stays)
+	inUse := map[string]bool{}
+	for _, t := range r.refresh {
+		inUse[t.Client] = true
+	}
+	for k := range r.clients {
+		if !inUse[k] && r.cfg.Now().Sub(r.regAt[k]) > time.Hour {
+			delete(r.clients, k)
+			delete(r.regAt, k)
+		}
+	}
 	r.clients[id] = ok
+	r.regAt[id] = r.cfg.Now()
+	r.save()
 	r.mu.Unlock()
 	writeJSON(w, 201, map[string]any{"client_id": id, "redirect_uris": ok, "token_endpoint_auth_method": "none"})
 }
@@ -472,19 +524,23 @@ func (r *Relay) authorize(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "wrong resource", 400)
 		return
 	}
-	back := func(params url.Values) {
+	back := func(params url.Values) string {
 		params.Set("state", q.Get("state"))
-		http.Redirect(w, req, redirect+"?"+params.Encode(), http.StatusFound)
+		return redirect + "?" + params.Encode()
 	}
 	r.mu.Lock()
+	// only a device where the owner just tapped "Claude जोड़ें" is asked (a stranger's Claude can never pop a card)
 	on := ""
 	online := r.onlineLocked()
 	for _, n := range r.cfg.ApproveOn {
 		for _, o := range online {
-			if n == o && on == "" {
+			if n == o && on == "" && r.cfg.Now().Before(r.connect[n]) {
 				on = n
 			}
 		}
+	}
+	if on != "" {
+		delete(r.connect, on) // one card per tap
 	}
 	var names []string
 	seen := map[string]bool{}
@@ -503,31 +559,82 @@ func (r *Relay) authorize(w http.ResponseWriter, req *http.Request) {
 	}
 	r.mu.Unlock()
 	if on == "" {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte("<p>Open Ronin on your tablet, phone or laptop to approve, then try again.</p>"))
+		r.note("oauth", "sign-in refused: no device has \"Claude जोड़ें\" open")
+		page(w, "<h2>पहले Ronin खोलें</h2><p>Tablet / phone पर Ronin Agent में <b>Claude जोड़ें</b> दबाएँ, फिर यहाँ दोबारा Connect करें.</p><p>Open Ronin on your tablet or phone, tap <b>Claude जोड़ें</b>, then connect again.</p>", "")
 		return
 	}
 	code0, nonce, scope := strings.ToUpper(rnd(3))[:4], rnd(16), strings.Join(names, ", ")
-	res := r.Call(on, "__approve", map[string]any{"nonce": nonce, "client": client, "redirect": redirect, "challenge": challenge, "scope": scope, "code": code0}, nil)
-	okv, _ := res["ok"].(bool)
-	sig, _ := res["sig"].(string)
-	epoch := num(res["epoch"])
-	issued := num(res["issued"])
-	text := strings.Join([]string{"approve", nonce, client, redirect, challenge, scope, code0, fmt.Sprint(epoch), fmt.Sprint(issued)}, "|")
-	if !okv || sig == "" || !verifySig(pub, text, sig) {
-		if okv {
-			r.note("oauth", "unsigned approval refused from "+on)
-		}
-		back(url.Values{"error": {"access_denied"}})
-		return
-	}
-	grant := map[string]any{"dev": on, "nonce": nonce, "client": client, "redirect": redirect, "challenge": challenge, "scope": scope, "code": code0, "epoch": epoch, "issued": issued, "sig": sig}
-	code := rnd(32)
+	t := rnd(16)
+	tx := &txn{code0: code0, exp: r.cfg.Now().Add(3 * time.Minute)}
 	r.mu.Lock()
-	r.codes[code] = map[string]any{"client": client, "dev": on, "challenge": challenge, "redirect": redirect, "aud": aud, "grant": grant, "exp": r.cfg.Now().Add(2 * time.Minute)}
+	for k, o := range r.txns {
+		if r.cfg.Now().After(o.exp) {
+			delete(r.txns, k)
+		}
+	}
+	r.txns[t] = tx
 	r.mu.Unlock()
-	r.note("owner", "connected Claude on "+on)
-	back(url.Values{"code": {code}})
+	go func() {
+		res := r.Call(on, "__approve", map[string]any{"nonce": nonce, "client": client, "redirect": redirect, "challenge": challenge, "scope": scope, "code": code0}, nil)
+		okv, _ := res["ok"].(bool)
+		sig, _ := res["sig"].(string)
+		epoch := num(res["epoch"])
+		issued := num(res["issued"])
+		text := strings.Join([]string{"approve", nonce, client, redirect, challenge, scope, code0, fmt.Sprint(epoch), fmt.Sprint(issued)}, "|")
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if tx.cancel || !okv || sig == "" || !verifySig(pub, text, sig) {
+			if okv && !tx.cancel {
+				r.note("oauth", "unsigned approval refused from "+on)
+			}
+			tx.loc = back(url.Values{"error": {"access_denied"}})
+			return
+		}
+		grant := map[string]any{"dev": on, "nonce": nonce, "client": client, "redirect": redirect, "challenge": challenge, "scope": scope, "code": code0, "epoch": epoch, "issued": issued, "sig": sig}
+		code := rnd(32)
+		r.codes[code] = map[string]any{"client": client, "dev": on, "challenge": challenge, "redirect": redirect, "aud": aud, "grant": grant, "exp": r.cfg.Now().Add(2 * time.Minute)}
+		r.note("owner", "connected Claude on "+on)
+		tx.loc = back(url.Values{"code": {code}})
+	}()
+	r.waitPage(w, t, code0)
+}
+
+// waitPage: the sign-in page shows the same 4-letter code as the card on the device and checks every 2 s.
+func (r *Relay) waitPage(w http.ResponseWriter, t, code0 string) {
+	page(w, fmt.Sprintf("<h2>Ronin पर Allow दबाकर रखें</h2><p>Card पर यही code होना चाहिए / the card must show this code:</p><p style=\"font-size:48px;letter-spacing:8px\"><b>%s</b></p><p>अलग code दिखे तो Deny दबाएँ।</p>", code0), "/authorize/wait?t="+t)
+}
+
+// authorizeWait: the browser comes back here until the owner answered on his device.
+func (r *Relay) authorizeWait(w http.ResponseWriter, req *http.Request) {
+	t := req.URL.Query().Get("t")
+	r.mu.Lock()
+	tx := r.txns[t]
+	if tx != nil && (tx.loc != "" || r.cfg.Now().After(tx.exp)) {
+		delete(r.txns, t)
+	}
+	r.mu.Unlock()
+	switch {
+	case tx == nil:
+		http.Error(w, "this sign-in is over: connect again", 404)
+	case tx.loc != "":
+		http.Redirect(w, req, tx.loc, http.StatusFound)
+	case r.cfg.Now().After(tx.exp):
+		page(w, "<p>समय खत्म: फिर से Connect करें / time is over, connect again.</p>", "")
+	default:
+		r.waitPage(w, t, tx.code0)
+	}
+}
+
+func page(w http.ResponseWriter, body, refresh string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
+	w.Header().Set("X-Frame-Options", "DENY")
+	meta := ""
+	if refresh != "" {
+		meta = fmt.Sprintf(`<meta http-equiv="refresh" content="2;url=%s">`, refresh)
+	}
+	fmt.Fprintf(w, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">%s<title>Ronin Agent</title></head><body style="font-family:sans-serif;text-align:center;padding:24px">%s</body></html>`, meta, body)
 }
 
 func num(v any) int64 {
@@ -598,21 +705,45 @@ func (r *Relay) exchange(f url.Values) map[string]any {
 	now := r.cfg.Now()
 	switch f.Get("grant_type") {
 	case "authorization_code":
+		ch := sha(f.Get("code"))
+		if u, ok := r.used[ch]; ok && now.Before(u.exp) { // a code used twice: what it gave is revoked (OAuth 2.1)
+			r.killFamilyLocked(u.fam)
+			r.note("oauth", "authorization code reused: family revoked")
+			return nil
+		}
 		c := r.codes[f.Get("code")]
 		delete(r.codes, f.Get("code"))
-		if c == nil || now.After(c["exp"].(time.Time)) || c["client"] != f.Get("client_id") || c["redirect"] != f.Get("redirect_uri") || sha(f.Get("code_verifier")) != c["challenge"] {
+		v := f.Get("code_verifier")
+		if c == nil || now.After(c["exp"].(time.Time)) || c["client"] != f.Get("client_id") || c["redirect"] != f.Get("redirect_uri") || len(v) < 43 || len(v) > 128 || sha(v) != c["challenge"] {
 			return nil
 		}
 		if res := f.Get("resource"); res != "" && res != c["aud"] {
 			return nil
 		}
-		return r.issueLocked(c["client"].(string), c["dev"].(string), c["aud"].(string), "", c["grant"].(map[string]any))
+		fam := rnd(8)
+		for k, u := range r.used {
+			if now.After(u.exp) {
+				delete(r.used, k)
+			}
+		}
+		r.used[ch] = usedCode{fam: fam, exp: now.Add(10 * time.Minute)}
+		return r.issueLocked(c["client"].(string), c["dev"].(string), c["aud"].(string), fam, c["grant"].(map[string]any))
 	case "refresh_token":
 		h := sha(f.Get("refresh_token"))
+		for k, o := range r.rot {
+			if now.After(o.until.Add(30 * 24 * time.Hour)) {
+				delete(r.rot, k)
+			}
+		}
 		if old := r.rot[h]; old != nil {
-			// an honest retry (bad mobile network) never used the new pair; if it was used, this old token was stolen
+			if old.client != f.Get("client_id") {
+				return nil // someone else's request never revokes anything
+			}
+			// an honest retry (bad mobile network) never used the new pair (neither its access nor its refresh
+			// token); if any of it was used, this old token was stolen
 			fresh := r.access[sha(old.pair["access_token"].(string))]
-			if now.Before(old.until) && old.client == f.Get("client_id") && fresh != nil && !fresh.Used {
+			freshR := r.refresh[sha(old.pair["refresh_token"].(string))]
+			if now.Before(old.until) && fresh != nil && !fresh.Used && freshR != nil {
 				return old.pair
 			}
 			r.killFamilyLocked(old.fam)
@@ -620,10 +751,10 @@ func (r *Relay) exchange(f url.Values) map[string]any {
 			return nil
 		}
 		t := r.refresh[h]
-		delete(r.refresh, h)
 		if t == nil || now.After(t.Exp) || t.Client != f.Get("client_id") {
-			return nil
+			return nil // checked BEFORE anything is deleted
 		}
+		delete(r.refresh, h)
 		pair := r.issueLocked(t.Client, t.Dev, t.Aud, t.Fam, t.Grant)
 		r.rot[h] = &rotated{pair: pair, fam: t.Fam, client: t.Client, until: now.Add(2 * time.Minute)}
 		return pair
@@ -792,8 +923,15 @@ func (r *Relay) pair(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "pairing is closed", 403)
 		return
 	}
-	for h, d := range r.devices { // a re-paired device replaces its old key
+	for h, d := range r.devices { // a name is never taken over: replacing needs <data>/repair holding that name (server only)
 		if d.Name == m.Name {
+			b, _ := os.ReadFile(filepath.Join(r.cfg.DataDir, "repair"))
+			if strings.TrimSpace(string(b)) != m.Name {
+				r.note(m.Name, "re-pair refused (already paired)")
+				http.Error(w, "already paired: the server owner must allow a re-pair", 409)
+				return
+			}
+			os.Remove(filepath.Join(r.cfg.DataDir, "repair"))
 			delete(r.devices, h)
 		}
 	}
@@ -822,11 +960,17 @@ func (r *Relay) hello(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "not paired", 401)
 		return
 	}
-	var m struct{ Nonce, Ecdh string }
+	var m struct{ Nonce, Ecdh, Sig string }
 	json.NewDecoder(req.Body).Decode(&m)
 	raw, err := base64.StdEncoding.DecodeString(m.Ecdh)
 	if err != nil || len(m.Nonce) < 16 {
 		http.Error(w, "bad hello", 400)
+		return
+	}
+	// the secret alone is not enough: the device's non-exportable Keystore key signs this hello
+	if !verifySig(d.Pub, "devhello|"+m.Nonce+"|"+m.Ecdh, m.Sig) {
+		r.note(d.Name, "hello without the device's signature refused")
+		http.Error(w, "not paired", 401)
 		return
 	}
 	devPub, err := ecdh.P256().NewPublicKey(raw)
@@ -854,9 +998,16 @@ func (r *Relay) hello(w http.ResponseWriter, req *http.Request) {
 	for id, p := range r.pend[d.Name] { // unanswered commands go again, same ids (the device answers each id once)
 		r.sendLocked(d.Name, id, p)
 	}
+	peers := map[string]string{}
+	for _, o := range r.devices {
+		peers[o.Name] = o.Pub
+	}
+	ev := r.epochEv
 	r.mu.Unlock()
 	r.note(d.Name, "online")
-	writeJSON(w, 200, map[string]any{"session": s.id, "ecdh": myPub, "proof": base64.StdEncoding.EncodeToString(sig)})
+	// peers: the device takes a NEW name only while the owner has "Claude जोड़ें" open on it, never replaces one;
+	// epoch: the latest signed "Disconnect Claude", so a device that was offline when it was pressed learns it now
+	writeJSON(w, 200, map[string]any{"session": s.id, "ecdh": myPub, "proof": base64.StdEncoding.EncodeToString(sig), "peers": peers, "epoch": ev})
 }
 
 func (r *Relay) sessionOf(req *http.Request) *session {
@@ -919,7 +1070,10 @@ func (r *Relay) out(w http.ResponseWriter, req *http.Request) {
 	s.seqIn = fr.Seq
 	r.mu.Unlock()
 	var m map[string]any
-	json.Unmarshal([]byte(fr.F), &m)
+	if json.Unmarshal([]byte(fr.F), &m) != nil {
+		http.Error(w, "bad frame", 400)
+		return
+	}
 	switch {
 	case m["hello"] != nil:
 		if h, ok := m["hello"].(map[string]any); ok {
@@ -927,9 +1081,20 @@ func (r *Relay) out(w http.ResponseWriter, req *http.Request) {
 			s.info = h
 			r.mu.Unlock()
 		}
-	case m["anchor"] != nil:
+	case m["connectOpen"] != nil:
+		// the owner tapped "Claude जोड़ें" on this device: for 3 minutes a Claude sign-in may show him the card here
 		r.mu.Lock()
-		r.anchors[s.dev] = append(r.anchors[s.dev], m["anchor"].(map[string]any))
+		r.connect[s.dev] = r.cfg.Now().Add(3 * time.Minute)
+		r.mu.Unlock()
+		r.note(s.dev, "owner opened Connect")
+	case m["anchor"] != nil:
+		a, ok := m["anchor"].(map[string]any)
+		if !ok {
+			http.Error(w, "bad anchor", 400)
+			return
+		}
+		r.mu.Lock()
+		r.anchors[s.dev] = append(r.anchors[s.dev], a)
 		if len(r.anchors[s.dev]) > 1000 {
 			r.anchors[s.dev] = r.anchors[s.dev][1:]
 		}
@@ -940,6 +1105,11 @@ func (r *Relay) out(w http.ResponseWriter, req *http.Request) {
 	case m["disconnectClaude"] != nil:
 		r.mu.Lock()
 		r.access, r.refresh, r.rot = map[string]*token{}, map[string]*token{}, map[string]*rotated{}
+		r.codes, r.connect = map[string]map[string]any{}, map[string]time.Time{} // codes not yet exchanged die too
+		for _, tx := range r.txns {
+			tx.cancel = true
+		}
+		r.epochEv = map[string]any{"by": s.dev, "epoch": m["epoch"], "sig": m["sig"]}
 		r.save()
 		var others []string
 		for n := range r.byDev {

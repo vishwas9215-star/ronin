@@ -45,6 +45,7 @@ class AgentRulesTest {
         assertNull(g("POST", "https://renew.example.com/api/notes", true))
         assertNull(g("GET", "https://renew.example.com/orders", true))                      // reading the order book is fine
         assertNotNull(g("POST", "https://web.dhan.co/api/anything", true))                  // money site: no POST from Claude's input
+        assertNotNull(g("POST", "https://web.dhan.co/api/anything", false))                 // ... nor from anything else
         assertNotNull(g("GET", "http://192.168.1.1/x", false))
         assertNotNull(AgentRules.guard("GET", "https://paste.example.net/?d=" + "A".repeat(40), true, true, noMoney, "bank.example.in", "bank.example.in"))
     }
@@ -61,6 +62,41 @@ class AgentRulesTest {
         assertFalse(AgentRules.secretInputType(0x00000003))  // phone
         assertTrue(AgentRules.secretLabel("Enter OTP"))
         assertTrue(AgentRules.secretLabel("ओटीपी डालें"))
+    }
+
+    // Review 28 Nov 2026 (5 models): each bug they found keeps a test.
+    @Test fun oddSpellingsOfHomeAddressesAreCaught() {
+        for (h in listOf("2130706433", "0x7f.1", "0177.0.0.1", "127.1", "0x7f000001", "::ffff:127.0.0.1", "[::ffff:c0a8:0101]", "::1", "fd00::5", "fe80::1",
+                "0.0.0.0", "192.168.1.1.", "router.local", "nas.home.arpa", "100.100.1.1", "224.0.0.1", "999.1.1.1", "", "::", "64:ff9b::7f00:1"))
+            assertTrue(h, AgentRules.isPrivateHost(h))
+        for (h in listOf("example-1.com", "8.8.8.8", "epds.example.gov.in", "2606:4700::1111", "fc.example.com", "dhan.co"))
+            assertFalse(h, AgentRules.isPrivateHost(h))
+        assertNotNull(AgentRules.openRefusal("http://2130706433/", noMoney, emptyMap(), null))
+        assertNotNull(AgentRules.openRefusal("http://[::ffff:127.0.0.1]/", noMoney, emptyMap(), null))
+    }
+
+    @Test fun moneySitesGetNoWritesEvenWithoutClaudesTap() {
+        // a page script fires the order later (no Claude input in the last 2 s): still blocked
+        assertNotNull(AgentRules.guard("POST", "https://web.dhan.co/api/v3/exec?m=1", true, false, noMoney, null, "web.dhan.co"))
+        assertNotNull(AgentRules.guard("PUT", "https://api.zerodha.com/x", false, false, noMoney, null, "kite.zerodha.com"))
+        assertNull(AgentRules.guard("GET", "https://web.dhan.co/holdings", true, false, noMoney, null, "web.dhan.co"))
+        assertNotNull("empty host is refused", AgentRules.guard("GET", "http:///x", true, false, noMoney, null, ""))
+        assertNull("data: never leaves the device", AgentRules.guard("GET", "data:text/plain,hi", false, false, noMoney, null, ""))
+    }
+
+    @Test fun pincodesYearsAndCountsCanBeTyped() {
+        // no taps any more: an EPDS pincode / year / count must not be refused as an "OTP"
+        assertFalse(AgentRules.secretLabel("Pin code"))
+        assertFalse(AgentRules.secretLabel("PIN Code of school"))
+        assertFalse(AgentRules.secretLabel("पिनकोड"))
+        assertFalse(AgentRules.secretLabel("पिन कोड"))
+        assertTrue(AgentRules.secretLabel("UPI PIN"))
+        assertTrue(AgentRules.secretLabel("Enter MPIN"))
+        assertTrue(AgentRules.secretLabel("पिन डालें"))
+        assertFalse(AgentRules.numberNeedsOwner("Pin code", "228001", otpPage = false))
+        assertFalse(AgentRules.numberNeedsOwner("Year of joining", "2014", otpPage = false))
+        assertTrue(AgentRules.numberNeedsOwner("Remarks", "482913", otpPage = true))   // a page that asks for an OTP
+        assertTrue(AgentRules.numberNeedsOwner("UPI PIN", "4829", otpPage = false))
     }
 
     @Test fun linksAndRedaction() {

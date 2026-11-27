@@ -16,6 +16,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -35,6 +38,7 @@ type fakeDevice struct {
 	seqIn        int64
 	handle       func(tool string, args map[string]any) map[string]any
 	forgeApprove bool
+	helloReply   map[string]any
 	stop         chan struct{}
 	wg           sync.WaitGroup
 }
@@ -81,12 +85,19 @@ func (d *fakeDevice) hello() int {
 	eph, _ := ecdh.P256().GenerateKey(rand.Reader)
 	nonce := rnd(16)
 	my := base64.StdEncoding.EncodeToString(eph.PublicKey().Bytes())
-	res, b := d.req("POST", "/agent/hello", map[string]string{"nonce": nonce, "ecdh": my})
+	res, b := d.req("POST", "/agent/hello", map[string]string{"nonce": nonce, "ecdh": my, "sig": d.sign("devhello|" + nonce + "|" + my)})
 	if res.StatusCode != 200 {
 		return res.StatusCode
 	}
-	var m map[string]string
-	json.Unmarshal(b, &m)
+	var mm map[string]any
+	json.Unmarshal(b, &mm)
+	d.helloReply = mm
+	m := map[string]string{}
+	for k, v := range mm {
+		if s, ok := v.(string); ok {
+			m[k] = s
+		}
+	}
 	if !verifySig(d.relayPub, strings.Join([]string{"relay", nonce, my, m["ecdh"]}, "|"), m["proof"]) {
 		return -1 // fake relay
 	}
@@ -162,14 +173,24 @@ func (d *fakeDevice) loop() {
 func (d *fakeDevice) close() { close(d.stop); d.wg.Wait() }
 
 type env struct {
-	r   *Relay
-	srv *httptest.Server
-	now time.Time
-	mu  sync.Mutex
+	r        *Relay
+	srv      *httptest.Server
+	now      time.Time
+	mu       sync.Mutex
+	devs     map[string]*fakeDevice
+	lastPage string
+}
+
+func (e *env) device(t *testing.T, name string) *fakeDevice {
+	d := newDevice(t, e.srv.URL, name)
+	e.mu.Lock()
+	e.devs[name] = d
+	e.mu.Unlock()
+	return d
 }
 
 func newEnv(t *testing.T) *env {
-	e := &env{now: time.Now()}
+	e := &env{now: time.Now(), devs: map[string]*fakeDevice{}}
 	r, err := New(Config{DataDir: t.TempDir(), Now: func() time.Time { e.mu.Lock(); defer e.mu.Unlock(); return e.now }})
 	if err != nil {
 		t.Fatal(err)
@@ -187,8 +208,23 @@ func noRedirect() *http.Client {
 	return &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }
 
-// connect runs Claude's whole sign-in and returns the access + refresh tokens.
+// connect: the owner taps "Claude जोड़ें" on the tablet, then Claude's whole sign-in runs; returns the tokens.
 func (e *env) connect(t *testing.T) (string, string, string) {
+	e.openOn(t, "tablet")
+	return e.signIn(t)
+}
+
+func (e *env) openOn(t *testing.T, name string) {
+	e.mu.Lock()
+	d := e.devs[name]
+	e.mu.Unlock()
+	if d == nil || d.send(map[string]any{"connectOpen": true}) != 204 {
+		t.Fatal("connectOpen")
+	}
+}
+
+// signIn runs Claude's sign-in: register, authorize (the page waits for the owner), token.
+func (e *env) signIn(t *testing.T) (string, string, string) {
 	res, _ := http.Post(e.srv.URL+"/register", "application/json", strings.NewReader(`{"redirect_uris":["https://claude.ai/api/mcp/auth_callback","https://claude.ai/other"]}`))
 	var reg map[string]any
 	json.NewDecoder(res.Body).Decode(&reg)
@@ -202,6 +238,17 @@ func (e *env) connect(t *testing.T) (string, string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	body, _ := io.ReadAll(a.Body)
+	for i := 0; a.StatusCode == 200 && i < 100; i++ { // the waiting page refreshes itself (meta refresh) every 2 s
+		mm := regexp.MustCompile(`url=(/authorize/wait\?t=[^"]+)`).FindStringSubmatch(string(body))
+		if mm == nil {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+		a, _ = noRedirect().Get(e.srv.URL + mm[1])
+		body, _ = io.ReadAll(a.Body)
+	}
+	e.lastPage = string(body)
 	loc, _ := url.Parse(a.Header.Get("Location"))
 	code := loc.Query().Get("code")
 	if code == "" {
@@ -241,7 +288,7 @@ func TestSignInToolsAndSafety(t *testing.T) {
 		t.Fatal("no token must be 401")
 	}
 	// a device cannot pair while pairing is closed
-	tab := newDevice(t, e.srv.URL, "tablet")
+	tab := e.device(t, "tablet")
 	if c := tab.pairAndHello(); c != 403 {
 		t.Fatalf("pairing closed: %d", c)
 	}
@@ -313,7 +360,7 @@ func TestSignInToolsAndSafety(t *testing.T) {
 func TestForgedApprovalIsRefused(t *testing.T) {
 	e := newEnv(t)
 	e.r.OpenPairing(time.Minute)
-	tab := newDevice(t, e.srv.URL, "tablet")
+	tab := e.device(t, "tablet")
 	tab.forgeApprove = true
 	if c := tab.pairAndHello(); c != 200 {
 		t.Fatal(c)
@@ -364,5 +411,181 @@ func TestStateSurvivesRestart(t *testing.T) {
 	r2, _ := New(Config{DataDir: dir})
 	if r2.PublicKeyPEM() != pub || r2.DevicePubs()["phone"] == "" {
 		t.Fatal("relay key and paired devices must survive a restart")
+	}
+}
+
+// Review 28 Nov (5 models): every bug they found gets a permanent test.
+func TestStrangerClaudeCannotPopACard(t *testing.T) {
+	e := newEnv(t)
+	e.r.OpenPairing(time.Minute)
+	tab := e.device(t, "tablet")
+	asked := 0
+	tab.handle = func(tool string, _ map[string]any) map[string]any { return map[string]any{"done": tool} }
+	if tab.pairAndHello() != 200 {
+		t.Fatal("pair")
+	}
+	tab.loop()
+	defer tab.close()
+	_ = asked
+	// no "Claude जोड़ें" on any device: the sign-in gets a page, the device is never asked
+	if at, _, _ := e.signIn(t); at != "" || !strings.Contains(e.lastPage, "Claude जोड़ें") {
+		t.Fatal("no window = no card, no token")
+	}
+	// with the window: the page shows the same code as the card, and the window is used up by one sign-in
+	if at, _, _ := e.connect(t); at == "" {
+		t.Fatal("owner opened Connect: should work")
+	}
+	if at, _, _ := e.signIn(t); at != "" {
+		t.Fatal("one card per tap")
+	}
+}
+
+func TestPairingCannotTakeOverANameAndHelloNeedsTheDeviceKey(t *testing.T) {
+	e := newEnv(t)
+	e.r.OpenPairing(time.Minute)
+	tab := e.device(t, "tablet")
+	if tab.pairAndHello() != 200 {
+		t.Fatal("pair")
+	}
+	thief := newDevice(t, e.srv.URL, "tablet")
+	if c := thief.pairAndHello(); c != 409 {
+		t.Fatalf("a second 'tablet' must be refused: %d", c)
+	}
+	// the secret alone (e.g. from a backup) is not enough: hello must be signed by the device's own key
+	copyCat := newDevice(t, e.srv.URL, "tablet")
+	copyCat.secret, copyCat.relayPub = tab.secret, tab.relayPub
+	if c := copyCat.hello(); c != 401 {
+		t.Fatalf("hello with a stolen secret but another key: %d", c)
+	}
+	// the server owner can allow one re-pair by name
+	os.WriteFile(filepath.Join(e.r.cfg.DataDir, "repair"), []byte("tablet\n"), 0o600)
+	if c := thief.pairAndHello(); c != 200 {
+		t.Fatalf("allowed re-pair: %d", c)
+	}
+	if c := newDevice(t, e.srv.URL, "tablet").pairAndHello(); c != 409 {
+		t.Fatal("the repair permission is used once")
+	}
+}
+
+func TestCodeReuseAndDisconnect(t *testing.T) {
+	e := newEnv(t)
+	e.r.OpenPairing(time.Minute)
+	tab := e.device(t, "tablet")
+	if tab.pairAndHello() != 200 {
+		t.Fatal("pair")
+	}
+	tab.loop()
+	defer tab.close()
+	// a code used twice revokes what it gave
+	e.openOn(t, "tablet")
+	res, _ := http.Post(e.srv.URL+"/register", "application/json", strings.NewReader(`{"redirect_uris":["https://claude.ai/api/mcp/auth_callback"]}`))
+	var reg map[string]any
+	json.NewDecoder(res.Body).Decode(&reg)
+	client := reg["client_id"].(string)
+	verifier := rnd(32) + rnd(8)
+	q := url.Values{"response_type": {"code"}, "client_id": {client}, "redirect_uri": {Redirects[0]}, "code_challenge": {sha(verifier)}, "code_challenge_method": {"S256"}, "state": {"s"}}
+	a, _ := noRedirect().Get(e.srv.URL + "/authorize?" + q.Encode())
+	body, _ := io.ReadAll(a.Body)
+	var loc *url.URL
+	for i := 0; i < 100; i++ {
+		mm := regexp.MustCompile(`url=(/authorize/wait\?t=[^"]+)`).FindStringSubmatch(string(body))
+		if mm == nil {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+		a, _ = noRedirect().Get(e.srv.URL + mm[1])
+		body, _ = io.ReadAll(a.Body)
+		if a.StatusCode == 302 {
+			loc, _ = url.Parse(a.Header.Get("Location"))
+			break
+		}
+	}
+	if loc == nil || !strings.Contains(string(e.r.cfg.Public), "http") {
+		t.Fatal("no redirect")
+	}
+	code := loc.Query().Get("code")
+	form := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {client}, "redirect_uri": {Redirects[0]}, "code_verifier": {verifier}}
+	r1, _ := http.PostForm(e.srv.URL+"/token", form)
+	var tok map[string]any
+	json.NewDecoder(r1.Body).Decode(&tok)
+	at, _ := tok["access_token"].(string)
+	if c, _ := e.mcp(at, "tools/list", nil); c != 200 {
+		t.Fatal("token works")
+	}
+	if r2, _ := http.PostForm(e.srv.URL+"/token", form); r2.StatusCode != 400 {
+		t.Fatal("second use of a code")
+	}
+	if c, _ := e.mcp(at, "tools/list", nil); c != 401 {
+		t.Fatal("a reused code revokes the tokens it gave")
+	}
+	// a wrong client never destroys someone's refresh token
+	at, rt, client := e.connect(t)
+	if w, _ := http.PostForm(e.srv.URL+"/token", url.Values{"grant_type": {"refresh_token"}, "refresh_token": {rt}, "client_id": {"c_other"}}); w.StatusCode != 400 {
+		t.Fatal("wrong client")
+	}
+	if ok, _ := http.PostForm(e.srv.URL+"/token", url.Values{"grant_type": {"refresh_token"}, "refresh_token": {rt}, "client_id": {client}}); ok.StatusCode != 200 {
+		t.Fatal("the real client's refresh still works")
+	}
+	// Disconnect: tokens die, and the signed epoch is given to every device at its next hello
+	tab.send(map[string]any{"disconnectClaude": true, "epoch": 1795800000001, "sig": tab.sign("epoch|1795800000001")})
+	if c, _ := e.mcp(at, "tools/list", nil); c != 401 {
+		t.Fatal("disconnect kills tokens")
+	}
+	ph := e.device(t, "phone")
+	if ph.pairAndHello() != 200 {
+		t.Fatal("phone")
+	}
+	ev, _ := ph.helloReply["epoch"].(map[string]any)
+	if ev == nil || ev["by"] != "tablet" || !verifySig(tab.pubPEM(), "epoch|1795800000001", fmt.Sprint(ev["sig"])) {
+		t.Fatalf("epoch at hello: %v", ph.helloReply["epoch"])
+	}
+	if _, ok := ph.helloReply["peers"].(map[string]any)["tablet"]; !ok {
+		t.Fatal("peers at hello")
+	}
+}
+
+func TestBadFramesNeverFreezeTheRelay(t *testing.T) {
+	e := newEnv(t)
+	e.r.OpenPairing(time.Minute)
+	tab := e.device(t, "tablet")
+	if tab.pairAndHello() != 200 {
+		t.Fatal("pair")
+	}
+	if c := tab.send(map[string]any{"anchor": "not an object"}); c != 400 {
+		t.Fatalf("bad anchor: %d", c)
+	}
+	done := make(chan bool)
+	go func() { e.r.DevicePubs(); done <- true }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the relay lock was left held")
+	}
+}
+
+func TestForwardedForUsesTheFrontsAddress(t *testing.T) {
+	q, _ := http.NewRequest("GET", "/", nil)
+	q.RemoteAddr = "127.0.0.1:5555"
+	q.Header.Set("X-Forwarded-For", "1.1.1.1, 9.9.9.9")
+	if ip(q) != "9.9.9.9" {
+		t.Fatal(ip(q))
+	}
+	q.RemoteAddr = "8.8.8.8:1"
+	if ip(q) != "8.8.8.8" {
+		t.Fatal("not behind the front: header ignored")
+	}
+}
+
+func TestClaudeRegistrationSurvivesRestart(t *testing.T) {
+	dir := t.TempDir()
+	r1, _ := New(Config{DataDir: dir, Public: "https://x"})
+	srv := httptest.NewServer(r1.Handler())
+	res, _ := http.Post(srv.URL+"/register", "application/json", strings.NewReader(`{"redirect_uris":["https://claude.ai/api/mcp/auth_callback"]}`))
+	var reg map[string]any
+	json.NewDecoder(res.Body).Decode(&reg)
+	srv.Close()
+	r2, _ := New(Config{DataDir: dir, Public: "https://x"})
+	if _, ok := r2.clients[reg["client_id"].(string)]; !ok {
+		t.Fatal("client lost on restart")
 	}
 }

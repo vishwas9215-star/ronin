@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"roninbrowser/internal/agentrelay"
@@ -31,6 +32,9 @@ func main() {
 	if *pub {
 		fmt.Print(r.PublicKeyPEM())
 		return
+	}
+	if *public == "" || !strings.HasPrefix(*public, "https://") && !strings.HasPrefix(*public, "http://10.0.2.2") {
+		log.Fatal("-public https://relay.example is required (the sign-in addresses and token audience come from it)")
 	}
 	if *pair > 0 {
 		r.OpenPairing(*pair)
