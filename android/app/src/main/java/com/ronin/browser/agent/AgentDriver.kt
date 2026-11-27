@@ -268,7 +268,7 @@ class AgentDriver(
 
     // ================= tools =================
     private val INPUT = setOf("click", "type", "select", "upload", "press")
-    private val READ = setOf("snapshot", "screenshot", "get_text", "scroll", "back", "tabs", "wait_for", "ask_owner", "open")
+    private val READ = setOf("snapshot", "screenshot", "get_text", "scroll", "back", "tabs", "wait_for", "ask_owner", "open", "downloads", "set_pace")
 
     /** One command from Claude. [id] makes it idempotent: the same id never runs twice. */
     fun run(id: String, tool: String, args: JSONObject): JSONObject {
@@ -309,7 +309,9 @@ class AgentDriver(
         "screenshot" -> screenshot()
         "wait_for" -> waitFor(a.optString("text"), a.optInt("seconds", 10))
         "ask_owner" -> askOwner(a.optString("reason"))
-        "upload" -> err("upload comes in the next pilot step")
+        "upload" -> err("upload comes in the next pilot step: ask the owner to attach the file")
+        "downloads" -> JSONObject().put("downloads", org.json.JSONArray()).put("note", "downloads are not used in the pilot")
+        "set_pace" -> { pace = if (a.optString("pace") == "slow") "slow" else "normal"; JSONObject().put("done", "pace $pace") }
         else -> err("unknown tool $tool")
     }
 
