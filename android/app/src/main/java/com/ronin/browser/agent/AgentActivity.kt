@@ -66,6 +66,7 @@ class AgentActivity : Activity() {
         var url = ""; var pub = ""
         try { val j = org.json.JSONObject(assets.open("agent/relay.json").bufferedReader().use { it.readText() }); url = j.optString("url"); pub = j.optString("pub") } catch (_: Exception) {}
         if (lab) { intent.getStringExtra("relayUrl")?.let { url = it }; intent.getStringExtra("relayPub")?.let { pub = it } }
+        if (lab && intent.getBooleanExtra("noLink", false)) return // device tests: never talk to the owner's real relay
         if (url.isEmpty() || pub.isEmpty()) return
         val autoApprove = lab && intent.getBooleanExtra("autoApprove", false) // CI end-to-end test only (debug lab app)
         val tablet = android.os.Build.MODEL.equals("OPD2415", true) || resources.configuration.smallestScreenWidthDp >= 600

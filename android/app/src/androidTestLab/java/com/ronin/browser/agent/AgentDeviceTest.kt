@@ -26,7 +26,9 @@ class AgentDeviceTest {
     private var snap = JSONObject()
 
     @Before fun start() {
-        scenario = ActivityScenario.launch(AgentActivity::class.java)
+        // never link to the owner's real relay from a test
+        val i = android.content.Intent(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext, AgentActivity::class.java).putExtra("noLink", true)
+        scenario = ActivityScenario.launch(i)
         var w = 0
         while (AgentActivity.driver == null && w < 100) { Thread.sleep(100); w++ }
         d = AgentActivity.driver ?: error("agent did not start")
