@@ -247,8 +247,9 @@ class AgentDriver(
                     onThread(h) {
                         ic.beginBatchEdit()
                         ic.performContextMenuAction(android.R.id.selectAll)
-                        if (!slow()) ic.commitText(text, 1) else ic.commitText("", 1)
-                        ic.endBatchEdit()
+                        val c = if (!slow()) ic.commitText(text, 1) else ic.commitText("", 1)
+                        ic.endBatchEdit() // returns "still in a batch?", not success
+                        c
                     }
                 } catch (t: Throwable) { log("input connection: ${t.javaClass.simpleName}"); false }
                 if (ok && slow()) for (ch in text) { onThread(h) { ic.commitText(ch.toString(), 1) }; Thread.sleep(60L + (Math.random() * 90).toLong()) }
