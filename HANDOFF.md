@@ -295,6 +295,34 @@ messages too; keep browser safety (danger sites, Family Filter, "Is this a scam?
 - Notification ✕ Close sent "pause": the next 1 s media check showed a paused card again (the 'flaky' song test).
   Now Close sends "stop" (pause + let go). Owner said "हाँ, V3.12.0 publish करो" 16:26.
 
+## Ronin Agent pilot (branch `claude/agent-pilot`, 27-28 Nov 2026; NOTHING published, main untouched)
+Claude works inside the owner's own Ronin. Design + 5-AI ratings: tools/agentsim/DESIGN.md (v6.1, panel avg 9.68),
+presentation https://claude.ai/artifact/19M2Q9K6QkQxkyyKhgYRPx, simulation `node tools/agentsim/simulate.js` (79/79).
+- **Owner decisions (27 Nov 23:10-23:26):** no time limit, no taps for work (only the one-time Connect), pace slow/normal
+  by chat, logins persist; refused things are told in chat. Tablet at home on charger = always-on Claude browser.
+- **Relay (live):** https://relay-16-4-152-212.sslip.io (server 16.4.152.212, installed by the server chat from
+  tools/relay-deploy/RELAY-HANDOFF.md; systemd roninrelay, 127.0.0.1:8790, MemoryMax 96M). Code internal/agentrelay +
+  cmd/roninrelay (Go, no deps): OAuth 2.1 + PKCE + DCR (exact claude.ai/claude.com callbacks), RFC 9728/8414, tokens
+  bound to the device-signed grant, refresh rotation with 2-min grace + theft = family revoked; devices via HTTPS long
+  poll (/agent/pair|hello|next|out), relay ECDSA proof + ECDH P-256 session + per-frame HMAC/seq. Its public key is
+  baked in android/app/src/main/assets/agent/relay.json. Pairing window: /var/lib/roninrelay/pair-until (24 h from
+  install). NOTE: re-pairing a name replaces its key (tighten in the next relay update: refuse when already paired).
+- **Android (flavor `lab` = separate app com.ronin.agentlab "Ronin Agent Lab"):** agent/AgentRules (pure, unit-tested),
+  AgentDriver (tools on a WebView: real taps dispatchTouchEvent, typing via the engine's InputConnection on ITS thread
+  -> key events -> read back verified/unverified, native EditorInfo password check, network guard in
+  shouldInterceptRequest + shouldOverrideUrlLoading + service-worker client, journal "uncertain", owner pause/stop),
+  AgentLink (Keystore P-256, grant/epoch checks), AgentActivity (banner DONE/RESUME/STOP, press-and-hold Connect card,
+  keeps screen on, lab shows above the lock screen). Debug/lab builds use android/lab-debug.keystore (test key only).
+- **Tests:** AgentRulesTest (unit), AgentDeviceTest (11, emulator + REAL phone OK (11 tests)), AgentLinkE2ETest
+  (CI: test plays Claude -> real Go relay -> lab app; tools/agentsim/ci-e2e.sh). Workflow .github/workflows/agent.yml
+  (push to claude/agent-*): release **agent-lab** = RoninAgentLab.apk, RoninAgentLab-test.apk, roninrelay-linux-*.
+- **Laptop helper:** tools/devicehelper -> C:\Ronin Ecosystem\scrcpy\ronin-device-helper4.exe via 9-claude-device-helper.bat
+  (started by Claude with computer use: Explorer double-click works). Keeps phone 192.168.1.183 + tablet 192.168.1.45
+  on Wi-Fi adb; runs only qa\jobs\*.job (info/install from qa\apks/test/screenshot/log/launch/uninstall lab only).
+- **Status 28 Nov 00:15:** tablet lab app paired + online with the real relay. Owner adds the connector in the morning:
+  Claude -> Customize -> Connectors -> + -> Add custom connector -> `https://relay-16-4-152-212.sslip.io/mcp` -> Connect
+  -> tablet card "दबाकर रखें: Allow". Next: Windows agent, independent QA (AI Fiesta panel), then real use.
+
 ## 3.14.5 (branch `claude/v3.14.3`; NOT published)
 - TV (owner 21 Nov 21:02-21:04, after installing Ronin TV 3.14.4 by 5-install-on-tv.bat: "TV बहुत अच्छा चल रहा है"):
   no white "▶ in a circle" before songs (WebChromeClient.getDefaultVideoPoster = 1 px see-through; TvTest);
