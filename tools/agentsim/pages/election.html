@@ -1,0 +1,9 @@
+<!doctype html><meta charset="utf-8"><title>EPDS - प्रपत्र-2 (copy for the test)</title>
+<h1>प्रपत्र-2: कर्मचारी विवरण</h1>
+<form onsubmit="event.preventDefault();window.saves=(window.saves||0)+1;document.getElementById('ok').textContent='Saved '+window.saves+': '+document.getElementById('nm').value+' / '+document.getElementById('desig').value+' / photo '+(document.getElementById('ph').files[0]||{}).name">
+<label for="nm">Employee name</label><input id="nm" name="name">
+<label for="eid">Employee ID</label><input id="eid" name="eid">
+<label for="desig">Designation</label><select id="desig"><option value="">--</option><option>Assistant Teacher</option><option>Head Master</option></select>
+<label for="mob">Mobile</label><input id="mob" name="mobile">
+<label for="ph">Upload photo</label><input id="ph" type="file">
+<button type="submit">Save</button></form><p id="ok"></p><p>Teacher Aadhaar on file: 1234 5678 9012</p>

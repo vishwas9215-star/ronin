@@ -12,7 +12,7 @@ import android.webkit.WebView
  * keepPlaying is on, the engine is never told that the window went away.
  */
 @SuppressLint("ViewConstructor")
-class RoninWebView(context: Context) : WebView(context) {
+open class RoninWebView(context: Context) : WebView(context) {
     @Volatile var keepPlaying = false
     /** When his finger last touched this page (Claude's Paste button may read the clipboard only right after a tap). */
     @Volatile var lastTouchAt = 0L

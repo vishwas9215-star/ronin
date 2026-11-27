@@ -32,6 +32,9 @@ android {
     productFlavors {
         create("browser") { dimension = "app"; applicationId = "com.ronin.browser" }
         create("phone") { dimension = "app"; applicationId = "com.ronin.phone" }
+        // pilot of the Ronin Agent (Claude works in the owner's own browser): a separate app, so tests on his real
+        // phone / tablet never touch his Ronin or its data
+        create("lab") { dimension = "app"; applicationId = "com.ronin.agentlab" }
     }
 
     signingConfigs {

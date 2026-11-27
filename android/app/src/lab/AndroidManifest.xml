@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Ronin Agent Lab: the pilot of "Claude works inside the owner's own Ronin" (27 Nov 2026). Separate app id
+         (com.ronin.agentlab), so tests on the real phone / tablet never touch Ronin Browser or its data. -->
+    <application>
+        <activity
+            android:name="com.ronin.browser.agent.AgentActivity"
+            android:exported="true"
+            android:label="Ronin Agent Lab"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

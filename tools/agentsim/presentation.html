@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ronin में Claude — डिज़ाइन</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@500;800&family=Mukta:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+/* VOICE: a newspaper graphics desk explaining one decision to one owner, calm and exact.
+   IDEA: a signal-flow board — commands travel from Claude through the relay to his own devices and are stopped at the gates.
+   PICTURE: the live flow board itself; six scenarios replay the real simulation step by step.
+   COLOUR and TYPE: pale pink ground, ink, teal for "allowed", claret for "stopped", amber-free; Libre Franklin + Mukta (Devanagari).
+   LAYOUT: decision and numbers first, the board large, then ratings, rules, plan, limits, all tests, full technical text. */
+:root{color-scheme:light dark;--bg:light-dark(#ffe3dc,#1c1512);--card:light-dark(#fff6f2,#271d19);--ink:light-dark(#1a1817,#f6e9e4);--mute:light-dark(#5d5450,#bfaea7);--line:light-dark(#e8c4ba,#45342e);--ok:light-dark(#0d7680,#3fb6bf);--no:light-dark(#990f3d,#ff6f93);--own:light-dark(#5a4fb0,#a99cff)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 'Mukta','Libre Franklin',system-ui,sans-serif;overflow-x:clip}
+h1,h2,h3{font-family:'Libre Franklin','Mukta',sans-serif;line-height:1.1;text-wrap:balance;margin:0 0 .5em}
+h1{font-size:clamp(30px,4.6vw,48px);font-weight:800}h2{font-size:clamp(24px,3vw,32px);font-weight:800;margin-top:.2em}h3{font-size:19px}
+.band{padding:clamp(24px,4vw,56px) max(5vw,16px)}.wrap{max-width:1240px;margin:0 auto}
+.alt{background:var(--card);border-block:1px solid var(--line)}
+p{max-width:70ch}.mute{color:var(--mute)}.small{font-size:14px}
+.nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin:18px 0 6px}
+.num{border-top:3px solid var(--ink);padding-top:8px}.num b{display:block;font:800 clamp(30px,4vw,42px)/1 'Libre Franklin',sans-serif;white-space:nowrap}.num span{font-size:15px;color:var(--mute)}
+.decide{border:2px solid var(--ok);background:var(--card);padding:16px 18px;margin-top:18px;max-width:880px}
+.decide ol{margin:.3em 0 0;padding-inline-start:1.3em}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 14px}
+button{font:600 16px 'Mukta',sans-serif;min-height:44px;padding:8px 14px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:6px;cursor:pointer}
+button[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button:focus-visible{outline:3px solid var(--ok);outline-offset:2px}
+.board{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px;align-items:start}
+.fig{position:relative;min-height:400px;background:var(--card);border:1px solid var(--line)}.fig>svg{position:absolute;inset:0;width:100%;height:100%}
+.step{background:var(--card);border:1px solid var(--line);padding:16px;min-height:400px;display:flex;flex-direction:column;gap:10px}
+.chip{display:inline-block;font-weight:800;font-size:14px;padding:2px 10px;border-radius:99px;color:#fff;white-space:nowrap}
+.chip.ok{background:var(--ok)}.chip.no{background:var(--no)}.chip.own{background:var(--own)}
+.ctrl{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
+.prog{font-size:14px;color:var(--mute)}
+.steps{margin:0;padding-inline-start:1.2em;font-size:15px;color:var(--mute)}.steps li.on{color:var(--ink);font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:16px}th,td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;vertical-align:top}
+td.n,th.n{text-align:right;white-space:nowrap}
+.bar{height:10px;background:var(--line);position:relative;min-width:80px}.bar i{position:absolute;inset:0 auto 0 0;background:var(--ok)}.bar i.lo{background:var(--no)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:22px}
+ul.rules{padding-inline-start:1.1em}ul.rules li{margin:.35em 0}
+details{background:var(--card);border:1px solid var(--line);padding:10px 14px;margin:10px 0}summary{cursor:pointer;font-weight:600;min-height:32px}
+pre{white-space:pre-wrap;font-size:13px;line-height:1.45;max-height:70vh;overflow:auto}
+.nav{display:flex;gap:16px;overflow-x:auto;font-size:15px;padding:10px max(5vw,16px);border-bottom:1px solid var(--line)}.nav a{flex:none;color:var(--ink)}
+pre,.scroll{overflow-x:auto}code{overflow-wrap:anywhere}html{scroll-padding-top:20px}
+@media(max-width:860px){.board{grid-template-columns:minmax(0,1fr)}.step{min-height:0}.fig{min-height:340px}}
+@media(max-width:600px){table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:10px}.stack td{display:flow-root;border:0;padding:3px 0;padding-inline-start:8em;text-align:start}.stack td::before{content:attr(data-l);float:inline-start;width:7.5em;margin-inline-start:-8em;white-space:normal}.stack td:empty{display:none}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style><script>new MutationObserver(()=>{for(const c of document.querySelectorAll('.stack td:not([data-l])')){let i=0,p=c;while(p=p.previousElementSibling)i+=p.colSpan;c.dataset.l=c.closest('table').rows[0].cells[i]?.textContent||''}}).observe(document,{childList:true,subtree:true})</script></head>
+<body>
+<nav class="nav"><a href="#sim">Simulation</a><a href="#ratings">Rating</a><a href="#rules">नियम</a><a href="#plan">पायलट</a><a href="#limits">सीमाएँ</a><a href="#tests">79 जाँचें</a><a href="#tech">पूरा डिज़ाइन</a></nav>
+
+<section class="band"><div class="wrap">
+<h1>Claude आपके अपने Ronin में काम करेगा — डिज़ाइन तैयार, 5 AI की औसत rating 9.68</h1>
+<p>Claude आपके laptop, tablet और phone पर Ronin के एक “Claude” tab में आपके अपने login और internet से पेज खोलेगा, पढ़ेगा और फ़ॉर्म भरेगा। आप देखते रहेंगे और कभी भी रोक सकेंगे। पासवर्ड, OTP, human check और पैसे वाला हर काम सिर्फ़ आप करेंगे।</p>
+<div class="nums">
+<div class="num"><b>9.68</b><span>5 AI की औसत rating (v6), 4 ने 9.5 से ज़्यादा दी</span></div>
+<div class="num"><b>5 / 5</b><span>AI ने कहा: पायलट बनाइए (नकली data के साथ)</span></div>
+<div class="num"><b>79 / 79</b><span>simulation जाँचें पास, लगातार 3 बार</span></div>
+<div class="num"><b>7.4 → 9.68</b><span>6 बार सुधार (v1 से v6.1)</span></div>
+</div>
+<div class="decide">
+<h3>आपका फ़ैसला चाहिए</h3>
+<p>आपकी शर्त थी: 10 में 9.5 से ज़्यादा, तभी बनाना। औसत 9.68 है। एक AI (GPT) ने 9.0 दिया — उसका कहना है कि कुछ बातें असली device पर ही साबित होंगी; पाँचों AI इस पर सहमत हैं। इसलिए सुझाव: <b>पहले छोटा पायलट</b>, live publish नहीं।</p>
+<ol><li><b>Step 0 (सबसे सस्ता, सबसे ज़रूरी):</b> छोटा relay + Claude connector जोड़ना, और जाँचना कि आपके Claude (web, desktop, phone) पर चलता है।</li><li>फिर laptop वाला हिस्सा, फिर tablet/phone।</li><li>सिर्फ़ नकली data और trading सिर्फ़ पढ़ना — असली EPDS/पैसे वाला काम पायलट पास होने के बाद।</li></ol>
+</div>
+</div></section>
+
+<section class="band alt" id="sim"><div class="wrap">
+<h2>Simulation: Claude कैसे जुड़ता है और कहाँ रोका जाता है</h2>
+<p class="mute small">यह मेरे computer पर चली असली simulation के कदम हैं (Chromium ने tablet/laptop/phone की जगह काम किया)। एक scenario चुनिए, फिर “चलाइए”।</p>
+<div class="tabs" id="tabs"></div>
+<div class="board">
+<div class="fig"><svg id="map" role="img" aria-label="Claude, relay और आपके तीन device का चित्र"></svg></div>
+<div class="step" aria-live="polite">
+<div class="prog" id="prog"></div>
+<h3 id="stitle"></h3>
+<div id="schip"></div>
+<p id="stext" style="margin:0"></p>
+<ol class="steps" id="slist"></ol>
+<div class="ctrl"><button id="prev">← पिछला</button><button id="play">▶ चलाइए</button><button id="next">अगला →</button></div>
+</div>
+</div>
+</div></section>
+
+<section class="band" id="ratings"><div class="wrap">
+<h2>हर दौर में rating कैसे बढ़ी</h2>
+<p>v1, v2 सिर्फ़ एक AI (Claude Sonnet) से पूछे गए थे। आपके कहने पर v3 से AI Fiesta के Compare mode में पाँच AI एक साथ: Qwen 3.8 Max, Gemini 3.1 Pro, DeepSeek V4.1, GPT-6.1 Sol, Claude Opus 5.5।</p>
+<div class="scroll"><table class="stack"><thead><tr><th>दौर</th><th class="n">Qwen</th><th class="n">Gemini</th><th class="n">DeepSeek</th><th class="n">Opus</th><th class="n">GPT</th><th class="n">औसत</th><th>औसत (10 में)</th></tr></thead><tbody id="rt"></tbody></table></div>
+<p class="small mute">हर दौर में AI ने जो कमियाँ बताईं, वे design और simulation दोनों में ठीक की गईं; हर सुधार का एक स्थायी test बना।</p>
+</div></section>
+
+<section class="band alt" id="rules"><div class="wrap two">
+<div><h2>Claude क्या कभी नहीं करेगा</h2><ul class="rules">
+<li>पासवर्ड या OTP टाइप करना — 4–8 अंकों वाला कोई भी नंबर भी नहीं (जब तक आप उस खाने को अनुमति न दें, जैसे Pincode)।</li>
+<li>Human check / CAPTCHA टिक करना — वह आप करेंगे, अपने ही device और internet से।</li>
+<li>Broker, bank, UPI site पर कोई tap या typing — सिर्फ़ आपके चुने पेज (जैसे positions) पढ़ना।</li>
+<li>Buy, Sell, Exit, Pay, Transfer — छिपे तरीक़े से भेजा गया order भी network पर रोका जाता है।</li>
+<li>नई site पर बिना आपकी अनुमति फ़ॉर्म भरना या button दबाना।</li>
+<li>संवेदनशील पेज पढ़ने के बाद data दूसरी site पर ले जाना (आपकी मंज़ूरी के बिना)।</li>
+<li>घर के network या server के पते खोलना।</li>
+</ul></div>
+<div><h2>आपको क्या करना होगा (कम से कम tap)</h2><ul class="rules">
+<li>एक बार Claude में connector जोड़ना (मैं चरण बताऊँगा)।</li>
+<li>Tablet पर “Claude को जोड़ें?” कार्ड को दबाकर रखना — हथेली से भी हो जाएगा। हर 12 घंटे में एक बार।</li>
+<li>नई लिखने वाली site (जैसे EPDS) को 45 मिनट के लिए जोड़ना — एक दबाव।</li>
+<li>Login, OTP, human check खुद करना, फिर बड़ा “DONE” बटन।</li>
+<li>रोकना हो तो बड़ा “Stop” या screen छू लेना — Claude तब तक रुका रहेगा जब तक आप “RESUME” न दबाएँ।</li>
+<li>लक्ष्य: 20 रिकॉर्ड की EPDS entry में 5 से कम tap।</li>
+</ul></div>
+</div></section>
+
+<section class="band" id="plan"><div class="wrap">
+<h2>पायलट योजना और अनुमान</h2>
+<div class="scroll"><table class="stack"><thead><tr><th>चरण</th><th>क्या बनेगा</th><th>जाँच (पास होना ज़रूरी)</th><th>अनुमान</th></tr></thead><tbody>
+<tr><td>0</td><td>छोटा relay + Claude connector</td><td>आपके Claude के web, desktop, phone तीनों पर जुड़ता है</td><td>1 सेशन</td></tr>
+<tr><td>1</td><td>पूरा relay + सारी जाँचें CI में (मौजूदा server service को छुए बिना)</td><td>79 जाँचें हर build पर</td><td>1 सेशन</td></tr>
+<tr><td>2</td><td>Laptop (Windows) Agent</td><td>21 खतरनाक पेज 21/21, Hindi नाम 20/20, crash पर दोबारा Save नहीं</td><td>2–3 सेशन</td></tr>
+<tr><td>3</td><td>Tablet + Phone (एक ही APK)</td><td>Wi-Fi↔mobile 20/20, रात भर चालू, battery ≤3%/घंटा</td><td>3–4 सेशन</td></tr>
+<tr><td>4</td><td>स्वतंत्र QA जाँच → आपको दिखाना</td><td>publish सिर्फ़ आपके version-नाम वाले शब्दों पर</td><td>1 सेशन</td></tr>
+</tbody></table></div>
+<p class="small mute">समय अनुमान पक्का नहीं है; असली device पर जो निकलेगा उससे बदल सकता है। सबसे ज़रूरी हिस्सा (step 0) पहले।</p>
+</div></section>
+
+<section class="band alt" id="limits"><div class="wrap">
+<h2>ईमानदार सीमाएँ</h2>
+<ul class="rules">
+<li><b>Human check की गारंटी कोई browser नहीं दे सकता।</b> Ronin सबसे अच्छा मौका देता है: आपका असली browser, profile और internet, कोई automation flag नहीं, और check आप खुद करते हैं।</li>
+<li><b>9.5+ असली device पर ही साबित होगा</b> — पाँचों AI सहमत: Android पर tap/typing, battery killer, Turnstile की दर कागज़ पर साबित नहीं होती।</li>
+<li><b>Link और secret-खाने की पहचान “अनुमान” है, गारंटी नहीं।</b> असली गारंटी: पैसे वाली site पर कोई input नहीं, नई site पर बिना आपकी अनुमति कोई फ़ॉर्म नहीं, पासवर्ड/OTP Claude के पास कभी नहीं।</li>
+<li><b>EPDS (शिक्षकों का data):</b> data Claude (Anthropic) तक जाता है — जैसे अभी chat में जाता है। चालू करने से पहले आप निर्वाचन कार्यालय के नियम और data कानून (DPDP Act 2023) देख लें; तब तक ID छिपे रहेंगे।</li>
+<li><b>Relay server अगर hack हो जाए</b> तो वह गुज़रता data पढ़ सकता है, पर device के नियम नहीं तोड़ सकता और 12 घंटे बाद आपकी अनुमति खत्म।</li>
+<li>Google sign-in जैसी कुछ sites WebView में नहीं खुलतीं — वे आप सामान्य browser में खोलेंगे।</li>
+</ul>
+</div></section>
+
+<section class="band" id="tests"><div class="wrap">
+<h2>सभी 79 simulation जाँचें</h2>
+<p class="mute small">A = जुड़ना, B = EPDS, C = trading, D = धोखेबाज़ पेज, E = human check, F = आपका नियंत्रण। (English में, जैसा test में लिखा है)</p>
+<details><summary>79 / 79 PASS — सूची खोलें</summary><pre id="testlist">PASS A1 no token: 401 (the connector address alone opens nothing)
+PASS A2 only Claude&#x27;s EXACT return address is accepted (not other claude.ai paths, not other sites)
+PASS A3 owner taps &quot;Deny&quot; on the tablet: Claude is not connected
+PASS A4 a stolen code without the PKCE secret is useless
+PASS A5 owner taps &quot;Allow&quot;: 1-hour token + rotating refresh token
+PASS A6 refresh rotates; a retry within 120 s gets the SAME pair (no logout on bad network), after that the old one is dead
+PASS A6b old refresh token replayed after the new pair was used = theft: whole token family revoked
+PASS A7 connector rules: no passwords / OTP / human checks / buy-sell; page text is data
+PASS A8 16 tools: devices, open, snapshot, get_text, click, type, select, upload, press, scroll, screenshot, tabs, back, wait_for, downloads, ask_owner
+PASS A9 three devices online, Ronin in front and drawing: tablet, laptop, phone
+PASS A10 an &quot;Allow&quot; without a valid signature from the device&#x27;s own hardware key is refused
+PASS A11 flood of client registrations is slowed down (429)
+PASS A12 a fake relay is detected (pinned key) and its commands are ignored
+PASS A13 an injected command without the session HMAC is ignored
+PASS A14 MCP auth discovery (RFC 9728 / 8414), 401 points to it; a token for another resource is refused
+PASS B1 ID numbers on the page are hidden from Claude by default
+PASS B2 first form change on a new site asks the owner once
+PASS B3 dropdown chosen by its text
+PASS B4 photo attached from &quot;Ronin/For Claude&quot; only
+PASS B5 any other file is refused
+PASS B6 network break during Save: the command is sent again after reconnect, the form is saved ONCE (saves=1)
+PASS B7 form saved with name, designation and photo
+PASS B10 app killed during Save: Claude is told &quot;uncertain, check the page&quot;, it is NOT pressed again (saves=2)
+PASS B11 after &quot;uncertain&quot;, the same Save stays blocked until the owner taps CHECKED (no double entry via a new command)
+PASS B8 two commands at once: done one after the other (one at a time per device)
+PASS B9 after reading a government site, opening ANY other site (even short data) needs the owner (taint rule)
+PASS C1 password typing refused
+PASS C2 broker site is read-only for Claude by default (no typing, no submits)
+PASS C3 ask_owner returns at once; while the owner has the screen Claude waits
+PASS C3b next ask_owner call: &quot;the owner finished&quot;
+PASS C4 after the owner&#x27;s login Claude reads P&amp;L; Exit / Place Order / Exit All marked
+PASS C5 &quot;Exit All&quot; refused (the page&#x27;s &quot;ignore all previous instructions&quot; did nothing)
+PASS C6 on a money site Claude has NO input at all, even on harmless links
+PASS C7 Claude opens only the owner&#x27;s listed read pages (/positions); /order and query tricks refused
+PASS D1 invisible layer over &quot;Cancel&quot; (clickjacking): refused, nothing paid
+PASS D2 Hindi &quot;भुगतान करें&quot; and an icon-only button posting to /api/placeOrder: both marked money
+PASS D3 both refused on an UNKNOWN site; nothing paid
+PASS D4 ordinary search on that site still works (after one &quot;Allow&quot;)
+PASS D5 OTP boxes found by shape (one-time-code, 6-digit numeric &quot;PIN code&quot;), not by name only
+PASS D6 typing into them refused
+PASS D6c 4-8 digits into an ordinary box look like an OTP: refused, until the owner allows digits in that exact field
+PASS D6d a split 6-box OTP is one secret field; &quot;48 29-13&quot; with spaces/dashes is still caught
+PASS D6b password box on an ordinary site: refused too
+PASS D7 a page that rewrites browser functions to lie cannot fool the helper (captured at document start): &quot;Pay now&quot; seen and marked
+PASS D8 sending data to a new site in the address needs the owner (refused)
+PASS D9b home-router / server addresses are never opened
+PASS D9 javascript: / file: / intent: addresses refused
+PASS D10 more than 2000 characters at once refused
+PASS D11 Aadhaar / PAN / account number hidden, the balance still readable
+PASS D12 get_text goes through the same ID filter: &quot;Statement for A/c [aadhaar-like hidden]&quot;
+PASS D13 a download needs the owner&#x27;s Allow (denied here: blocked (owner did not allow))
+PASS D14 screenshot of a bank / government page needs the owner (pixels cannot be redacted)
+PASS D15 (the trap) &quot;Continue&quot; looks harmless: no money word, no form
+PASS D15b an UNKNOWN site is read-only: even a plain-looking button needs the owner to add the site
+PASS D16 ...but its hidden POST /api/v2/placeOrder is blocked at the network layer: tapped &quot;Continue&quot;, but the page then tried POST /api/v2/placeOrder (money / order request)
+PASS D17 a plain link to /order?confirm=1 is blocked too
+PASS D18 an ordinary POST (save a note) still works
+PASS D19 an order fired by a 3-second timer AFTER Claude&#x27;s tap is still blocked
+PASS E1 Claude ticking a human check refused
+PASS E2 owner ticks it, Claude continues inside
+PASS E3 the same check 3 times: Claude stops and tells the owner (no endless loop)
+PASS F1 owner touches the screen: Claude pauses and STAYS paused (no silent auto-resume)
+PASS F2 ...and continues only after he taps RESUME
+PASS F3 &quot;Stop Claude on the tablet&quot; pressed on the PHONE works
+PASS F4 access switch OFF on a device
+PASS F5 screenshot (16 KB)
+PASS F6 relay audit keeps tool names / sites only, never page text or typed text
+PASS F9 Stop pressed while the network was DOWN still holds (local flag, needs no relay)
+PASS F10 daily action limit per device stops a looping agent
+PASS D20 unknown site: &quot;Unsubscribe?u=77&quot; link needs the owner, a javascript: link is refused, a plain link works
+PASS D20b an ordinary search link (?q=update+drivers) does not cost the owner a tap
+PASS F16 a grant older than 12 h is refused on the device (max delay if a &quot;Disconnect&quot; is hidden); a clock moved back stops Claude
+PASS F11 &quot;what Claude did&quot; list is hash-chained: 17 lines verify, a changed line is detected
+PASS F11b a fully rewritten list is caught by the heads the relay kept (9 anchors)
+PASS F12 every Claude token is bound to the device that approved it (tablet)
+PASS F13 owner removes the laptop: it is gone, Claude keeps working on the others
+PASS F7 &quot;Disconnect Claude&quot; on a device: all tokens dead at once
+PASS F7b ...and even a hacked relay replaying the old grant is refused by the devices (new signed epoch)
+PASS F8 an unpaired device is refused
+
+79 passed, 0 failed (3 runs in a row)</pre></details>
+</div></section>
+
+<section class="band alt" id="tech"><div class="wrap">
+<h2>पूरा technical design (English)</h2>
+<p class="mute small">यही दस्तावेज़ पाँचों AI को दिखाया गया था।</p>
+<details><summary>DESIGN v6.1 खोलें</summary><pre># Ronin Agent: Claude works inside the owner&#x27;s own Ronin (laptop + tablet + phone)
+
+Design v6.1, 27 Nov 2026. Protocol simulation: **79 / 79 checks passed, 3 runs in a row** (section 12; full list in `simulation-result-full.txt`).
+Ratings: v1 7.4, v2 8.4 (Claude Sonnet). 5-model panel — v3: Qwen 8.9, Opus 8.6, DeepSeek 8.6, Gemini 7.5, GPT 5.5. **v4: Qwen 9.3, Gemini 9.2, Opus 9.2, DeepSeek 9.0, GPT 8.6 — all five approve building the pilot.** Their stated ceiling for any paper design of this kind: 9.2–9.5; 9.5+ needs real-device data. **v5: Gemini 9.8, Qwen 9.7, DeepSeek 9.5, Opus 9.5, GPT 9.0 (average 9.5); all five approve the pilot with dummy data.** **v6: Qwen 9.9, Gemini 9.9, DeepSeek 9.8, Opus 9.8, GPT 9.0 — average 9.68, four of five above 9.5; all five approve the pilot (dummy data, read-only trading).** v6.1 folds in their last notes (section 11d) without changing the architecture.
+
+## 1. Problem
+- Claude can drive only the Claude desktop app&#x27;s browser or a server-side Chromium. Neither has the owner&#x27;s logins, home internet or real device.
+- Human checks (Cloudflare etc.) fail there even when the owner solves them (automation-attached browser, fresh profile, datacenter IP).
+- The trading-terminal login refuses to open; election (EPDS) data entry stops halfway; the server browser switches off when the trading engine needs RAM.
+
+## 2. What it is — and what it deliberately is NOT
+- **Is:** Claude works in a &quot;🤖 Claude&quot; tab of the owner&#x27;s own Ronin, on his own devices, with his profile and internet, while he watches and can take over.
+- **Is not:** a general robot for money sites. On broker / bank / payment sites Claude can **only read** (no taps, no typing, no keys, only the pages he listed). Passwords, OTPs, human checks and anything that moves money are **owner-only**, always.
+- **Every other site starts read-only too.** Claude may follow plain links there (not links with a query string or action words like unsubscribe / delete / confirm, not `javascript:` links, never home-network or server addresses); any button, form or typing needs the owner to add that exact site to Claude&#x27;s write list (one press-and-hold, 45 minutes, ends when the tab leaves the site). His real write sites (EPDS and similar) are listed once.
+
+```
+Claude (web / desktop / phone app, the owner&#x27;s paid Claude plan)
+   │ ONE custom connector  https://&lt;host&gt;/mcp   (MCP Streamable HTTP, OAuth 2.1 + PKCE)
+   ▼
+Ronin Agent Relay  (small Node service on the owner&#x27;s server, no browser, stores no page content)
+   │ one OUTGOING WebSocket per device, TLS + pinned relay key + per-frame HMAC
+   ├──► Ronin on the laptop  (WebView2)
+   ├──► Ronin on the tablet  (Android WebView)
+   └──► Ronin on the phone   (Android WebView, same APK)
+```
+
+## 3. Threat model (honest)
+| Attacker | What they can do | What they cannot do |
+|---|---|---|
+| Hostile web page / prompt injection | Show lying text, hidden layers, timers, fake buttons | Make Claude type a password/OTP, tick a human check, touch a money site, POST to an order/payment path, carry data to another site without the owner&#x27;s tap |
+| Network attacker (Wi-Fi, DNS, fake certificate) | Block the connection | Pretend to be the relay (pinned key), inject or replay a frame (HMAC + sequence) |
+| Someone who steals a Claude token | Use Claude tools for ≤1 h | Anything outside the on-device rules; survive &quot;Disconnect Claude&quot; |
+| **A compromised relay server** | Read what passes through it; send commands **only under the owner&#x27;s still-valid signed grant** | Mint a grant; keep using one after &quot;Disconnect Claude&quot; (devices move to a new signed epoch, F7b); break any on-device rule (money read-only, unknown sites read-only, owner-only steps, taint, budget, visible banner) |
+| Anyone hiding a &quot;Disconnect&quot; from a device (relay withholds it, device offline) | Keep that device usable by Claude for a while | Beyond **12 hours**: every grant expires on the device itself; a clock moved backwards stops Claude (F16) |
+| Thief with the unlocked phone | Use Ronin like the owner | Export the device&#x27;s signing key; sign a new grant without the screen-lock credential (TEE-only devices) or user presence (StrongBox devices) |
+
+The relay is **trusted for delivery** and kept small and hardened; the device rules are what limit damage if it is not.
+
+## 4. Sign-in (how Claude connects)
+1. Owner adds the connector once in Claude → `https://&lt;host&gt;/mcp`. The relay&#x27;s public key is **baked into the signed APK / exe at build time** (no trust-on-first-use). **Pilot step 0 verifies this works on his plan on web, desktop and phone before anything else is built.**
+2. Spec-compliant discovery: `/.well-known/oauth-protected-resource` (RFC 9728), `/.well-known/oauth-authorization-server` (RFC 8414); a 401 carries `WWW-Authenticate: Bearer resource_metadata=…`.
+3. Dynamic client registration; redirect URIs must match **exactly** `https://claude.ai/api/mcp/auth_callback` or `https://claude.com/api/mcp/auth_callback`.
+4. `/authorize` (PKCE S256, `resource` must be this `/mcp`). The device shows a **fixed native card**: &quot;Connect Claude to your Ronin? Code ABCD. Devices: laptop, tablet, phone&quot; — **press and hold** to allow (palm-friendly). The device signs the **whole transaction** (nonce, client, redirect, PKCE challenge, device scope, code) with its **non-exportable ECDSA P-256 key** (Android Keystore: StrongBox with `setUserPresenceRequired` where available; TEE-only devices use `setUserAuthenticationRequired` with a short timeout and the screen lock; Windows: TPM via CNG, checked at setup). Press-and-hold is consent UI, not hardware proof — the key policy is the proof. Each device&#x27;s actual protection (StrongBox + presence / TEE + screen lock / TPM) is probed at setup and shown to the owner; never silently downgraded. (API 30+: `setUserAuthenticationParameters(timeout, AUTH_BIOMETRIC_STRONG | AUTH_DEVICE_CREDENTIAL)`.) The relay issues a code only if the signature verifies (A10). If the tablet is off, the phone, then the laptop, is asked.
+5. That signed Allow is the **grant** (client, devices, code, epoch, issue time; valid 12 h on the device). It rides with every command and **each device checks it itself** — right signer, this device in scope, epoch not revoked. Relay-made tokens alone never run anything.
+6. Tokens: access 1 h, audience = this `/mcp`; refresh 30 days, rotated on every use, tied to the client, with a 120 s grace so a retried request on bad mobile data does not log him out (A6) — but only while the new pair is still unused; an old refresh token used after the new pair was used is theft, and the whole token family is revoked (A6b).
+7. Limits: per client on `/token`, generous per-IP on `/mcp` (Claude traffic comes from Anthropic&#x27;s shared addresses), `/register` 5/min/IP, `/authorize` 10/min/IP.
+8. &quot;Disconnect Claude&quot; (any device) kills every token **and** moves every device to a new epoch signed by the pressing device, so old grants die even if the relay misbehaves (F7, F7b). &quot;Remove device&quot; kills that device&#x27;s key, link and the tokens it approved.
+
+## 5. Device link (relay ↔ device)
+- The device opens the WebSocket with its device key, a nonce and an ephemeral X25519 key. The relay answers with its own X25519 key and an ECDSA signature over both + nonce, made with the **relay key pinned in the app at pairing**. Wrong signature → &quot;fake relay&quot;, nothing runs (A12).
+- Both sides derive a session key; **every frame carries a sequence number and HMAC**. Injected or replayed frames are dropped (A13).
+- Heartbeat 20 s; commands are re-sent after reconnect with the same id.
+
+## 6. Tools (16), each takes `device`
+`devices` · `open(url)` · `snapshot` · `get_text(ref)` · `click(ref)` · `type(ref, text, submit)` · `select(ref, option)` · `upload(ref, file)` · `press(key)` · `scroll` · `back` · `tabs` · `screenshot` · `wait_for(text)` (≤20 s) · `downloads` · `ask_owner(reason)`.
+- **No tool call blocks long:** `ask_owner` returns at once (&quot;with the owner&quot;); later calls wait ≤15 s each until he taps Done.
+
+## 7. On the device
+**Page helper (`agent.js`) — a first filter, never the final authority**
+- Windows: injected through CDP `Page.addScriptToEvaluateOnNewDocument` with a **`worldName`** (a real isolated world). (`AddScriptToExecuteOnDocumentCreated` runs in the main world, so it is not used for this.)
+- Android: `WebViewCompat.addDocumentStartJavaScript` (feature-checked: `DOCUMENT_START_SCRIPT`), **main world — Android has no public isolated-world API**. Natives are captured before page scripts; results come back over `addWebMessageListener`. A fooled helper can at worst mislabel a harmless element; it can never unlock a refused action.
+- Bundled inside the signed APK / exe, never downloaded at run time.
+- Reads visible elements (shadow roots, same-origin frames), stable fingerprinted refs, flags (money words EN+HI, OTP shape, password, captcha), redacts ID numbers, lists cross-origin frames.
+
+**Native checks (final authority)**
+| Check | Windows (WebView2) | Android (WebView) |
+|---|---|---|
+| Money site = read only (no input tools) | device rule | device rule |
+| Password / OTP box refused before any text is committed (re-checked right before dispatch) | CDP: resolve the focused node, `DOM.getAttributes` (type, autocomplete); unresolved → fail closed | **`EditorInfo.inputType`** from the WebView&#x27;s `onCreateInputConnection` (`TYPE_TEXT_VARIATION_PASSWORD`, `TYPE_TEXT_VARIATION_WEB_PASSWORD`, `TYPE_NUMBER_VARIATION_PASSWORD`); no input connection after focus → unknown → fail closed; accessibility tree as a second check (often empty without an accessibility service). Either says secret → refuse; unknown → fail closed |
+| Network guard on order / payment paths, at all times in the Claude tab (not only 2 s) | `WebResourceRequested` (+ body visible), `NavigationStarting` | `shouldInterceptRequest` (**no POST body**), `shouldOverrideUrlLoading`, `ServiceWorkerControllerCompat` hook |
+| WebSocket on a write-listed unknown site | main-document response gets a CSP `connect-src` without `ws:`/`wss:` (+ watch `Network.webSocket*`) | main-document response rewritten with the same CSP; a site that needs WebSocket is not write-listed on Android |
+| Service workers | covered by `WebResourceRequested` | `ServiceWorkerControllerCompat` client with the same rules |
+| Cross-origin frames | read-only (write list is per exact origin) | same |
+| Isolated helper | yes (`worldName`) | no (stated) |
+
+The two platforms are **not** equal. That is why the money boundary is a **capability rule** (no input on money sites), not URL guessing. The path guard is a second fence for unknown sites; it cannot see WebSocket frames or Android POST bodies (residual risk, stated).
+
+**Input**
+- Android: `WebView.dispatchTouchEvent` on Ronin&#x27;s own, laid-out WebView, on the UI thread, a matched DOWN/UP pair with consistent `downTime`/`eventTime` (a public View method — reliability is measured per device in the pilot). Text: `commitText` through the WebView&#x27;s input connection; if that fails on a keyboard, `dispatchKeyEvent` per character. **After typing, the field&#x27;s value is read back and reported as &quot;verified&quot;, &quot;already matched&quot; or &quot;unverified&quot; — never a blind &quot;done&quot;.** Secret fields are never read back or logged. The WebView version is written in every audit line; on a WebView major update the 21 hostile cases run again and a failing mechanism switches itself off. Fallback for taps: `ACTION_CLICK` on the WebView&#x27;s own accessibility node.
+- Windows: CDP `Input.dispatchMouseEvent`; text with `Input.insertText` (works for Hindi / Devanagari), `Input.dispatchKeyEvent` for Enter / Tab / Escape, and per character (with `text`) as a per-site fallback for rich editors that ignore insertText. Frame and focus are re-checked in the same step, right before dispatch.
+- Pop-ups (`window.open`) from Claude&#x27;s actions are refused in the Claude tab; every page change caused by any Claude input (click, select, press, redirect) passes the taint check.
+- No remote-debugging port, no `--enable-automation`, no webdriver flag. This **is** automation inside a normal browser; it does not fake an identity. Ronin keeps its usual user agent; sites that refuse WebView (e.g. Google sign-in) are opened by the owner elsewhere.
+
+**Take-over and approvals (designed for injured hands)**
+- Banner: &quot;Claude is working on &lt;site&gt; — **Pause | Take over | Stop**&quot;, thumb-size.
+- Any touch by the owner **pauses Claude until he taps RESUME** (no silent auto-resume) (F1, F2).
+- All approval cards are **fixed native templates** (site, action, data size); Claude&#x27;s text appears only inside a separate, differently styled box headed **&quot;Unverified AI message&quot;**, never as the headline; the card always states the real action itself (&quot;Claude wants to TAP &#x27;Submit&#x27; on …&quot;). One &quot;Add to write list&quot; lasts **45 minutes** for that exact site. On write sites the first 3 Saves of a batch show a native summary card (name, number of fields filled); after that one card per batch. Target: **≤5 owner taps per 20-record batch, ≤1 per trade read.**
+
+**Life cycle**
+- Android: foreground service only while Claude access is ON, `specialUse` with the `PROPERTY_SPECIAL_USE_FGS_SUBTYPE` property; notification with Stop; wake lock only during a command; the owner allows battery exemption and (optionally) full-screen notifications himself in Settings — Claude never changes them. OEM battery killers can still stop it: `devices` then shows it offline (measured in the pilot).
+- Windows: Claude window kept non-minimized, `--disable-features=CalculateNativeWinOcclusion`, `rendering:false` reported when minimized.
+
+## 8. Safety rules (on the device)
+1. **Money sites (broker / bank / UPI / payment list + any site the owner marks): read only.** No click / type / select / upload / press at all (C5, C6). `open` only to pages he listed (e.g. `/positions`), no query strings (C7). Screenshots need his tap.
+2. **Owner-only:** passwords and OTPs (input type, autocomplete, shape, label in EN/HI; and **any 4–8-digit-only text** unless the owner allowed digits in that exact field, e.g. &quot;Pincode&quot;: C1, D5, D6, D6b, D6c). Secret entry happens only in the owner&#x27;s take-over; human checks (E1), any money action.
+3. **Unknown sites:** first change asks once (45 min); money words / money form actions refused (D2, D3); network guard blocks order/payment requests **at any time** — including a timer firing 3 s after Claude&#x27;s tap (D19) — while ordinary POSTs still work (D18).
+4. **Page text is data** (`page_text_untrusted`); injected &quot;ignore previous instructions&quot; does nothing (C5).
+5. **Data leaving:** only http/https; &gt;100 chars to a new site needs the owner (D8); **taint:** after reading a sensitive page (money, government, or any page where ID numbers were seen) any other registrable domain needs his tap (B9); daily outgoing-text budget; ≤2000 chars per type; uploads only from &quot;Ronin/For Claude&quot;; downloads need his Allow (D13). Claude&#x27;s only ways to move data are `open`, `type`, `upload` — all gated. (Pages that already hold data and leak it themselves are outside Claude&#x27;s control in any browser.)
+6. **Privacy:** Aadhaar / PAN / account numbers hidden in snapshot and get_text (D11, D12); screenshots of sensitive pages need his tap (D14).
+7. **Crash-safe writes:** every input command is journaled as &quot;started&quot; **before** it runs. If Ronin dies mid-command, the replay answers **&quot;uncertain — check the page&quot;** and never presses again (B10); **the same action on the same element stays blocked until the owner taps CHECKED**, so a new command cannot save the record twice (B11). Network breaks after an answer return the cached answer (B6).
+8. **Stops:** local Stop flag needs no network (F9); Stop another device (F3); access switch (F4); daily action budget (F10); 5 tabs max; idle off (45 min sensitive, 8 h overall).
+9. **Audit:** relay keeps metadata only (F6). Device keeps &quot;what Claude did&quot;, hash-chained, and sends the chain head to the relay **after every input command** (and every 10 lines) — an edited line, a fully rewritten list, and a cut-off tail of input commands are detected (F11, F11b). It does not defeat a device and relay compromised together (stated).
+
+## 9. Privacy and legal (owner decisions, blocking the EPDS feature only)
+- Snapshots/screenshots go to Anthropic as part of the Claude chat; the relay stores none.
+- **EPDS gate:** teachers&#x27; names/IDs would leave the device. Before EPDS mode is switched on, the owner confirms (a) the election office allows using an assistant and (b) data rules (India&#x27;s DPDP Act 2023 — not certain how it applies here). Until then: EPDS runs with IDs hidden, or not at all. The trading-read and general features do not depend on this.
+
+## 10. Relay operations
+systemd: own user, no shell, `MemoryHigh=96M`, `MemoryMax=128M`, Node `--max-old-space-size=64`, `Restart=always`. **TLS ends on the owner&#x27;s own server** (free DuckDNS hostname + Let&#x27;s Encrypt), so tokens and page content are only ever on his box. (A Cloudflare Tunnel would let Cloudflare see the traffic — fallback only, stated.) Pinning protects the device link; it does not protect what a compromised relay box can read. Metadata logs rotated daily, 14 days. Runbooks: lost phone, lost server, key rotation, revoke-and-re-pair (rehearsed in the pilot).
+
+## 11. Panel points → v4
+| Raised by | Point | v4 |
+|---|---|---|
+| all 5 | Money blocking by URL/keywords is weak; WebSocket/GraphQL/bodies invisible | Capability rule: **no input at all** on money sites; path guard only a second fence; always-on (timer test D19) |
+| GPT, Opus, DeepSeek | Copied key / DPAPI / Ed25519 claims wrong | Non-exportable ECDSA P-256 (StrongBox/TEE + presence; TPM/CNG); threat table honest |
+| GPT, DeepSeek | Compromised relay / MITM after handshake | Honest threat model; ECDH session + per-frame HMAC + sequence (A13) |
+| DeepSeek, Opus | 50–60 s blocking tools break MCP | ask_owner returns at once, ≤15 s polls; wait_for ≤20 s |
+| Opus, GPT, DeepSeek | OAuth spec gaps, exact redirect, per-IP limit wrong | RFC 9728/8414, resource/audience, exact redirects, per-client limits (A2, A14) |
+| Opus, DeepSeek | Approval fatigue / injected ask_owner text | Fixed native cards, hold-to-allow, 45-min site sessions, tap budget |
+| GPT, Opus | Idempotency fails on crash | Write-ahead journal, &quot;uncertain&quot; answer (B10) |
+| GPT | Auto-resume after 1.5 s unsafe | Latched pause until RESUME (F1, F2) |
+| Opus | Hash chain can be rewritten whole | Heads anchored at the relay (F11b) |
+| DeepSeek, Opus, GPT | WebView2 isolated world mis-stated; Input.insertText; InputConnection | CDP `worldName`; `dispatchKeyEvent`; focused InputConnection; parity table |
+| DeepSeek | Password check relies on page JS | Native accessibility-tree check before commit |
+| Gemini, GPT | Connector availability / cost unverified | Pilot step 0 on his paid plan, all three Claude apps |
+| GPT, DeepSeek | EPDS legal gate | Section 9, blocks EPDS only |
+| DeepSeek, Opus | MemoryMax, specialUse property, full-screen intent | Fixed (sections 7, 10) |
+| Gemini | Use OS-level input (SendInput / AccessibilityService) | **Not taken:** SendInput moves the owner&#x27;s real mouse; a system-wide AccessibilityService is a far bigger permission. In-app trusted events are enough; measured in the pilot |
+
+## 11b. v4 panel points → v5
+| Raised by | Point | v5 |
+|---|---|---|
+| GPT, Opus | Unknown sites: plain buttons could still call hidden APIs | Unknown sites read-only until the owner adds them; buttons included (D15b) |
+| DeepSeek, Opus | Android accessibility tree may be empty | `EditorInfo.inputType` is the primary password check; fail closed |
+| DeepSeek | Windows `dispatchKeyEvent` breaks Hindi | `Input.insertText` for text |
+| Opus, DeepSeek | `commitText` fragile | Key-event fallback + read-back, &quot;failed&quot; not &quot;done&quot; |
+| DeepSeek | Relay key pinned on first use (TOFU) | Baked into the signed build |
+| DeepSeek | Refresh rotation logs him out on bad network | 120 s grace, same pair (A6) |
+| DeepSeek, Opus | &quot;Uncertain&quot; can be bypassed with a new command | Action blocked until CHECKED (B11); summary card for first 3 Saves |
+| GPT | Relay-minted tokens should not authorize execution | Device-checked signed grant + revocation epoch (F7b) |
+| Opus, GPT | StrongBox vs TEE, press-and-hold ≠ presence | Key policy per hardware, stated |
+| Opus | Tail truncation of the audit list | Head sent after every input command |
+| GPT | TLS front / compromised relay can read | TLS on his own server; stated plainly |
+| Gemini | Quarantine Claude&#x27;s text in cards | &quot;AI note&quot; box |
+| Qwen | 45-min allow too broad | Exact site only, ends when the tab leaves it |
+| GPT | Test totals did not add up | Fixed: A14 + B11 + C8 + D21 + E3 + F15 = 72 |
+| Gemini | End-to-end encryption Claude ↔ device | **Not possible while the relay is the MCP server** (our chosen integration): it must read tool calls; the signed grant + device rules limit the relay instead |
+| Gemini | Accessibility click as primary input | **Kept as fallback:** the tree may be empty without an accessibility service; the pilot measures both |
+
+## 11c. v5 panel points → v6
+| Raised by | Point | v6 |
+|---|---|---|
+| DeepSeek, GPT, Qwen | Plain links can still change things (GET), script links, home network | Action links need the owner; `javascript:` refused; private addresses never (D9b, D20) |
+| DeepSeek | Windows secret check unstated | CDP `DOM.getAttributes` on the focused node, fail closed |
+| Opus, GPT | OTP boxes that look like plain text | Any 4–8-digit-only text = owner, unless he allowed that field (D6c) |
+| DeepSeek | Refresh grace hides theft | Grace only while the new pair is unused; reuse afterwards kills the family (A6b) |
+| GPT | Revocation can be withheld / device offline | Grants expire on the device after 12 h; clock-rollback stop (F16); max delay stated |
+| Opus | WebSocket orders on write-listed sites | CSP without ws/wss on write-listed unknown sites (both platforms); red-team case added |
+| Gemini | Service workers, cross-origin iframes | SW client hook; write list per exact origin; cross-origin frames read-only |
+| Qwen | Fingerprints unstable in SPAs | Generated ids dropped; form action added |
+| Qwen | Relay key rotation needs a rebuild | Ronin updates itself in minutes (no app store); plus an offline anchor key can sign an emergency rotation note |
+| GPT, DeepSeek | &quot;E2E impossible&quot; too absolute | Now: &quot;not possible while the relay is the MCP server (our chosen integration)&quot; |
+| Opus | Android constants, deprecated API | Fixed (section 4, 7) |
+| GPT | Read-back &quot;no change ≠ failed&quot; | verified / already matched / unverified |
+| Gemini | AI-note social engineering | &quot;Unverified AI message&quot; box; card states the real action |
+
+## 11d. v6 panel notes → v6.1 (wording made honest + small fixes)
+- **Best-effort, said plainly (GPT):** link filtering and secret-field detection are heuristics, not guarantees. The real guarantees are: money sites get no input; unknown sites get no form/input actions without the owner; passwords/OTPs are never in Claude&#x27;s data (the owner types them in take-over); ambiguous fields go to an owner card.
+- Action links: only an action word as the **last** path part, an action-like query key, or an `/api/` path — so `?q=update+drivers` costs no tap (Qwen; D20b).
+- OTP: separators stripped before the 4–8-digit rule (&quot;48 29-13&quot; caught); a row of 4–8 one-character boxes is one secret field (DeepSeek, Gemini; D6d). A native &quot;allow this time&quot; button covers real 6-digit quantities.
+- Private addresses: the hostname is **resolved natively** and blocked if any address is private, loopback (127/8), 0.0.0.0, link-local or CGNAT (100.64/10); cannot resolve → fail closed; DNS-rebinding case in the red team (Opus, GPT).
+- CSP: explicit `https://` origins only — **no `&#x27;self&#x27;`, no bare `https:`** (CSP3 `&#x27;self&#x27;` allows same-origin wss) — applied to main documents **and worker scripts**; Android rewrites only GET main documents (POST main-document navigations go to the owner card; gzip handled; cookies/redirects tested). WebRTC is not covered by CSP: `RTCPeerConnection` is removed at document start, and a site that needs WebRTC or WebSocket is not write-listable. Windows `Network.webSocket*` is detection only — a WebSocket opening on a write-listed site closes the tab (Opus, DeepSeek, Gemini).
+- WebView2 service workers: `AddWebResourceRequestedFilter` with `ServiceWorker` source kinds; runtime version checked at start (Opus, GPT).
+- Windows check-then-type gap: the field is re-checked right after insertText too; if it became a secret field, it is cleared and Claude stops (Gemini).
+- **Updater is a trust root (DeepSeek, Qwen):** update manifest and payload must be signed by the offline anchor key baked into the app; the relay/server only serves opaque bytes; a bad signature = no update. (Android additionally refuses an APK with a different signing certificate.) This is a pilot gate.
+
+## 12. Protocol simulation v6.1 — 79 / 79, 3 runs in a row
+A real Chromium page stands in for each WebView; this tests protocol and rules, not Android/WebView2 behaviour.
+- **A sign-in &amp; link (15):** refresh-token theft kills the family; 401 without token; exact redirect only; Deny; stolen code useless; Allow → token; refresh rotation with 120 s retry grace; connector rules; 16 tools; 3 devices; unsigned/forged Allow refused; /register flood 429; fake relay ignored; injected frame without HMAC ignored; RFC 9728 discovery + wrong resource refused.
+- **B EPDS on tablet (11):** IDs hidden; one Allow for the site; dropdown; photo from folder only; other path refused; network cut after Save → saved once; record correct; **app killed during Save → &quot;uncertain&quot;, not pressed again; the same Save blocked until CHECKED**; queue; taint after reading.
+- **C trading on laptop (8):** password refused; read-only; ask_owner returns at once, Claude waits, owner logs in, &quot;finished&quot;; P&amp;L read; Exit All refused; even harmless taps refused; only listed read pages open.
+- **D hostile pages (26):** split 6-box OTP and spaced/dashed digits; ordinary search links cost no tap; 4–8-digit OTP-like text; home-network address; action / script links on unknown sites; clickjacking; unknown site read-only even for plain buttons; Hindi + icon-only money buttons; normal search; OTP by shape; password box on an ordinary site; lying prototypes; exfil URL; javascript:; text cap; ID redaction incl. get_text; download Allow; screenshot Allow; hidden fetch placeOrder; /order?confirm=1; **order fired by a 3-s timer after the tap**; ordinary POST works.
+- **E human checks (3).** **F owner control (16):** 12-hour grant life and clock-rollback stop; Disconnect → a hacked relay replaying the old grant is refused by the devices; latched pause + RESUME; stop from another device; access switch; screenshot; metadata-only relay audit; offline Stop; daily budget; hash chain + relay anchors catch an edit and a full rewrite; tokens bound to approving device; remove a device; Disconnect; unpaired device refused.
+
+## 13. Real-device pilot (the only way to 9.5) — pass marks
+| Test | Device | Pass |
+|---|---|---|
+| Step 0: connector + OAuth on his Claude (web, desktop, phone) | all | works 3/3 |
+| Wi-Fi ↔ mobile switch | phone, tablet | reconnect ≤10 s, 20/20, no lost/double command |
+| Overnight on charger (Doze, OEM battery manager) | tablet, phone | online after 8 h, or clearly &quot;offline&quot; |
+| Kill Ronin during Save | tablet | &quot;uncertain&quot; 10/10, never a second Save |
+| Turnstile demo, owner solves | tablet, laptop | ≥19/20 (Claude-desktop-browser rate recorded beside it) |
+| Trading terminal: owner logs in, Claude reads positions | laptop, tablet | 5/5; any input refused 5/5 |
+| EPDS-style 20 records (dummy data) | tablet | 0 wrong, 0 double, ≤5 owner taps |
+| Red team: ≥100 hostile pages with the helper deliberately poisoned (timers, WebSocket, WebRTC, GraphQL, service worker, sendBeacon, OTP-as-text, action links, overlays) | all | 0 passwords / OTP / money actions get through |
+| Same 21 hostile cases inside the real APK / exe, per mechanism (tap, commitText, key fallback, EditorInfo check, accessibility tree, shouldInterceptRequest, service worker) | OnePlus, Motorola, laptop | 21/21 per mechanism, else that mechanism is switched off (fail closed) |
+| Hindi name typing | laptop, tablet | 20/20 exact read-back |
+| Crash at every journal step | tablet, laptop | never a double Save |
+| Latency p95 | all | ≤1.5 s Wi-Fi, ≤3 s mobile |
+| Battery idle, connected | phone | ≤3 %/hour |
+
+## 14. Build order (after the owner approves)
+0. Minimal relay with OAuth → add as connector in his Claude → verify on web/desktop/phone (cheap, decides everything).
+1. Relay complete + these tests in CI (beside the existing server service, which is not touched).
+2. Windows agent → pilot tests on the laptop.
+3. Android agent (one APK, tablet + phone) → pilot tests.
+4. Independent QA review → the owner sees it → publish only when he names the version. Live money or government sessions only after the pilot&#x27;s pass marks are met; until then dummy data and read-only trading.
+</pre></details>
+</div></section>
+
+<script>
+{
+const N={claude:{x:80,y:190,t:'Claude',s:'आपका chat'},relay:{x:330,y:190,t:'Relay',s:'आपका server'},laptop:{x:600,y:70,t:'Laptop',s:'Ronin'},tablet:{x:600,y:190,t:'Tablet',s:'Ronin'},phone:{x:600,y:310,t:'Phone',s:'Ronin'},owner:{x:810,y:190,t:'आप',s:'मालिक'}};
+const S=[
+{n:'1. Claude जुड़ता है',st:[
+['claude','relay','ok','आप Claude में एक बार connector जोड़ते हैं। बिना token कुछ नहीं खुलता (A1)।'],
+['relay','tablet','own','Tablet पर कार्ड: “Claude को अपने Ronin से जोड़ें? कोड ABCD” — आप दबाकर रखते हैं (A3, A5)।'],
+['tablet','relay','ok','Tablet अपनी hardware चाबी से आपकी अनुमति पर हस्ताक्षर करता है। नकली “Allow” रोका गया (A10)।'],
+['relay','claude','ok','Claude को 1 घंटे का token मिलता है; चोरी हुआ refresh token पूरा परिवार बंद कर देता है (A6, A6b)।'],
+['relay','laptop','ok','हर device relay की बनी-बनाई (app में पक्की) चाबी पहचानता है। नकली relay और बीच में डाला गया command रोका (A12, A13)।']]},
+{n:'2. EPDS entry',st:[
+['claude','tablet','ok','EPDS पेज खुला। Aadhaar जैसे नंबर Claude से छिपे (B1)।'],
+['tablet','owner','own','पहली बार: “epds को 45 मिनट के लिए लिखने की सूची में जोड़ें?” — एक दबाव (B2)।'],
+['claude','tablet','ok','नाम, ID, पद (dropdown), mobile, फ़ोटो (सिर्फ़ “For Claude” folder से) भरे (B3, B4, B5)।'],
+['tablet','relay','ok','Save के ठीक बाद network टूटा: दोबारा भेजा गया, पर रिकॉर्ड एक ही बार सेव (B6, B7)।'],
+['claude','tablet','no','Save के बीच app बंद हुआ: “पक्का नहीं — पेज देखें”; वही Save तब तक बंद जब तक आप CHECKED न दबाएँ (B10, B11)।']]},
+{n:'3. Trading पढ़ना',st:[
+['claude','laptop','ok','Broker का पेज खुला — यह site Claude के लिए सिर्फ़ पढ़ने वाली है।'],
+['claude','laptop','no','पासवर्ड टाइप करने की कोशिश: रोका (C1, C2)।'],
+['laptop','owner','own','ask_owner: आप खुद login करते हैं, Claude रुका रहता है, फिर “DONE” (C3)।'],
+['laptop','claude','ok','Claude P&L और positions पढ़ता है (C4)।'],
+['claude','laptop','no','Exit All, या कोई भी tap: रोका। सिर्फ़ आपके चुने पेज (/positions) खुलते हैं, /order नहीं (C5, C6, C7)।']]},
+{n:'4. धोखेबाज़ पेज',st:[
+['claude','phone','no','“Cancel” के ऊपर अदृश्य परत (clickjacking): tap रोका (D1)।'],
+['claude','phone','no','नई site पर साधारण “Continue” बटन: पहले आपकी अनुमति; अनुमति के बाद भी उसका छिपा order request network पर रोका (D15b, D16)।'],
+['phone','relay','no','3 सेकंड बाद timer से भेजा गया order भी रोका (D19)।'],
+['claude','phone','no','6 खानों वाला OTP, “48 29-13” जैसे अंक: Claude नहीं भरेगा (D6c, D6d)।'],
+['claude','phone','no','संवेदनशील पेज पढ़ने के बाद दूसरी site खोलना: आपकी अनुमति चाहिए; घर के router का पता कभी नहीं (B9, D8, D9b)।']]},
+{n:'5. Human check',st:[
+['claude','tablet','no','Claude “Verify you are human” टिक करने की कोशिश करे: रोका (E1)।'],
+['tablet','owner','own','आप अपने device और internet से टिक करते हैं, Claude अंदर आगे बढ़ता है (E2)।'],
+['claude','phone','no','10 मिनट में 3 बार check आया: Claude रुककर आपको बताता है, चक्कर नहीं (E3)।']]},
+{n:'6. आपका नियंत्रण',st:[
+['owner','phone','own','आपने screen छुई: Claude रुक गया और RESUME तक रुका रहेगा (F1, F2)।'],
+['phone','tablet','own','Phone से “Tablet पर Claude रोको” — काम करता है (F3)।'],
+['owner','phone','own','Network बंद होने पर भी Stop काम करता है (F9)।'],
+['phone','relay','no','“Disconnect Claude”: सारे token खत्म; hack हुआ relay पुरानी अनुमति दोबारा भेजे तो device खुद मना करते हैं (F7, F7b)।'],
+['relay','tablet','no','अनुमति 12 घंटे बाद device पर खुद खत्म; घड़ी पीछे की तो Claude रुकता है (F16)।']]}];
+const R=[['v1',null,null,null,null,null,7.4,'सिर्फ़ Sonnet'],['v2',null,null,null,null,null,8.4,'सिर्फ़ Sonnet'],['v3',8.9,7.5,8.6,8.6,5.5,7.82],['v4',9.3,9.2,9.0,9.2,8.6,9.06],['v5',9.7,9.8,9.5,9.5,9.0,9.5],['v6',9.9,9.9,9.8,9.8,9.0,9.68]];
+const svg=document.getElementById('map');let sc=0,k=0,timer=null,anim=null;
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const col=c=>css(c==='ok'?'--ok':c==='no'?'--no':'--own');
+function sx(p,W,H){return[p.x/900*W,p.y/380*H]}
+function draw(pk){const W=svg.clientWidth,H=svg.clientHeight;if(!W)return;const st=S[sc].st[k],c=col(st[2]);const small=W<520;
+let h='';const edges=[['claude','relay'],['relay','laptop'],['relay','tablet'],['relay','phone'],['laptop','owner'],['tablet','owner'],['phone','owner']];
+for(const[a,b]of edges){const[x1,y1]=sx(N[a],W,H),[x2,y2]=sx(N[b],W,H);const ends=[st[0],st[1]],via=ends.includes('claude')&&!ends.includes('relay');const on=(st[0]===a&&st[1]===b)||(st[0]===b&&st[1]===a)||(via&&((a==='claude'&&b==='relay')||(a==='relay'&&ends.includes(b))));h+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${on?c:css('--line')}" stroke-width="${on?4:2}" ${b==='owner'?'stroke-dasharray="6 6"':''}/>`}
+for(const id in N){const[x,y]=sx(N[id],W,H),on=id===st[0]||id===st[1];const w=small?72:116,hh=small?44:56;
+h+=`<rect x="${x-w/2}" y="${y-hh/2}" width="${w}" height="${hh}" rx="10" fill="${on?c:css('--card')}" stroke="${on?c:css('--ink')}" stroke-width="2"/>`;
+h+=`<text x="${x}" y="${y-(small?2:4)}" text-anchor="middle" font-family="Libre Franklin,Mukta,sans-serif" font-weight="800" font-size="${small?13:17}" fill="${on?'#fff':css('--ink')}">${N[id].t}</text>`;
+if(!small)h+=`<text x="${x}" y="${y+16}" text-anchor="middle" font-size="13" fill="${on?'#fff':css('--mute')}">${N[id].s}</text>`}
+if(pk!=null){const[x1,y1]=sx(N[st[0]],W,H),[x2,y2]=sx(N[st[1]],W,H);let px=x1+(x2-x1)*pk,py=y1+(y2-y1)*pk;
+if(st[2]==='no'&&pk>.55){px=x1+(x2-x1)*.55;py=y1+(y2-y1)*.55;h+=`<line x1="${px-12}" y1="${py-12}" x2="${px+12}" y2="${py+12}" stroke="${c}" stroke-width="5"/><line x1="${px+12}" y1="${py-12}" x2="${px-12}" y2="${py+12}" stroke="${c}" stroke-width="5"/>`}
+else h+=`<circle cx="${px}" cy="${py}" r="9" fill="${c}" stroke="#fff" stroke-width="2"/>`}
+svg.innerHTML=h}
+function show(){const s=S[sc],st=s.st[k];document.getElementById('prog').textContent=`कदम ${k+1} / ${s.st.length}`;document.getElementById('stitle').textContent=s.n;
+const lab={ok:'चला',no:'रोका गया',own:'आपका काम'}[st[2]];document.getElementById('schip').innerHTML=`<span class="chip ${st[2]}">${lab}</span>`;
+document.getElementById('stext').textContent=st[3];document.getElementById('slist').innerHTML=s.st.map((x,i)=>`<li class="${i===k?'on':''}"></li>`).join('');
+[...document.querySelectorAll('#slist li')].forEach((li,i)=>li.textContent=s.st[i][3].split(':')[0].split('।')[0]);
+run()}
+function run(){cancelAnimationFrame(anim);const red=matchMedia('(prefers-reduced-motion: reduce)').matches;if(red){draw(1);return}const t0=performance.now();const f=t=>{const p=Math.min(1,(t-t0)/900);draw(p);if(p<1)anim=requestAnimationFrame(f)};anim=requestAnimationFrame(f)}
+function go(d){const n=S[sc].st.length;k=Math.max(0,Math.min(n-1,k+d));show()}
+function stop(){clearInterval(timer);timer=null;document.getElementById('play').textContent='▶ चलाइए'}
+document.getElementById('tabs').innerHTML=S.map((s,i)=>`<button data-i="${i}" aria-pressed="${i===0}">${s.n}</button>`).join('');
+document.getElementById('tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;sc=+b.dataset.i;k=0;stop();document.querySelectorAll('#tabs button').forEach(x=>x.setAttribute('aria-pressed',x===b));show()});
+document.getElementById('prev').onclick=()=>{stop();go(-1)};document.getElementById('next').onclick=()=>{stop();go(1)};
+document.getElementById('play').onclick=()=>{if(timer){stop();return}if(k>=S[sc].st.length-1)k=-1;go(1);document.getElementById('play').textContent='❚❚ रोकिए';timer=setInterval(()=>{if(k>=S[sc].st.length-1){stop();return}go(1)},3200)};
+document.addEventListener('keydown',e=>{if(e.target.tagName==='BUTTON'||e.target===document.body){if(e.key==='ArrowRight'){stop();go(1)}if(e.key==='ArrowLeft'){stop();go(-1)}}});
+const ro=new ResizeObserver(()=>draw(1));ro.observe(svg);
+const f=v=>v==null?'—':v.toFixed(1);
+document.getElementById('rt').innerHTML=R.map(r=>`<tr><td>${r[0]}${r[7]?' <span class="mute small">('+r[7]+')</span>':''}</td><td class="n">${f(r[1])}</td><td class="n">${f(r[2])}</td><td class="n">${f(r[3])}</td><td class="n">${f(r[4])}</td><td class="n">${f(r[5])}</td><td class="n"><b>${r[6].toFixed(2)}</b></td><td><div class="bar"><i class="${r[6]<9.5?'lo':''}" style="width:${r[6]*10}%"></i></div></td></tr>`).join('');
+show()}
+</script>
+</body>
+</html>

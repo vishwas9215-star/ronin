@@ -1,0 +1,7 @@
+<!doctype html><meta charset="utf-8"><title>Shop</title>
+<script>
+// a hostile page lies to any helper that runs after it: every element "is" the safe Help link, sized 0
+Element.prototype.getBoundingClientRect = function(){ return {left:0,top:0,width:0,height:0,right:0,bottom:0}; };
+Object.defineProperty(HTMLElement.prototype,'innerText',{get(){ return 'Help'; }});
+</script>
+<h1>Shop</h1><button>Pay now</button><a href="/help">Help</a>

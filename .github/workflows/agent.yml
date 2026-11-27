@@ -1,0 +1,114 @@
+# Ronin Agent pilot (Claude works inside the owner's own Ronin). A SEPARATE app "Ronin Agent Lab"
+# (com.ronin.agentlab), so tests on his real phone / tablet never touch Ronin Browser. Nothing here publishes Ronin.
+name: agent-pilot
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["claude/agent-*"]
+    paths-ignore: ["**/*.md", "docs/**"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Rules unit tests + lab app + its device tests
+        working-directory: android
+        run: ./gradlew --no-daemon testLabDebugUnitTest --tests 'com.ronin.browser.agent.*' assembleLabDebug assembleLabDebugAndroidTest
+      - name: Test summary
+        if: always()
+        run: |
+          python3 - android/app/build/test-results >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import glob, sys, xml.etree.ElementTree as ET
+          rows = []
+          for f in glob.glob(sys.argv[1] + "/**/*.xml", recursive=True):
+              for tc in ET.parse(f).getroot().iter("testcase"):
+                  bad = tc.find("failure") is not None or tc.find("error") is not None
+                  msg = (tc.find("failure") if tc.find("failure") is not None else tc.find("error"))
+                  rows.append(("FAIL" if bad else "PASS", tc.get("classname", "").split(".")[-1] + "." + tc.get("name", "") + ((" - " + (msg.get("message") or "")[:200]) if bad else "")))
+          print(f"### unit: {sum(r[0]=='PASS' for r in rows)} passed, {sum(r[0]=='FAIL' for r in rows)} failed")
+          for r in sorted(set(rows)):
+              print(f"- {r[0]} {r[1]}")
+          PY
+      - name: Lab APKs (release "agent-lab", a test build only, never an update)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/lab/debug/*.apk RoninAgentLab.apk
+          cp android/app/build/outputs/apk/androidTest/lab/debug/*.apk RoninAgentLab-test.apk
+          gh release view agent-lab >/dev/null 2>&1 || gh release create agent-lab --title "Ronin Agent Lab (pilot test build)" --notes "Pilot test app (com.ronin.agentlab). Not a Ronin release, never offered as an update." --prerelease || true
+          gh release upload agent-lab RoninAgentLab.apk RoninAgentLab-test.apk --clobber
+
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [phone, tablet]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Agent device tests (${{ matrix.device }})
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.device == 'tablet' && 36 || 35 }}
+          profile: ${{ matrix.device == 'tablet' && 'pixel_tablet' || 'pixel_6' }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          ram-size: 4096M
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          working-directory: android
+          script: |
+            timeout 25m ./gradlew --no-daemon connectedLabDebugAndroidTest || echo failed > ../agent-tests-failed
+            timeout 60 adb logcat -d -s RoninAgent > ../agent-log.txt || true
+            timeout 60 adb logcat -d -b crash > ../crash.txt || true
+      - name: Test summary
+        if: always()
+        run: |
+          echo "## ${{ matrix.device }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -s agent-log.txt ]; then echo "### mechanisms"; echo '```'; grep -E "MECH|blocked" agent-log.txt | tail -60; echo '```'; fi >> "$GITHUB_STEP_SUMMARY"
+          if [ -s crash.txt ]; then echo "### crashes"; echo '```'; head -60 crash.txt; echo '```'; fi >> "$GITHUB_STEP_SUMMARY"
+          python3 - android/app/build/outputs/androidTest-results >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import glob, sys, xml.etree.ElementTree as ET
+          rows = []
+          for f in glob.glob(sys.argv[1] + "/**/*.xml", recursive=True):
+              for tc in ET.parse(f).getroot().iter("testcase"):
+                  bad = tc.find("failure") is not None or tc.find("error") is not None
+                  msg = (tc.find("failure") if tc.find("failure") is not None else tc.find("error"))
+                  rows.append(("FAIL" if bad else "PASS", tc.get("name", "") + ((" - " + (msg.text or "")[:300].replace("\n", " ")) if bad else "")))
+          print(f"### device: {sum(r[0]=='PASS' for r in rows)} passed, {sum(r[0]=='FAIL' for r in rows)} failed")
+          for r in sorted(set(rows)):
+              print(f"- {r[0]} {r[1]}")
+          PY
+      - name: Fail if a test failed
+        run: test ! -f agent-tests-failed

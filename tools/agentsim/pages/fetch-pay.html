@@ -1,0 +1,5 @@
+<!doctype html><meta charset="utf-8"><title>Renew</title><h1>Renew plan</h1>
+<button id="go" onclick="fetch('/api/v2/placeOrder',{method:'POST',body:'{&quot;qty&quot;:50}'}).then(()=>window.paid=1).catch(()=>window.failed=1)">Continue</button>
+<a href="/order?confirm=1">Next step</a>
+<button onclick="fetch('/api/notes',{method:'POST',body:'hi'}).then(()=>window.noted=1)">Save note</button>
+<button onclick="setTimeout(()=>fetch('/api/placeOrder',{method:'POST',body:'x'}).then(()=>window.paid2=1).catch(()=>window.late=1),3000)">Later</button>
