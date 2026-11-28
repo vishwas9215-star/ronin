@@ -280,7 +280,12 @@ class CensusService : AccessibilityService() {
         val p = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.argb(200, 13, 118, 128)); setPadding((4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt()) }
         said = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; maxLines = 4; maxWidth = (160 * d).toInt(); visibility = android.view.View.GONE }
         // 🎤: hands-free — after each sentence it listens again by itself; tap again (or say "बस") to stop
-        p.addView(btn("🎤") { handsFree = !handsFree; lastHeardAt = System.currentTimeMillis(); if (handsFree) listen() else { recognizer?.cancel(); show("🎤 बंद") } }.apply { tag = "census-mic" })
+        // 🎤 tap: listen to ONE sentence (owner, 28 Nov: repeated taps switched hands-free on and off).
+        // Long press: hands-free (listens again by itself; say "बस" or long-press again to stop).
+        p.addView(btn("🎤") { handsFree = false; listen() }.apply {
+            tag = "census-mic"
+            setOnLongClickListener { handsFree = !handsFree; lastHeardAt = System.currentTimeMillis(); if (handsFree) { show("🎤 लगातार सुन रहा है (\"बस\" बोलें तो बंद)"); listen() } else { recognizer?.cancel(); show("🎤 बंद") }; true }
+        })
         p.addView(btn("📋") { handle("स्क्रीन पढ़ो") }.apply { tag = "census-scan" })
         yes = btn("✓") { confirmByHand() }.apply { visibility = android.view.View.GONE; setBackgroundColor(Color.rgb(27, 127, 58)); setTextColor(Color.WHITE) }
         no = btn("✕") { handle("नहीं") }.apply { visibility = android.view.View.GONE }
@@ -307,6 +312,8 @@ class CensusService : AccessibilityService() {
     // ---------------- speech: on the phone only ----------------
 
     @Volatile var handsFree = false
+    @Volatile private var hindiMissing = false
+    @Volatile private var usingOnDevice = false
     private val STOP = setOf("बस", "रुको", "बंद करो", "बंद", "स्टॉप")
     @Volatile private var lastHeardAt = 0L
     private fun again() {
@@ -319,10 +326,12 @@ class CensusService : AccessibilityService() {
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             show("माइक की अनुमति नहीं: 'जनगणना सहायक' app खोलकर अनुमति दें"); return
         }
-        val onDevice = Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
-        if (!onDevice) { show("इस phone पर offline Hindi आवाज़ पहचान नहीं मिली: 'जनगणना सहायक' app खोलकर देखें"); Log.i(TAG, "census speech: no on-device recogniser"); return }
+        // on the phone if it can (Hindi pack installed); else Google's online recognition, which the owner chose
+        // (28 Nov: "इंटरनेट गाँव में रहेगा") — the audio goes to Google's speech service, this app itself still has no internet
+        val onDevice = Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(this) && !hindiMissing
         recognizer?.destroy()
-        val r = SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+        val r = if (onDevice) SpeechRecognizer.createOnDeviceSpeechRecognizer(this) else SpeechRecognizer.createSpeechRecognizer(this)
+        usingOnDevice = onDevice
         recognizer = r
         r.setRecognitionListener(object : RecognitionListener {
             override fun onResults(b: Bundle?) {
@@ -333,6 +342,10 @@ class CensusService : AccessibilityService() {
                 if (tts == null || !ttsReady || lastMessage.startsWith("✅").not()) again() // after a read-back, TTS restarts listening
             }
             override fun onError(error: Int) {
+                // the on-device recogniser has no Hindi: from now on use the online one, and try again at once
+                if (usingOnDevice && (error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE || error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED)) {
+                    hindiMissing = true; Log.i(TAG, "census speech: no Hindi on the phone, using online recognition"); main.post { listen() }; return
+                }
                 show(if (error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE || error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED)
                     "Hindi का offline pack नहीं है: 'जनगणना सहायक' app में कदम देखें" else "फिर से 🎤 दबाकर बोलें (त्रुटि $error)")
                 Log.i(TAG, "census speech error $error")
@@ -350,7 +363,7 @@ class CensusService : AccessibilityService() {
         val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
-            .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, usingOnDevice)
         r.startListening(i)
     }
 }

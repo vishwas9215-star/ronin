@@ -73,7 +73,7 @@ class SetupActivity : Activity() {
             }
             checkHindi()
         }
-        if (!offline) text("इस phone पर offline आवाज़ पहचान नहीं मिली। Google app → Settings → Voice → Offline speech recognition → हिन्दी download करें। तब तक Gboard के 🎤 से बोलकर लिखें।", 15f, Color.DKGRAY)
+        if (!offline || hindi.startsWith("❌")) text("ठीक है: offline हिन्दी नहीं होने पर सहायक internet से (Google की आवाज़ पहचान) सुनेगा। 🎤 एक बार दबाएँ = एक वाक्य; देर तक दबाएँ = लगातार सुनना।", 15f, Color.DKGRAY)
 
         val on = CensusService.instance != null
         text((if (on) "✅" else "3️⃣") + " सहायक चालू (Accessibility)")
