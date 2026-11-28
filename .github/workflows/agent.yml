@@ -55,7 +55,7 @@ jobs:
           cp android/census/build/outputs/apk/debug/*.apk RoninCensus.apk
           cp android/census/build/outputs/apk/androidTest/debug/*.apk RoninCensus-test.apk
           # the census helper must never ask for the internet
-          if unzip -p RoninCensus.apk AndroidManifest.xml | strings | grep -q "android.permission.INTERNET"; then echo "census helper asks for INTERNET"; exit 1; fi
+          if unzip -p RoninCensus.apk AndroidManifest.xml | strings -e l | grep -q "android.permission.INTERNET"; then echo "census helper asks for INTERNET"; exit 1; fi
           gh release view agent-lab >/dev/null 2>&1 || gh release create agent-lab --title "Ronin Agent Lab (pilot test build)" --notes "Pilot test app (com.ronin.agentlab). Not a Ronin release, never offered as an update." --prerelease || true
           for A in amd64 arm64; do CGO_ENABLED=0 GOOS=linux GOARCH=$A go build -trimpath -ldflags "-s -w" -o roninrelay-linux-$A ./cmd/roninrelay; sha256sum roninrelay-linux-$A | cut -d' ' -f1 > roninrelay-linux-$A.sha256; done
           go test ./internal/agentrelay ./internal/agentcore
