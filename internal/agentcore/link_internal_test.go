@@ -58,3 +58,14 @@ func TestHandoverFromAKnownDeviceOnly(t *testing.T) {
 		t.Fatal("older one again")
 	}
 }
+
+// tabs: the laptop has only t1; a call for another tab must never land on it
+func TestLaptopRefusesOtherTabs(t *testing.T) {
+	d := &Driver{}
+	if r := d.Run("x1", "snapshot", map[string]any{"tab": "t2"}); r["error"] == nil {
+		t.Fatal("tab t2 accepted")
+	}
+	if r := d.Run("x2", "open", map[string]any{"url": "https://example.com/", "new_tab": true}); r["error"] == nil {
+		t.Fatal("new_tab accepted")
+	}
+}

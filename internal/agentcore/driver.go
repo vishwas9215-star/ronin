@@ -335,6 +335,13 @@ func (d *Driver) Run(id, tool string, args map[string]any) (out map[string]any) 
 	}
 	stopped, paused, holding := d.Stopped, d.Paused, d.OwnerHolding
 	d.mu.Unlock()
+	// the laptop has one Claude tab (t1) for now: a call meant for another tab never lands on this one
+	if t, _ := args["tab"].(string); t != "" && t != "t1" {
+		return e("this device has only Claude's main tab (t1): tab " + t + " does not exist here")
+	}
+	if nt, _ := args["new_tab"].(bool); nt {
+		return e("new tabs are not on the laptop yet: use the main tab (no tab argument)")
+	}
 	if stopped {
 		return e("the owner pressed STOP on this device. Claude must wait until he turns Claude on again.")
 	}
