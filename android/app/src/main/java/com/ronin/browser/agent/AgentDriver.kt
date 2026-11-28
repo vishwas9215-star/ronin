@@ -354,6 +354,25 @@ class AgentDriver(
         return s
     }
 
+    /** The owner is using another app (Claude app, WhatsApp...): Ronin is not on the screen. */
+    fun background(): Boolean = forceBackground || !onMain { web.hasWindowFocus() && web.isShown }
+    @Volatile var forceBackground = false // device tests only: act as if the owner were in another app
+
+    /** Typing while Ronin is in the background: the page's own setter + input / change events, then read back. */
+    private fun typeInBackground(ref: String, name: String, text: String, submit: Boolean): JSONObject {
+        claudeUntil = Long.MAX_VALUE
+        try {
+            val r = call("window.__roninAgent.fill(${q(ref)}, ${q(text)})")
+            if (r.has("error")) return err(if (r.optString("error") == "secret box") "password / OTP box: only the owner types it." else r.optString("error"))
+            Thread.sleep(if (slow()) 600 else 150)
+            val v = call("window.__roninAgent.value(${q(ref)})").optString("value")
+            val result = when { v == text -> "verified"; v.contains(text) -> "verified (box had more text)"; else -> "unverified" }
+            if (submit && result.startsWith("verified")) { call("window.__roninAgent.submitBox(${q(ref)})"); Thread.sleep(400) }
+            return JSONObject().put("done", "typed into \"$name\"").put("check", result).put("method", "background-fill").put("editorinfo", "background")
+                .also { if (submit && !result.startsWith("verified")) it.put("note", "not submitted: the box does not show exactly the text") }
+        } finally { claudeUntil = SystemClock.uptimeMillis() + 2000 }
+    }
+
     private fun click(ref: String): JSONObject {
         val at = call("window.__roninAgent.locate(${q(ref)})")
         if (at.has("error")) return at
@@ -366,9 +385,13 @@ class AgentDriver(
         if (act in blockedActs) return err("\"$name\" was interrupted earlier and its result is unknown. The owner must check the page and tap CHECKED first.")
         lastTarget = act; journal.edit().putString("lastTarget", act).commit()
         val b0 = blocked.size
-        tap(at.optDouble("x"), at.optDouble("y"))
+        val bg = background()
+        if (bg) { // the owner is in another app: the same checks were made above; the element is pressed directly
+            claudeUntil = Long.MAX_VALUE
+            try { call("window.__roninAgent.press(${q(ref)})"); Thread.sleep(if (slow()) 700 else 400) } finally { claudeUntil = SystemClock.uptimeMillis() + 2000 }
+        } else tap(at.optDouble("x"), at.optDouble("y"))
         if (blocked.size > b0) return err("tapped \"$name\", but the page then tried ${blocked.subList(b0, blocked.size).joinToString("; ")}. BLOCKED on the device. Tell the owner.")
-        return JSONObject().put("done", "tapped ${at.optString("kind")} \"$name\"").put("url", currentUrl)
+        return JSONObject().put("done", "tapped ${at.optString("kind")} \"$name\"").put("url", currentUrl).put("method", if (bg) "background-press" else "tap")
     }
 
     private fun type(ref: String, text: String, submit: Boolean): JSONObject {
@@ -383,6 +406,7 @@ class AgentDriver(
         if (AgentRules.numberNeedsOwner(name, text, at.optBoolean("otpPage"))) return err("\"${text.replace(Regex("\\D"), "").length}-digit number\" looks like an OTP / PIN (this page asks for one): the owner types it. Call ask_owner.")
         val before = call("window.__roninAgent.value(${q(ref)})")
         if (before.optString("value") == text) return JSONObject().put("done", "already matched \"$name\"")
+        if (background()) return typeInBackground(ref, name, text, submit)
         val t0 = SystemClock.uptimeMillis()
         tap(at.optDouble("x"), at.optDouble("y"))
         // native check (outside the page's JavaScript): what the engine told the keyboard about this box

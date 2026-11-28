@@ -187,6 +187,21 @@ class AgentDeviceTest {
         mech("banner", true)
     }
 
+    // the owner works in the Claude app while Ronin runs behind it (28 Nov): typing and taps must still work
+    @Test fun worksWhileTheOwnerIsInAnotherApp() {
+        open("https://epds.example.gov.in/")
+        d.forceBackground = true
+        try {
+            val r = tool("type", "ref" to ref("Employee name"), "text" to "सीता देवी")
+            assertTrue(r.toString(), r.optString("check") == "verified" && r.optString("method") == "background-fill")
+            val c = tool("click", "ref" to ref("Save"))
+            assertTrue(c.toString(), c.optString("method") == "background-press")
+            open("https://verify.example.in/")
+            assertTrue("password box still refused", tool("type", "ref" to ref("Portal password"), "text" to "x").has("error"))
+            mech("background", true)
+        } finally { d.forceBackground = false }
+    }
+
     @Test fun linksAddressesAndHumanChecks() {
         open("https://news.example.com/")
         assertTrue(tool("click", "ref" to ref("Read more")).optString("error").contains("script link"))

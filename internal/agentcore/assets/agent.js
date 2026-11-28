@@ -12,6 +12,9 @@
     innerText: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'innerText').get,
     shadow: Object.getOwnPropertyDescriptor(Element.prototype, 'shadowRoot').get,
     value: Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').get,
+    setValue: Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set,
+    setTA: Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set,
+    click: HTMLElement.prototype.click, focus: HTMLElement.prototype.focus,
     scroll: Element.prototype.scrollIntoView, tag: Object.getOwnPropertyDescriptor(Element.prototype, 'tagName').get,
   };
   const call = (f, o, ...a) => Function.prototype.call.call(f, o, ...a);
@@ -141,7 +144,30 @@
   function getText(ref, allowIds) { const el = resolve(ref); if (!el) return { error: "ref gone" }; const t = TXT(el).slice(0, 2000); return { text: allowIds ? t : redact(t) }; }
   // the value of a box after typing (read back to report "verified"); never for password boxes
   function value(ref) { const el = resolve(ref); if (!el) return { error: 'ref gone' }; if (kind(el) === 'input:password') return { secret: true }; let v; try { v = call(N.value, el); } catch (e) { v = el.value; } return { value: String(v ?? '') }; }
+  // BACKGROUND only (the owner is using another app: no keyboard connection, taps are not drawn): put the text in
+  // the way the page's own setter does, with input / change events. Never password / OTP / CAPTCHA boxes.
+  function fill(ref, text) {
+    const el = resolve(ref); if (!el) return { error: 'ref gone' };
+    if (kind(el) === 'input:password' || otpBox(el)) return { error: 'secret box' };
+    const t = call(N.tag, el);
+    try { call(N.focus, el); } catch (e) {}
+    if (el.isContentEditable) { el.textContent = String(text); el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: String(text) })); return { done: true }; }
+    if (t === 'INPUT') call(N.setValue, el, String(text)); else if (t === 'TEXTAREA') call(N.setTA, el, String(text)); else return { error: 'not a text box' };
+    el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: String(text) }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return { done: true };
+  }
+  // BACKGROUND only: press an element the way a click does (the same checks as a tap are made before this)
+  function press(ref) { const el = resolve(ref); if (!el) return { error: 'ref gone' }; call(N.click, el); return { done: true }; }
+  // BACKGROUND only: Enter in a box = submit its form (like the keyboard's Go)
+  function submitBox(ref) {
+    const el = resolve(ref); if (!el) return { error: 'ref gone' };
+    const o = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+    const go = el.dispatchEvent(new KeyboardEvent('keydown', o)); el.dispatchEvent(new KeyboardEvent('keyup', o));
+    if (go && el.form) { try { el.form.requestSubmit(); } catch (e) { el.form.submit(); } }
+    return { done: true };
+  }
   function view() { return { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio }; }
   function hasText(t) { return TXT(document.body || document.documentElement).includes(t); }
-  window.__roninAgent = Object.freeze({ snapshot, locate, challenge, selectOption, getText, value, view, hasText });
+  window.__roninAgent = Object.freeze({ snapshot, locate, challenge, selectOption, getText, value, view, hasText, fill, press, submitBox });
 })();
