@@ -166,6 +166,26 @@ class AgentDeviceTest {
         assertTrue("a page's WebSocket to this device is refused by Ronin's proxy", p.refused.get() > b0)
     }
 
+    // the owner said (28 Nov) "no button does anything": every press must visibly change the banner at once
+    @Test fun everyBannerButtonVisiblyAnswers() {
+        fun press(tag: String): String {
+            var text = ""
+            scenario.onActivity { a ->
+                val root = a.window.decorView
+                (root.findViewWithTag<android.widget.Button>(tag) ?: error("no button $tag")).performClick()
+            }
+            Thread.sleep(300)
+            scenario.onActivity { a -> text = (a.window.decorView.findViewWithTag<android.view.View>("agent-connect").parent.parent as android.view.ViewGroup).let { r -> ((r.getChildAt(0) as android.view.ViewGroup).getChildAt(0) as android.widget.TextView).text.toString() } }
+            return text
+        }
+        assertTrue(press("agent-stop").contains("रुका"))
+        assertTrue(d.stopped)
+        assertTrue(press("agent-resume").contains("काम कर सकता"))
+        assertTrue(!d.stopped)
+        press("agent-connect") // no link in tests: must not crash, says so
+        mech("banner", true)
+    }
+
     @Test fun linksAddressesAndHumanChecks() {
         open("https://news.example.com/")
         assertTrue(tool("click", "ref" to ref("Read more")).optString("error").contains("script link"))

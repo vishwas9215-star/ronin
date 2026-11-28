@@ -25,6 +25,10 @@ class AgentActivity : Activity() {
     }
 
     private lateinit var status: TextView
+    private lateinit var linkLine: TextView
+    private var removedAt = 0L
+    private val ticker = android.os.Handler(android.os.Looper.getMainLooper())
+    private val tick = object : Runnable { override fun run() { refresh(); ticker.postDelayed(this, 1000) } }
     private lateinit var web: AgentWebView
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,32 +39,40 @@ class AgentActivity : Activity() {
         if (packageName.endsWith(".agentlab") && android.os.Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true) }
         val d = resources.displayMetrics.density
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.WHITE) }
-        val bar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.rgb(13, 118, 128)); setPadding((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), (6 * d).toInt())
+        // banner: a full-width status line (always readable on a phone), then the buttons in two rows.
+        // Every press shows at once what happened (status + a short message), so a press never looks "dead".
+        val top = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(13, 118, 128)); setPadding((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), (4 * d).toInt()) }
+        status = TextView(this).apply { setTextColor(Color.WHITE); textSize = 16f; text = "🤖 Claude तैयार है"; maxLines = 3 }
+        top.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        linkLine = TextView(this).apply { setTextColor(Color.rgb(220, 240, 240)); textSize = 13f }
+        top.addView(linkLine)
+        root.addView(top)
+        fun btn(label: String, tag: String, said: String, f: () -> Unit) = Button(this).apply {
+            text = label; this.tag = tag; isAllCaps = false; textSize = 16f; minHeight = (52 * d).toInt(); minWidth = 0
+            setOnClickListener {
+                f(); refresh()
+                android.widget.Toast.makeText(this@AgentActivity, said, android.widget.Toast.LENGTH_SHORT).show()
+                android.util.Log.i("RoninAgent", "owner pressed $tag")
+            }
         }
-        status = TextView(this).apply { setTextColor(Color.WHITE); textSize = 16f; text = "🤖 Claude तैयार है" }
-        bar.addView(status, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        fun btn(label: String, tag: String, f: () -> Unit) = Button(this).apply {
-            text = label; this.tag = tag; isAllCaps = false; textSize = 16f; minHeight = (52 * d).toInt(); minWidth = (88 * d).toInt()
-            setOnClickListener { f(); refresh() }
+        fun row(vararg b: Button) = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.rgb(9, 90, 98))
+            for (x in b) addView(x, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
-        bar.addView(btn("DONE", "agent-done") { driver?.ownerDone() })
-        bar.addView(btn("RESUME", "agent-resume") { driver?.resume() })
-        bar.addView(btn("STOP", "agent-stop") { driver?.ownerStop() })
-        root.addView(bar)
-        // the owner's two Claude buttons: "Claude जोड़ें" opens a 3-minute window for ONE Connect card on this device
-        // (a stranger's Claude can never show a card); "Claude हटाएँ" disconnects Claude from all his devices.
-        val bar2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.rgb(9, 90, 98)) }
-        bar2.addView(btn("Claude जोड़ें", "agent-connect") {
-            link?.openConnectWindow()
-            status.post { status.text = "🔗 3 मिनट: अब Claude में Connect दबाएँ, फिर यहाँ Allow दबाकर रखें" }
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        bar2.addView(btn("Claude हटाएँ", "agent-disconnect") {
-            link?.disconnectClaude()
-            status.post { status.text = "⛔ Claude हटा दिया गया (सभी devices से)" }
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        root.addView(bar2)
+        root.addView(row(
+            btn("DONE", "agent-done", "✅ DONE: Claude को बता दिया") { driver?.ownerDone() },
+            btn("RESUME", "agent-resume", "▶ Claude फिर चालू") { driver?.resume() },
+            btn("STOP", "agent-stop", "⏹ Claude रोक दिया") { driver?.ownerStop() }))
+        // "Claude जोड़ें" opens a 3-minute window for ONE Connect card on this device (a stranger's Claude can never
+        // show a card); "Claude हटाएँ" disconnects Claude from all his devices.
+        root.addView(row(
+            btn("Claude जोड़ें", "agent-connect", "🔗 3 मिनट खुला: अब Claude में Connect करें") {
+                if (link == null) android.widget.Toast.makeText(this, "relay से link अभी नहीं है", android.widget.Toast.LENGTH_SHORT).show()
+                link?.openConnectWindow()
+            },
+            btn("Claude हटाएँ", "agent-disconnect", "⛔ Claude सभी devices से हटा दिया") {
+                link?.disconnectClaude(); removedAt = System.currentTimeMillis()
+            }))
         web = AgentWebView(this)
         root.addView(web, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
@@ -135,13 +147,24 @@ class AgentActivity : Activity() {
 
     private fun refresh() {
         val dr = driver ?: return
+        val left = ((link?.connectUntil ?: 0L) - System.currentTimeMillis()) / 1000
         status.text = when {
+            left > 0 -> "🔗 Claude जोड़ें खुला है: ${left / 60}:${"%02d".format(left % 60)} बाकी। अब Claude में Connect करें, फिर यहाँ code मिलाकर Allow दबाकर रखें"
+            System.currentTimeMillis() - removedAt < 10_000 -> "⛔ Claude हटा दिया गया (सभी devices से)"
             dr.stopped -> "⏹ Claude रुका है (RESUME से चालू)"
             dr.paused -> "⏸ आपने छुआ: Claude रुका है (RESUME दबाएँ)"
             dr.ownerHolding -> "✋ आपकी बारी: काम करके DONE दबाएँ"
             else -> "🤖 Claude काम कर सकता है"
         }
+        linkLine.text = when {
+            link == null -> "relay link: बंद"
+            link?.online == true -> "🟢 relay से जुड़ा" + if (proxyOn) " · सुरक्षा proxy चालू" else ""
+            else -> "🔴 relay से जुड़ रहा है…"
+        }
     }
+
+    override fun onResume() { super.onResume(); ticker.removeCallbacks(tick); ticker.post(tick) }
+    override fun onPause() { ticker.removeCallbacks(tick); super.onPause() }
 
     override fun onStop() { super.onStop(); CookieManager.getInstance().flush() }
     override fun onDestroy() { if (driver?.web === web) { driver = null; link?.stop(); link = null }; web.destroy(); super.onDestroy() }
