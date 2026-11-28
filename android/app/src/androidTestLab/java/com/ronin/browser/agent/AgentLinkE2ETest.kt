@@ -120,4 +120,51 @@ class AgentLinkE2ETest {
             Log.i("RoninAgent", "MECH e2e PASS")
         } finally { scenario.close() }
     }
+
+    // the owner will format his phone (28 Nov): the new install has a new key; the name can not be taken over, so the
+    // new device waits with a code and the owner allows it on his OTHER device. No server step.
+    @Test fun formattedDeviceIsAllowedBackFromTheOtherDevice() {
+        assumeTrue("needs the CI relay", relay.isNotEmpty())
+        val pub = String(Base64.decode(args.getString("relayPub") ?: "", Base64.DEFAULT))
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val intent = Intent(ctx, AgentActivity::class.java).putExtra("relayUrl", relay).putExtra("relayPub", pub).putExtra("autoApprove", true)
+        val scenario = ActivityScenario.launch<AgentActivity>(intent)
+        val ks = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        try {
+            var w = 0
+            while ((AgentActivity.link?.online != true) && w < 120) { Thread.sleep(500); w++ }
+            val me = AgentActivity.link!!
+            assertTrue(me.online)
+            val tablet = ctx.resources.configuration.smallestScreenWidthDp >= 600
+            val other = if (tablet) "phone" else "tablet"
+            val pa = ctx.getSharedPreferences("t-old", 0).also { it.edit().clear().commit() }
+            val pb = ctx.getSharedPreferences("t-new", 0).also { it.edit().clear().commit() }
+            listOf("t-old-$other", "t-new-$other").forEach { if (ks.containsAlias(it)) ks.deleteEntry(it) }
+            val d = AgentActivity.driver!!
+            val old = AgentLink(relay, pub, other, pa, d, { true }, "t-old-$other")
+            assumeTrue("the other name is free on this relay", old.pair())
+            assertTrue("nothing waiting", me.approveRepair().contains("कोई नया device"))
+            // "format": new key + new secret
+            val nw = AgentLink(relay, pub, other, pb, d, { true }, "t-new-$other")
+            assertTrue("the taken name is refused", !nw.pair())
+            val code = nw.repairCode
+            assertTrue("waits with a 6-digit code", code != null && Regex("^[0-9]{6}$").matches(code))
+            // a forged handover is ignored
+            assertTrue(!me.applyHandover(JSONObject().put("name", other).put("by", "laptop").put("ts", System.currentTimeMillis()).put("new_pub", nw.publicPem()).put("old_pub", old.publicPem())
+                .put("new", AgentLink.sha(nw.publicPem())).put("old", AgentLink.sha(old.publicPem())).put("sig", "AAAA")))
+            val said = me.approveRepair()
+            assertTrue("the owner allowed it here: $said", said.startsWith("✅"))
+            assertEquals(nw.publicPem(), ctx.getSharedPreferences("agent-link", 0).getString("peer_$other", null))
+            assertTrue("the new device pairs now", nw.pair())
+            assertEquals("keeps the old key for older grants", old.publicPem(), pb.getString("prev_self", null))
+            nw.start()
+            w = 0; while (!nw.online && w < 60) { Thread.sleep(500); w++ }
+            assertTrue("the new device is online", nw.online)
+            nw.stop()
+            Log.i("RoninAgent", "MECH repair PASS")
+        } finally {
+            scenario.close()
+            listOf("t-old-phone", "t-new-phone", "t-old-tablet", "t-new-tablet").forEach { try { if (ks.containsAlias(it)) ks.deleteEntry(it) } catch (_: Exception) {} }
+        }
+    }
 }

@@ -41,6 +41,7 @@ class AgentLink(
     private val prefs: SharedPreferences,
     private val driver: AgentDriver,
     private val approve: (String) -> Boolean, // the native "Connect Claude?" card (press and hold)
+    private val alias: String = "ronin-agent-$name", // Keystore key name (tests use their own)
 ) {
     @Volatile var running = false
     @Volatile var online = false
@@ -51,7 +52,8 @@ class AgentLink(
     private var seqIn = 0L
     private var seqOut = 0L
     private val generation = java.util.concurrent.atomic.AtomicInteger(0) // Stop / Start: an old loop sees a new number and ends
-    private val alias = "ronin-agent-$name"
+    /** After a format: this device waits with this code until the owner allows it on another of his devices. */
+    @Volatile var repairCode: String? = null
     private val worker = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "ronin-agent-work").apply { isDaemon = true } }
     /** "Claude जोड़ें": only while the owner opened it on THIS device (3 minutes) may a Connect card show here. */
     @Volatile var connectUntil = 0L
@@ -93,6 +95,8 @@ class AgentLink(
 
     companion object {
         val PEER_NAMES = setOf("phone", "tablet")
+        val HANDOVER_NAMES = setOf("phone", "tablet", "laptop")
+        fun sha(s: String): String = java.security.MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
         fun pemToKey(pem: String): PublicKey {
             val b64 = pem.lines().filter { !it.startsWith("-----") }.joinToString("")
             return KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(Base64.decode(b64, Base64.DEFAULT)))
@@ -131,12 +135,17 @@ class AgentLink(
         // A man in the middle could still copy that page; he gains nothing: every hello needs the Keystore signature.
         val (wc, wt) = try { http("GET", "/.well-known/ronin-relay.json", auth = false) } catch (e: Exception) { return false }
         if (wc != 200 || JSONObject(wt).optString("pub").trim() != relayPubPem.trim()) { log("pair: NOT our relay"); return false }
-        val (code, text) = http("POST", "/agent/pair", JSONObject().put("name", name).put("key", secret).put("pub", publicPem()))
+        // the code is only used when the name is already paired (after a format): shown here, compared on the tablet
+        val myCode = prefs.getString("repairCode", null) ?: (100000 + SecureRandom().nextInt(900000)).toString().also { prefs.edit().putString("repairCode", it).commit() }
+        val (code, text) = http("POST", "/agent/pair", JSONObject().put("name", name).put("key", secret).put("pub", publicPem()).put("code", myCode))
+        if (code == 409 && (try { JSONObject(text).optString("repair") } catch (e: Exception) { "" }) == "waiting") { repairCode = myCode; log("re-pair waiting (code shown)"); return false }
         if (code != 200) { log("pair refused ($code)"); return false }
         val got = JSONObject(text).optString("relay_pub")
         if (got.trim() != relayPubPem.trim()) { log("pair: NOT our relay"); return false }
         JSONObject(text).optJSONObject("peers")?.let { p -> for (n in p.keys()) if (n != name && n in PEER_NAMES && prefs.getString("peer_$n", null) == null) rememberPeer(n, p.getString(n)) }
-        prefs.edit().putBoolean("paired", true).commit()
+        JSONObject(text).optJSONObject("handover")?.let { applyHandover(it) }
+        prefs.edit().putBoolean("paired", true).remove("repairCode").commit()
+        repairCode = null
         return true
     }
 
@@ -158,6 +167,7 @@ class AgentLink(
         if (now() < connectUntil) learnPeers(text)
         // a "Disconnect Claude" pressed on another device while this one was offline
         m.optJSONObject("epoch")?.let { applyEpoch(it.optString("by"), it.optLong("epoch"), it.optString("sig")) }
+        m.optJSONArray("handovers")?.let { a -> for (i in 0 until a.length()) a.optJSONObject(i)?.let { applyHandover(it) } }
         synchronized(lock) {
             if (gen != generation.get()) return false
             sid = m.getString("session"); k = key; seqIn = 0; seqOut = 0
@@ -278,11 +288,13 @@ class AgentLink(
     fun grantProblem(g: JSONObject?): String? {
         if (g == null) return "no owner grant"
         val dev = g.optString("dev")
-        val pub = if (dev == name) publicPem() else prefs.getString("peer_$dev", null) ?: return "grant from an unknown device"
+        // a grant this device's OLD key signed before a format still counts (its handover was allowed by the owner)
+        val pubs = if (dev == name) listOfNotNull(publicPem(), prefs.getString("prev_self", null)) else listOfNotNull(prefs.getString("peer_$dev", null))
+        if (pubs.isEmpty()) return "grant from an unknown device"
         if (name !in g.optString("scope").split(", ")) return "this device is not in the owner's grant"
         if (g.optLong("epoch") < prefs.getLong("epoch", 0)) return "Claude was disconnected by the owner: connect again"
         val text = listOf("approve", g.optString("nonce"), g.optString("client"), g.optString("redirect"), g.optString("challenge"), g.optString("scope"), g.optString("code"), g.optLong("epoch"), g.optLong("issued")).joinToString("|")
-        return if (verify(pub, text, g.optString("sig"))) null else "the grant's signature is wrong"
+        return if (pubs.any { verify(it, text, g.optString("sig")) }) null else "the grant's signature is wrong"
     }
 
     /**
@@ -298,4 +310,52 @@ class AgentLink(
     }
 
     fun rememberPeer(dev: String, pem: String) { prefs.edit().putString("peer_$dev", pem).commit() }
+
+    // ---------- a formatted / new device takes its old name back (the owner allows it on another device) ----------
+
+    /**
+     * The owner pressed "नया device जोड़ें" here. A device waiting with a code is shown on the press-and-hold card; he
+     * compares the code with the new device's screen. Runs off the UI thread. Returns what to tell him.
+     */
+    fun approveRepair(): String {
+        if (!online) return "relay से link अभी नहीं है, थोड़ी देर में फिर दबाएँ"
+        val r = send(JSONObject().put("repairList", true)) ?: return "relay से जवाब नहीं आया"
+        val list = try { JSONObject(r).optJSONArray("repairs") } catch (e: Exception) { null } ?: return "कोई नया device इंतज़ार में नहीं है"
+        if (list.length() == 0) return "कोई नया device इंतज़ार में नहीं है। पहले नए device पर Ronin Agent खोलें।"
+        val q = list.getJSONObject(0)
+        val n = q.optString("name"); val pub = q.optString("pub"); val code = q.optString("code"); val old = q.optString("old_pub")
+        if (n == name || n !in HANDOVER_NAMES || !pub.contains("PUBLIC KEY") || !Regex("^[0-9]{6}$").matches(code)) return "गलत request: मना कर दिया"
+        val text = "नया $n जोड़ें? Code $code — नए $n की screen पर भी यही code होना चाहिए। अलग हो तो Deny दबाएँ। पुराना $n हट जाएगा।"
+        if (driver.stopped || !approve(text)) return "मना कर दिया"
+        val ts = now()
+        val sig = sign("handover|$n|${sha(pub)}|${sha(old)}|$code|$ts")
+        val a = JSONObject().put("name", n).put("new", sha(pub)).put("old", sha(old)).put("code", code).put("ts", ts).put("sig", sig)
+        val res = send(JSONObject().put("repairApprove", a))?.let { try { JSONObject(it) } catch (e: Exception) { null } } ?: return "relay से जवाब नहीं आया"
+        if (!res.optBoolean("ok")) return "नहीं हुआ: ${res.optString("error")}"
+        rememberPeer(n, pub); prefs.edit().putLong("handover_$n", ts).commit()
+        log("handover of $n allowed here")
+        return "✅ नया $n जुड़ गया"
+    }
+
+    /**
+     * A handover the owner allowed on one of his devices. Taken only when signed by a device this one knows (never by
+     * the name itself), newest only. For THIS device (just re-paired) it keeps the old key to check older grants.
+     */
+    fun applyHandover(h: JSONObject): Boolean {
+        val n = h.optString("name"); val by = h.optString("by"); val ts = h.optLong("ts")
+        val newPub = h.optString("new_pub"); val oldPub = h.optString("old_pub")
+        if (n.isEmpty() || by == n || n !in HANDOVER_NAMES || sha(newPub) != h.optString("new") || sha(oldPub) != h.optString("old")) return false
+        if (ts <= prefs.getLong("handover_$n", 0)) return false
+        val byPub = if (by == name) publicPem() else prefs.getString("peer_$by", null) ?: return false
+        if (!verify(byPub, "handover|$n|${h.optString("new")}|${h.optString("old")}|${h.optString("code")}|$ts", h.optString("sig"))) return false
+        if (n == name) {
+            if (newPub.trim() != publicPem().trim()) return false
+            prefs.edit().putString("prev_self", oldPub).putLong("handover_$n", ts).commit()
+        } else {
+            if (n !in PEER_NAMES) return false
+            prefs.edit().putString("peer_$n", newPub).putLong("handover_$n", ts).commit()
+        }
+        log("handover of $n from $by")
+        return true
+    }
 }

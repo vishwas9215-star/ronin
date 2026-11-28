@@ -40,6 +40,7 @@ class AgentActivity : Activity() {
         if (on) ticker.postDelayed(autoHide, 30_000)
     }
     private var removedAt = 0L
+    private var repairSaid = ""; private var repairAt = 0L
     private val ticker = android.os.Handler(android.os.Looper.getMainLooper())
     private val tick = object : Runnable { override fun run() { refresh(); ticker.postDelayed(this, 1000) } }
     private lateinit var web: AgentWebView
@@ -52,14 +53,22 @@ class AgentActivity : Activity() {
         // it never unlocks the phone. The real Ronin will ask the owner before doing this.
         if (packageName.endsWith(".agentlab") && android.os.Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true) }
         val d = resources.displayMetrics.density
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.WHITE) }
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(13, 118, 128)) }
+        // Android 15+ draws apps under the status bar and the navigation bar: the strip starts BELOW the status bar
+        // (owner, 28 Nov: the top bar mixed with the page), and the keyboard never covers the page either
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { v, ins ->
+            val t = androidx.core.view.WindowInsetsCompat.Type.systemBars() or androidx.core.view.WindowInsetsCompat.Type.displayCutout()
+            val b = ins.getInsets(t); val ime = ins.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())
+            v.setPadding(b.left, b.top, b.right, maxOf(b.bottom, ime.bottom))
+            androidx.core.view.WindowInsetsCompat.CONSUMED
+        }
         // banner: a full-width status line (always readable on a phone), then the buttons in two rows.
         // Every press shows at once what happened (status + a short message), so a press never looks "dead".
         val top = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(13, 118, 128)); setPadding((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), (4 * d).toInt()) }
         // a thin strip by default (the page gets the whole screen); "बटन ▾" opens the buttons, they close again by
         // themselves after 30 s. They open by themselves when Claude hands the screen to the owner (DONE needed).
         val strip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        status = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; text = "🤖 Claude तैयार है"; maxLines = 2 }
+        status = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; text = "🤖 Claude तैयार है"; maxLines = 3 }
         strip.addView(status, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         toggle = Button(this).apply {
             text = "बटन ▾"; tag = "agent-toggle"; isAllCaps = false; textSize = 13f; minHeight = (36 * d).toInt(); minimumHeight = (36 * d).toInt(); minWidth = 0
@@ -98,6 +107,14 @@ class AgentActivity : Activity() {
             },
             btn("Claude हटाएँ", "agent-disconnect", "⛔ Claude सभी devices से हटा दिया") {
                 link?.disconnectClaude(); removedAt = System.currentTimeMillis()
+            }))
+        // after a format the phone waits with a code: the owner allows it HERE (compare the code, press and hold)
+        rows.addView(row(
+            btn("नया device जोड़ें", "agent-repair", "🔁 देख रहे हैं: कोई नया device इंतज़ार में है?") {
+                val l = link
+                if (l == null) { repairSaid = "relay से link अभी नहीं है"; repairAt = System.currentTimeMillis(); return@btn }
+                repairSaid = "🔁 देख रहे हैं..."; repairAt = System.currentTimeMillis()
+                kotlin.concurrent.thread { val m = l.approveRepair(); runOnUiThread { repairSaid = m; repairAt = System.currentTimeMillis(); refresh(); android.widget.Toast.makeText(this, m, android.widget.Toast.LENGTH_LONG).show() } }
             }))
         web = AgentWebView(this)
         root.addView(web, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -156,7 +173,14 @@ class AgentActivity : Activity() {
         link = l
         if (!autoApprove) keepWorkingInBackground()
         kotlin.concurrent.thread {
-            if (!prefs.getBoolean("paired", false)) l.pair()
+            // not paired yet (or formatted): keep asking; while the name is taken it waits for the owner's OK on
+            // another device, with its code on the screen
+            var wait = 6000L
+            while (!prefs.getBoolean("paired", false) && !isDestroyed) {
+                if (l.pair()) break
+                runOnUiThread { refresh() }
+                Thread.sleep(wait); if (l.repairCode == null) wait = minOf(wait * 2, 60_000)
+            }
             l.start()
             if (autoApprove) l.openConnectWindow() // CI: the test stands in for the owner's tap
         }
@@ -180,7 +204,10 @@ class AgentActivity : Activity() {
     private fun refresh() {
         val dr = driver ?: return
         val left = ((link?.connectUntil ?: 0L) - System.currentTimeMillis()) / 1000
+        val code = link?.repairCode
         status.text = when {
+            code != null -> "🔁 Code $code · यह device पहले से जुड़ा था: tablet पर Ronin Agent → बटन ▾ → \"नया device जोड़ें\" दबाएँ"
+            System.currentTimeMillis() - repairAt < 15_000 && repairSaid.isNotEmpty() -> repairSaid
             left > 0 -> "🔗 Claude जोड़ें खुला है: ${left / 60}:${"%02d".format(left % 60)} बाकी। अब Claude में Connect करें, फिर यहाँ code मिलाकर Allow दबाकर रखें"
             System.currentTimeMillis() - removedAt < 10_000 -> "⛔ Claude हटा दिया गया (सभी devices से)"
             dr.stopped -> "⏹ Claude रुका है (RESUME से चालू)"

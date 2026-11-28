@@ -187,6 +187,35 @@ class AgentDeviceTest {
         mech("banner", true)
     }
 
+    // owner, 28 Nov: "the top bar is not separate, the page and the bar behind it are mixed" (Android 15+ draws apps
+    // under the status bar): the strip must start below the status bar and the page above the navigation bar
+    @Test fun bannerStartsBelowTheStatusBar() {
+        var top = -1; var inset = -1; var bottomGap = -1; var navInset = -1
+        scenario.onActivity { a ->
+            val strip = a.window.decorView.findViewWithTag<android.view.View>("agent-toggle").parent as android.view.View
+            val loc = IntArray(2); strip.getLocationOnScreen(loc); top = loc[1]
+            val ins = androidx.core.view.ViewCompat.getRootWindowInsets(a.window.decorView)!!
+            inset = ins.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top
+            navInset = ins.getInsets(androidx.core.view.WindowInsetsCompat.Type.navigationBars()).bottom
+            val w = a.window.decorView.findViewWithTag<android.view.View>("agent-toggle").rootView
+            val webLoc = IntArray(2); val web = (strip.parent.parent as android.view.ViewGroup).let { g -> (0 until g.childCount).map { g.getChildAt(it) }.first { it is android.webkit.WebView } }
+            web.getLocationOnScreen(webLoc); bottomGap = w.height - (webLoc[1] + web.height)
+        }
+        Log.i("RoninAgent", "insets: strip top $top, status bar $inset, nav $navInset, page bottom gap $bottomGap")
+        assertTrue("the strip starts below the status bar ($top < $inset)", top >= inset)
+        assertTrue("the page ends above the navigation bar ($bottomGap < $navInset)", bottomGap >= navInset)
+        mech("insets", true)
+    }
+
+    @Test fun repairButtonAnswersWithoutALink() {
+        scenario.onActivity { a -> a.window.decorView.findViewWithTag<android.widget.Button>("agent-toggle").performClick() }
+        var text = ""
+        scenario.onActivity { a -> a.window.decorView.findViewWithTag<android.widget.Button>("agent-repair").performClick() }
+        Thread.sleep(300)
+        scenario.onActivity { a -> text = ((a.window.decorView.findViewWithTag<android.view.View>("agent-toggle").parent as android.view.ViewGroup).getChildAt(0) as android.widget.TextView).text.toString() }
+        assertTrue("says the link is missing: $text", text.contains("link"))
+    }
+
     // the owner works in the Claude app while Ronin runs behind it (28 Nov): typing and taps must still work
     @Test fun worksWhileTheOwnerIsInAnotherApp() {
         open("https://epds.example.gov.in/")

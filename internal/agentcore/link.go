@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -305,6 +307,13 @@ func (l *Link) hello(gen int64) bool {
 	if ev, ok := m["epoch"].(map[string]any); ok {
 		l.applyEpoch(fmt.Sprint(ev["by"]), int64(numAny(ev["epoch"])), fmt.Sprint(ev["sig"]))
 	}
+	if hs, ok := m["handovers"].([]any); ok {
+		for _, h := range hs {
+			if hm, ok := h.(map[string]any); ok {
+				l.ApplyHandover(hm)
+			}
+		}
+	}
 	l.mu.Lock()
 	if gen != l.generation.Load() {
 		l.mu.Unlock()
@@ -532,6 +541,36 @@ func (l *Link) applyEpoch(by string, ep int64, sig string) bool {
 		l.log(fmt.Sprintf("epoch %d from %s", ep, by))
 	}
 	return true
+}
+
+// ApplyHandover: a formatted / new device took its old name back, allowed by the owner on another of his devices.
+// Taken only when signed by a device this one knows (never by that name itself), newest only.
+func (l *Link) ApplyHandover(h map[string]any) bool {
+	n, by := str(h, "name"), str(h, "by")
+	newPub, oldPub := str(h, "new_pub"), str(h, "old_pub")
+	ts := int64(numAny(h["ts"]))
+	if n == "" || n == l.Name || by == n || !PeerNames[n] || shaHex(newPub) != str(h, "new") || shaHex(oldPub) != str(h, "old") {
+		return false
+	}
+	if last, _ := strconv.ParseInt(l.Store.Get("handover_"+n), 10, 64); ts <= last {
+		return false
+	}
+	byPub := l.Store.Get("peer_" + by)
+	if by == l.Name {
+		byPub = l.PublicPEM()
+	}
+	if byPub == "" || !Verify(byPub, fmt.Sprintf("handover|%s|%s|%s|%s|%d", n, str(h, "new"), str(h, "old"), str(h, "code"), ts), str(h, "sig")) {
+		return false
+	}
+	l.Store.Set("peer_"+n, newPub)
+	l.Store.Set("handover_"+n, fmt.Sprint(ts))
+	l.log("handover of " + n + " from " + by)
+	return true
+}
+
+func shaHex(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:])
 }
 
 // GrantProblem: the owner's grant must be signed by one of HIS devices, name this device, and not be revoked.

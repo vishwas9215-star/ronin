@@ -116,11 +116,13 @@ type Relay struct {
 	rot      map[string]*rotated
 	anchors  map[string][]map[string]any
 	limits   map[string][]time.Time
-	connect  map[string]time.Time // device -> until: the owner tapped "Claude जोड़ें" there (no window = no Connect card at all)
-	txns     map[string]*txn      // waiting "Connect Claude?" answers (the sign-in page polls them)
-	used     map[string]usedCode  // sha(code) -> family, so a code used twice kills what it gave
-	epochEv  map[string]any       // the latest signed "Disconnect Claude" (given to every device at its next hello)
-	pairOpen time.Time            // new devices may register until then (opened by the server's owner only)
+	connect  map[string]time.Time      // device -> until: the owner tapped "Claude जोड़ें" there (no window = no Connect card at all)
+	txns     map[string]*txn           // waiting "Connect Claude?" answers (the sign-in page polls them)
+	used     map[string]usedCode       // sha(code) -> family, so a code used twice kills what it gave
+	epochEv  map[string]any            // the latest signed "Disconnect Claude" (given to every device at its next hello)
+	repairs  map[string]*repairReq     // name -> a new / formatted device waiting to take over that name
+	handover map[string]map[string]any // name -> the latest owner-approved handover (signed by another device)
+	pairOpen time.Time                 // new devices may register until then (opened by the server's owner only)
 	audit    *os.File
 }
 
@@ -135,7 +137,8 @@ func New(cfg Config) (*Relay, error) {
 		pend: map[string]map[string]*pending{}, queues: map[string]chan struct{}{}, clients: map[string][]string{},
 		codes: map[string]map[string]any{}, access: map[string]*token{}, refresh: map[string]*token{}, rot: map[string]*rotated{},
 		anchors: map[string][]map[string]any{}, limits: map[string][]time.Time{}, connect: map[string]time.Time{},
-		txns: map[string]*txn{}, used: map[string]usedCode{}, regAt: map[string]time.Time{}, nonces: map[string]time.Time{}}
+		txns: map[string]*txn{}, used: map[string]usedCode{}, regAt: map[string]time.Time{}, nonces: map[string]time.Time{},
+		repairs: map[string]*repairReq{}, handover: map[string]map[string]any{}}
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		return nil, err
 	}
@@ -182,11 +185,12 @@ func (r *Relay) PublicKeyPEM() string {
 }
 
 type saved struct {
-	Devices []*device           `json:"devices"`
-	Access  map[string]*token   `json:"access"`
-	Refresh map[string]*token   `json:"refresh"`
-	Clients map[string][]string `json:"clients"` // Claude's registration survives a relay restart
-	Epoch   map[string]any      `json:"epoch,omitempty"`
+	Devices []*device                 `json:"devices"`
+	Access  map[string]*token         `json:"access"`
+	Refresh map[string]*token         `json:"refresh"`
+	Clients map[string][]string       `json:"clients"` // Claude's registration survives a relay restart
+	Epoch   map[string]any            `json:"epoch,omitempty"`
+	Hand    map[string]map[string]any `json:"handovers,omitempty"`
 }
 
 func (r *Relay) load() {
@@ -214,6 +218,9 @@ func (r *Relay) load() {
 		}
 	}
 	r.epochEv = s.Epoch
+	if s.Hand != nil {
+		r.handover = s.Hand
+	}
 }
 
 // save keeps paired devices and (hashed) tokens, so a relay restart never asks the owner again. Caller holds r.mu.
@@ -229,7 +236,7 @@ func (r *Relay) save() {
 			delete(r.refresh, k)
 		}
 	}
-	s := saved{Access: r.access, Refresh: r.refresh, Clients: r.clients, Epoch: r.epochEv}
+	s := saved{Access: r.access, Refresh: r.refresh, Clients: r.clients, Epoch: r.epochEv, Hand: r.handover}
 	for _, d := range r.devices {
 		s.Devices = append(s.Devices, d)
 	}
@@ -947,38 +954,68 @@ var reName = regexp.MustCompile(`^(laptop|tablet|phone)$`)
 // pair: a NEW device registers its name, secret key (hashed here) and public signing key, only while the
 // server's owner has opened pairing (roninrelay -pair).
 func (r *Relay) pair(w http.ResponseWriter, req *http.Request) {
-	var m struct{ Name, Key, Pub string }
+	var m struct{ Name, Key, Pub, Code string }
 	if req.Method != http.MethodPost || json.NewDecoder(req.Body).Decode(&m) != nil || !reName.MatchString(m.Name) || len(m.Key) < 32 || !strings.Contains(m.Pub, "PUBLIC KEY") {
 		http.Error(w, "bad request", 400)
 		return
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.cfg.Now().After(r.pairUntilLocked()) {
-		http.Error(w, "pairing is closed", 403)
+	if r.limited("pair|"+ip(req), 30) {
+		http.Error(w, "slow down", 429)
 		return
 	}
-	for h, d := range r.devices { // a name is never taken over: replacing needs <data>/repair holding that name (server only)
+	r.hit("pair|" + ip(req))
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if d := r.devices[sha(m.Key)]; d != nil { // this very device again (a re-pair the owner approved since): as at pairing
+		if d.Name != m.Name || d.Pub != m.Pub {
+			http.Error(w, "bad request", 400)
+			return
+		}
+		r.pairReplyLocked(w, m.Name)
+		return
+	}
+	for h, d := range r.devices { // a name is never taken over: replacing needs <data>/repair (server) or another device's OK
 		if d.Name == m.Name {
 			b, _ := os.ReadFile(filepath.Join(r.cfg.DataDir, "repair"))
-			if strings.TrimSpace(string(b)) != m.Name {
+			if strings.TrimSpace(string(b)) == m.Name && !r.cfg.Now().After(r.pairUntilLocked()) {
+				os.Remove(filepath.Join(r.cfg.DataDir, "repair"))
+				delete(r.devices, h)
+				continue
+			}
+			if !reRepairCode.MatchString(m.Code) {
 				r.note(m.Name, "re-pair refused (already paired)")
 				http.Error(w, "already paired: the server owner must allow a re-pair", 409)
 				return
 			}
-			os.Remove(filepath.Join(r.cfg.DataDir, "repair"))
-			delete(r.devices, h)
+			// a formatted / new device: it waits with its own code until the owner allows it on ANOTHER of his devices
+			r.repairs[m.Name] = &repairReq{Name: m.Name, KeyHash: sha(m.Key), Pub: m.Pub, Code: m.Code, Exp: r.cfg.Now().Add(10 * time.Minute)}
+			r.note(m.Name, "re-pair waiting for the owner's OK on another device")
+			writeJSON(w, 409, map[string]any{"error": "already paired", "repair": "waiting", "code": m.Code})
+			return
 		}
+	}
+	if r.cfg.Now().After(r.pairUntilLocked()) {
+		http.Error(w, "pairing is closed", 403)
+		return
 	}
 	r.devices[sha(m.Key)] = &device{Name: m.Name, KeyHash: sha(m.Key), Pub: m.Pub}
 	r.save()
 	r.note(m.Name, "paired")
+	r.pairReplyLocked(w, m.Name)
+}
+
+// the other devices' public keys are handed out only to a device the server's owner (pairing window) or the owner on
+// another device (handover) let in. Caller holds r.mu.
+func (r *Relay) pairReplyLocked(w http.ResponseWriter, name string) {
 	peers := map[string]string{}
 	for _, d := range r.devices {
 		peers[d.Name] = d.Pub
 	}
-	// the other devices' public keys are handed out only inside the pairing window the server's owner opened
-	writeJSON(w, 200, map[string]any{"ok": true, "relay_pub": r.PublicKeyPEM(), "peers": peers})
+	out := map[string]any{"ok": true, "relay_pub": r.PublicKeyPEM(), "peers": peers}
+	if h := r.handover[name]; h != nil {
+		out["handover"] = h
+	}
+	writeJSON(w, 200, out)
 }
 
 func (r *Relay) deviceOf(req *http.Request) *device {
@@ -1053,11 +1090,12 @@ func (r *Relay) hello(w http.ResponseWriter, req *http.Request) {
 		peers[o.Name] = o.Pub
 	}
 	ev := r.epochEv
+	hands := r.handoversLocked()
 	r.mu.Unlock()
 	r.note(d.Name, "online")
 	// peers: the device takes a NEW name only while the owner has "Claude जोड़ें" open on it, never replaces one;
 	// epoch: the latest signed "Disconnect Claude", so a device that was offline when it was pressed learns it now
-	writeJSON(w, 200, map[string]any{"session": s.id, "ecdh": myPub, "proof": base64.StdEncoding.EncodeToString(sig), "peers": peers, "epoch": ev})
+	writeJSON(w, 200, map[string]any{"session": s.id, "ecdh": myPub, "proof": base64.StdEncoding.EncodeToString(sig), "peers": peers, "epoch": ev, "handovers": hands})
 }
 
 func (r *Relay) sessionOf(req *http.Request) *session {
@@ -1148,6 +1186,18 @@ func (r *Relay) out(w http.ResponseWriter, req *http.Request) {
 		r.mu.Unlock()
 		r.note(s.dev, "owner opened Connect")
 		writeJSON(w, 200, map[string]any{"peers": peers}) // the device learns NEW peer names only now (owner present)
+		return
+	case m["repairList"] != nil:
+		writeJSON(w, 200, map[string]any{"repairs": r.repairList(s.dev)})
+		return
+	case m["repairApprove"] != nil:
+		a, _ := m["repairApprove"].(map[string]any)
+		if err := r.approveRepair(s.dev, a); err != "" {
+			r.note(s.dev, "re-pair approval refused: "+err)
+			writeJSON(w, 200, map[string]any{"ok": false, "error": err})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"ok": true})
 		return
 	case m["anchor"] != nil:
 		a, ok := m["anchor"].(map[string]any)
