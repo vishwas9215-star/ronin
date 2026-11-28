@@ -264,6 +264,12 @@ class AgentActivity : Activity() {
      */
     private fun keepWorkingInBackground() {
         AgentKeepAlive.start(this)
+        // "background data" off or Data Saver on: the page's requests fail silently behind other apps: say so in the log
+        try {
+            val cm = getSystemService(android.net.ConnectivityManager::class.java)
+            if (android.os.Build.VERSION.SDK_INT >= 24 && cm.restrictBackgroundStatus == android.net.ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED)
+                android.util.Log.i("RoninAgent", "background data is restricted for Ronin Agent (Data Saver)")
+        } catch (_: Exception) {}
         val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
         val prefs = getSharedPreferences("agent-ui", MODE_PRIVATE)
         if (android.os.Build.VERSION.SDK_INT >= 23 && !pm.isIgnoringBatteryOptimizations(packageName) && !prefs.getBoolean("askedBattery", false)) {

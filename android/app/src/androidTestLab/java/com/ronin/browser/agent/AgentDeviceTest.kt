@@ -283,6 +283,28 @@ class AgentDeviceTest {
         mech("background-ajax", true)
     }
 
+    // screen OFF (phone locked): the page's timers keep their pace and the AJAX finishes
+    @Test fun ajaxFinishesWithTheScreenOff() {
+        open("https://ifsc.example.gov.in/")
+        assertTrue(!tool("type", "ref" to ref("IFSC"), "text" to "SBIN0001234").has("error"))
+        val ua = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+        d.pageValue("window.beats=0;setInterval(function(){window.beats++},1000)")
+        ua.executeShellCommand("input keyevent KEYCODE_SLEEP").close()
+        try {
+            Thread.sleep(2000)
+            val b0 = d.pageValue("window.beats")?.toIntOrNull() ?: -1
+            Thread.sleep(10_000)
+            val b1 = d.pageValue("window.beats")?.toIntOrNull() ?: -1
+            Log.i("RoninAgent", "screen off: timer beats in 10 s = ${b1 - b0}")
+            val r = tool("click", "ref" to ref("IFSC Search"))
+            assertTrue("pressed with the screen off: $r", !r.has("error"))
+            var w = 0; while (d.pageValue("window.posted") != "1" && w < 150) { Thread.sleep(100); w++ }
+            assertEquals("the AJAX finished with the screen off", "\"SBI SULTANPUR\"", d.pageValue("document.getElementById('bank').value"))
+            assertTrue("timers kept their pace with the screen off (${b1 - b0} beats in 10 s)", b1 - b0 >= 7)
+        } finally { ua.executeShellCommand("input keyevent KEYCODE_WAKEUP").close(); Thread.sleep(800) }
+        mech("screen-off", true)
+    }
+
     // the owner works in the Claude app while Ronin runs behind it (28 Nov): typing and taps must still work
     @Test fun worksWhileTheOwnerIsInAnotherApp() {
         open("https://epds.example.gov.in/")

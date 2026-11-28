@@ -295,6 +295,7 @@ class AgentDriver(
 
     private fun runInner(id: String, tool: String, args: JSONObject): JSONObject {
         onCommand?.invoke()
+        try { onMain(3000) { web.keepAwake() } } catch (_: Exception) {}
         synchronized(done) { done[id] }?.let { return it }
         if (stopped) return err("the owner pressed STOP on this device. Claude must wait until he turns Claude on again.")
         if ((paused || ownerHolding) && tool != "ask_owner") return err(if (paused) "the owner pressed PAUSE. Claude waits until he taps RESUME." else "the owner is using the screen right now: wait and try again")
