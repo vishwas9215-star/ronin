@@ -111,7 +111,6 @@ class AgentActivity : Activity() {
         dr.onOwnerAsked = { reason -> runOnUiThread { showButtons(true); ticker.removeCallbacks(autoHide); status.text = "✋ आपकी बारी: ${reason.ifBlank { "काम पूरा करके DONE दबाएँ" }}" } }
         driver = dr
         startProxy()
-        fullScreen()
         dr.onCommand = { runOnUiThread { working() } }
         try { // pages that offer a dark look use it at night
             if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.ALGORITHMIC_DARKENING))
