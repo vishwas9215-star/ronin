@@ -220,7 +220,9 @@ func (a *app) msg(hwnd, msg, wparam, lparam uintptr) (uintptr, bool) {
 	}
 	switch msg {
 	case wmSize:
-		a.layout()
+		if wparam != 1 { // SIZE_MINIMIZED: keep the page's size (a 0 x 0 page is a hidden page: its timers stop)
+			a.layout()
+		}
 		return 0, true
 	case wmTimer:
 		a.watchOwner()

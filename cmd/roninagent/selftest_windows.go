@@ -147,7 +147,8 @@ func (a *app) selfTest(data string) {
 	n0, n1 := 0, 0
 	fmt.Sscan(beat0, &n0)
 	fmt.Sscan(beat1, &n1)
-	check(n1-n0 >= 6, "timers keep their pace while minimized", fmt.Sprintf("%d beats in 8 s", n1-n0))
+	vis, _ := a.page.Call("document.visibilityState")
+	check(n1-n0 >= 6, "timers keep their pace while minimized", fmt.Sprintf("%d beats in 8 s (%q -> %q, page %s)", n1-n0, beat0, beat1, vis))
 	runOnUI(func() { pShowWindow.Call(a.hwnd, swShow) })
 	_ = agentcore.Host
 }
