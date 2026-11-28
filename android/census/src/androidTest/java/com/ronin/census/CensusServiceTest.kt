@@ -133,7 +133,7 @@ class CensusServiceTest {
         }
         assertTrue("opens the dropdown", b("app_choose", "text" to "मकान का वर्तमान उपयोग").has("done"))
         val s = b("app_screen")
-        val all = s.toString()
+        val all = (0 until s.getJSONArray("options").length()).map { s.getJSONArray("options").getJSONObject(it).getString("text") } + (0 until s.getJSONArray("texts").length()).map { s.getJSONArray("texts").getString(it) }
         assertTrue("the open list is seen: $all", "दुकान/कार्यालय" in all)
         assertTrue("chooses from it", b("app_choose", "text" to "दुकान/कार्यालय").has("done"))
         var u = ""; sc.onActivity { u = it.use }
