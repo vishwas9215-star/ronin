@@ -91,8 +91,11 @@ class CensusService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(e: AccessibilityEvent?) {
-        if (e == null || panel == null || e.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
-        val pkg = e.packageName?.toString() ?: return
+        if (e == null || panel == null) return
+        if (e.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && e.eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return
+        // the app really in front (events alone can come from a dialog or a toast of another package)
+        val pkg = frontApp() ?: e.packageName?.toString() ?: return
+        Log.i(TAG, "census front: $pkg")
         // the shade, the keyboard and our own panel are not "another app"
         if (pkg == packageName || pkg == "com.android.systemui" || pkg.contains("inputmethod") || pkg.contains("keyboard")) return
         if (waitingForApp && !isLauncher(pkg)) { onFor = pkg; waitingForApp = false; show("✅ सहायक इस app के साथ है"); return }
