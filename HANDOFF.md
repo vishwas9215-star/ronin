@@ -792,3 +792,5 @@ confirmed - owner's decision. Android developer verification: not in India yet (
   tabs, re-pair, phone2…9 and /get.
 
 - 2026-11-28: जनगणना सहायक अब सिर्फ़ हाथ से चालू (Quick Settings tile / setup बटन), app छोड़ते ही अपने-आप बंद, panel ✥ से खिसकता है, ⏻ से बंद। launcher पहचान = phone का असली default home (Settings का FallbackHome नहीं). CI 4fbada3 हरा; RoninCensus.apk release में.
+
+- 2026-11-28 (रात): जनगणना LIVE: नए tools app_listen (phone जो सुने वह C को) और app_say (C का सवाल panel पर + आवाज़). रुको / panel का 🤖 = C का सुनना बंद; C 2 मिनट न आए तो mic बंद, पुराने तय वाक्य चलते रहते हैं. CI 46160212178 हरा. बाक़ी: server पर relay update (इसके बिना app_* tools Claude को नहीं दिखते), phone पर नया build (owner के कहने पर), फिर training app पर असली live जाँच.
