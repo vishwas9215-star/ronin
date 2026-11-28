@@ -65,7 +65,7 @@ class CensusService : AccessibilityService() {
             if (!on) { turnOff("बंद"); return@post }
             if (panel == null) showPanel()
             val front = frontApp()
-            if (front == null || front == packageName || isLauncher(front)) { waitingForApp = true; onFor = null; show("जनगणना app खोलें: सहायक उसी के साथ रहेगा") }
+            if (front == null || front == packageName || front == "com.android.systemui" || isLauncher(front)) { waitingForApp = true; onFor = null; show("जनगणना app खोलें: सहायक उसी के साथ रहेगा") }
             else { onFor = front; waitingForApp = false; show("✅ सहायक चालू") }
             Log.i(TAG, "census helper: on")
             CensusTile.refresh(this)
