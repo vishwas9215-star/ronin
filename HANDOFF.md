@@ -755,3 +755,11 @@ confirmed - owner's decision. Android developer verification: not in India yet (
   Laptop refuses any tab but t1 (until laptop tabs are built).
 - Tests: tabsKeepClaudesWorkAndTheOwnersApart, ownerOpensHisOwnTabFromTheRobotMenu (emulators PASS).
 - Known limit: if the owner takes a tab back while a C command is running in it, that one command still finishes.
+
+### 28 Nov 2026 (14:26–14:50) — laptop updated (real laptop self-test 20/20, link online)
+- DONE from the laptop list: 1 owner's clicks never pause (driver OwnerBusy wait, PAUSE button), 2 minimized keeps
+  timers (browser args + no 0x0 layout on SIZE_MINIMIZED; self-test), 3 "C" + buttons behind 🤖 in the banner,
+  5 new exe deployed (0-update-and-start.bat), 6 auto-start (HKCU Run: RoninAgentLab, RoninDeviceHelper = newest
+  *-claude-device-helper.bat in ..\scrcpy, minimized).
+- LEFT: 4 laptop tabs (laptop refuses tab ≠ t1 meanwhile), 7 TPM key (optional).
+- Owner 14:48: phone + tablet in personal use (daughter studying on the tablet) — do not touch them until he says.
