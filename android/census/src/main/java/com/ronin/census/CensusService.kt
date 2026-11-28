@@ -203,10 +203,13 @@ class CensusService : AccessibilityService() {
     private fun tapAt(n: AccessibilityNodeInfo): Boolean {
         val b = android.graphics.Rect().also { n.getBoundsInScreen(it) }
         if (b.isEmpty) return false
-        val path = android.graphics.Path().apply { moveTo(b.exactCenterX(), b.exactCenterY()) }
+        // our panel may sit over the box: let the finger through for a moment
+        panel?.let { p -> p.visibility = android.view.View.INVISIBLE; main.postDelayed({ p.visibility = android.view.View.VISIBLE }, 400) }
+        // a little left of the end: dropdown arrows sit on the right, text boxes take a tap anywhere
+        val path = android.graphics.Path().apply { moveTo(b.left + b.width() * 0.8f, b.exactCenterY()) }
         val g = android.accessibilityservice.GestureDescription.Builder()
             .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 60)).build()
-        return dispatchGesture(g, null, null)
+        return main.postDelayed({ dispatchGesture(g, null, null) }, 60)
     }
 
     /** "स्क्रीन पढ़ो": what the helper can see (labels / counts only, for the panel and the log) */
@@ -441,6 +444,12 @@ class CensusService : AccessibilityService() {
             if (t.isNotEmpty()) { lastHeardAt = System.currentTimeMillis(); if (heardQ.size < 40) heardQ.add(t); show("👂 $t"); answerListen() }
             again(); return
         }
+        if (t.isNotEmpty() && System.currentTimeMillis() - lastListenAt < 30 * 60_000 && lastListenAt > 0) {
+            // C worked in the last half hour: whatever is said goes to him (owner, 28 Nov: "नहीं सुन पाता")
+            lastHeardAt = System.currentTimeMillis(); if (heardQ.size < 40) heardQ.add(t); show("👂 $t")
+            if (!live) { live = true; liveStopped = false; robot?.setBackgroundColor(Color.rgb(27, 127, 58)) }
+            answerListen(); again(); return
+        }
         if (t.isNotEmpty()) { lastHeardAt = System.currentTimeMillis(); handle(t) } else show("कुछ सुनाई नहीं दिया")
         if (tts == null || !ttsReady || lastMessage.startsWith("✅").not()) again() // after a read-back, TTS restarts listening
     }
@@ -489,7 +498,8 @@ class CensusService : AccessibilityService() {
                     val n = maxOf(opt.size, box.size, txt.size)
                     out.put("error", if (n == 0) "nothing called \"$t\" on screen (call app_screen; scroll if needed)" else "\"$t\" is on screen $n times: ask the owner to tap the right one")
                 } else {
-                    val ok = clickUp(pick.node) || tapAt(pick.node)
+                    val isBox = box.size == 1 && pick === box[0] || txt.size == 1 && pick === txt[0]
+                    val ok = if (isBox) (tapAt(pick.node) || clickUp(pick.node)) else (clickUp(pick.node) || tapAt(pick.node))
                     out.put(if (ok) "done" else "error", if (ok) "tapped $t: call app_screen to see what opened" else "\"$t\" did not respond")
                     Log.i(TAG, "census bridge choose: ${if (ok) "ok" else "refused"}")
                 }
