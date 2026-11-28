@@ -169,7 +169,7 @@ class AgentActivity : Activity() {
         val autoApprove = lab && intent.getBooleanExtra("autoApprove", false) // CI end-to-end test only (debug lab app)
         val tablet = android.os.Build.MODEL.equals("OPD2415", true) || resources.configuration.smallestScreenWidthDp >= 600
         val prefs = getSharedPreferences("agent-link", MODE_PRIVATE)
-        val l = AgentLink(url, pub, if (tablet) "tablet" else "phone", prefs, dr) { text -> autoApprove || askApproval(text) }
+        val l = AgentLink(url, pub, if (tablet) "tablet" else "phone", prefs, dr, approve = { text -> autoApprove || askApproval(text) })
         link = l
         if (!autoApprove) keepWorkingInBackground()
         kotlin.concurrent.thread {
