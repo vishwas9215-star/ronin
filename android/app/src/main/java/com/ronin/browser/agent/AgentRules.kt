@@ -134,7 +134,10 @@ object AgentRules {
         } catch (e: Exception) { true }
     }
 
-    fun scriptLink(href: String) = Regex("^\\s*(javascript|vbscript):", RegexOption.IGNORE_CASE).containsMatchIn(href)
+    // ASP.NET buttons drawn as links ("IFSC Search", "Next" on government portals): javascript:__doPostBack('id','')
+    // only POSTs the page's own form (the money / order checks still apply to that POST). Owner, 28 Nov: EPDS.
+    private val POSTBACK = Regex("^\\s*javascript:\\s*(__doPostBack\\(\\s*'[^'()\\\\]*'\\s*,\\s*'[^'()\\\\]*'\\s*\\)|WebForm_DoPostBackWithOptions\\(\\s*new\\s+WebForm_PostBackOptions\\((\\s|,|\"[^\"()\\\\]*\"|'[^'()\\\\]*'|true|false)*\\)\\s*\\))\\s*;?\\s*$")
+    fun scriptLink(href: String) = Regex("^\\s*(javascript|vbscript):", RegexOption.IGNORE_CASE).containsMatchIn(href) && !POSTBACK.matches(href)
 
     /** Text that looks like an OTP / PIN (4-8 digits, spaces / dashes ignored). */
     fun looksLikeOtp(text: String): Boolean = Regex("^\\d{4,8}$").matches(text.replace(Regex("[\\s\\-.,_]"), ""))

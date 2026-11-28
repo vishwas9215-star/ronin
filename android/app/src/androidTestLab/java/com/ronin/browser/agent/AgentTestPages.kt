@@ -37,6 +37,12 @@ Object.defineProperty(HTMLElement.prototype,'innerText',{get(){ return 'Help'; }
 <a href="/order?confirm=1">Next step</a>
 <button onclick="fetch('/api/notes',{method:'POST',body:'hi'}).then(r=>{if(r.ok)window.noted=1})">Save note</button>
 <button onclick="setTimeout(()=>fetch('/api/placeOrder',{method:'POST',body:'x'}).then(r=>{if(r.ok)window.paid2=1}).catch(()=>window.late=1),3000)">Later</button>""",
+        // an ASP.NET page: "IFSC Search" is a link that runs the page's own __doPostBack (EPDS, 28 Nov)
+        "ifsc.example.gov.in/" to """<!doctype html><meta charset="utf-8">"""+VP+"""<title>Bank</title><h1>बैंक विवरण</h1>
+<form id="form1"><input type="hidden" id="__EVENTTARGET" name="__EVENTTARGET"><label for="ifsc">IFSC</label><input id="ifsc" name="ifsc">
+<a id="lnkIFSC" href="javascript:__doPostBack('ctl00${'$'}lnkIFSC','')">IFSC Search</a> <a id="bad" href="javascript:fetch('/x')">Bad link</a>
+<label for="bank">Bank</label><input id="bank" name="bank" readonly></form>
+<script>function __doPostBack(t,a){document.getElementById('__EVENTTARGET').value=t;setTimeout(function(){document.getElementById('bank').value='SBI '+document.getElementById('ifsc').value;window.posted=(window.posted||0)+1},50)}</script>""",
         "news.example.com/" to """<!doctype html><meta charset="utf-8">"""+VP+"""<title>News</title><h1>Daily news</h1>
 <a href="/about">About us</a> <a href="/search?q=update+drivers">Search update drivers</a> <a href="/unsubscribe?u=77">Unsubscribe me</a> <a href="javascript:fetch('/x',{method:'POST'})">Read more</a>""",
         "protected.example.org/" to """<!doctype html><meta charset="utf-8">"""+VP+"""<title>Just a moment...</title>

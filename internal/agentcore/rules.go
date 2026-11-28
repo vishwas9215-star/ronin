@@ -288,7 +288,11 @@ func ActionLink(href, base string) bool {
 }
 
 // ScriptLink: javascript: / vbscript:.
-func ScriptLink(href string) bool { return scriptRe.MatchString(href) }
+func ScriptLink(href string) bool { return scriptRe.MatchString(href) && !postbackRe.MatchString(href) }
+
+// ASP.NET buttons drawn as links (government portals): they only POST the page's own form; the money / order
+// checks still apply to that POST. The same rule as Android.
+var postbackRe = regexp.MustCompile(`^\s*javascript:\s*(__doPostBack\(\s*'[^'()\\]*'\s*,\s*'[^'()\\]*'\s*\)|WebForm_DoPostBackWithOptions\(\s*new\s+WebForm_PostBackOptions\((\s|,|"[^"()\\]*"|'[^'()\\]*'|true|false)*\)\s*\))\s*;?\s*$`)
 
 // Guard: the network guard for every request of the Claude tab while the owner is NOT holding the screen.
 // claudeInput = Claude's own tap / key in the last 2 s. Returns the reason to block, or "".

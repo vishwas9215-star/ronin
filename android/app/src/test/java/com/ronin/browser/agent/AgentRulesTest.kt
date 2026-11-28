@@ -104,6 +104,11 @@ class AgentRulesTest {
 
     @Test fun linksAndRedaction() {
         assertTrue(AgentRules.scriptLink("javascript:fetch('/x')"))
+        // ASP.NET postback links (EPDS "IFSC Search") are pressed; anything more is still refused
+        assertTrue(!AgentRules.scriptLink("javascript:__doPostBack('ctl00\$ContentPlaceHolder1\$lnkIFSC','')"))
+        assertTrue(!AgentRules.scriptLink("javascript:WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions(\"ctl00\$btnNext\", \"\", true, \"\", \"\", false, true))"))
+        assertTrue(AgentRules.scriptLink("javascript:__doPostBack('a','');fetch('//evil')"))
+        assertTrue(AgentRules.scriptLink("javascript:__doPostBack('a',(function(){return 1})())"))
         assertTrue(AgentRules.actionLink("/unsubscribe?u=77", "https://news.example.com/"))
         assertFalse(AgentRules.actionLink("/search?q=update+drivers", "https://news.example.com/"))
         assertFalse(AgentRules.actionLink("/blog/how-to-edit-video", "https://news.example.com/"))

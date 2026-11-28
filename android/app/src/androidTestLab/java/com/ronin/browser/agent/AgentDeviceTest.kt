@@ -246,6 +246,24 @@ class AgentDeviceTest {
         assertTrue("says the link is missing: $text", text.contains("link"))
     }
 
+    // EPDS, 28 Nov: "IFSC Search" (an ASP.NET postback link) must press, in front and in the background; other script
+    // links stay refused
+    @Test fun postbackLinkIsPressedInFrontAndBehind() {
+        for (bg in listOf(false, true)) {
+            d.forceBackground = bg
+            try {
+                open("https://ifsc.example.gov.in/")
+                assertTrue(!tool("type", "ref" to ref("IFSC"), "text" to "SBIN0001234").has("error"))
+                val r = tool("click", "ref" to ref("IFSC Search"))
+                assertTrue("pressed (bg=$bg): $r", !r.has("error"))
+                var w = 0; while (d.pageValue("window.posted") != "1" && w < 30) { Thread.sleep(100); w++ }
+                assertEquals("the page's postback ran (bg=$bg)", "1", d.pageValue("window.posted"))
+                assertTrue(tool("click", "ref" to ref("Bad link")).optString("error").contains("script link"))
+            } finally { d.forceBackground = false }
+        }
+        mech("postback", true)
+    }
+
     // the owner works in the Claude app while Ronin runs behind it (28 Nov): typing and taps must still work
     @Test fun worksWhileTheOwnerIsInAnotherApp() {
         open("https://epds.example.gov.in/")

@@ -108,3 +108,18 @@ func TestLinksAndRedaction(t *testing.T) {
 		t.Fatal("registrable")
 	}
 }
+
+func TestPostbackLinksArePressedButNothingMore(t *testing.T) {
+	ok := []string{`javascript:__doPostBack('ctl00$ContentPlaceHolder1$lnkIFSC','')`, `javascript:WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions("ctl00$btnNext", "", true, "", "", false, true))`}
+	bad := []string{`javascript:__doPostBack('a','');fetch('//evil')`, `javascript:__doPostBack('a',(function(){return 1})())`, `javascript:fetch('/x')`}
+	for _, h := range ok {
+		if ScriptLink(h) {
+			t.Fatal("postback refused: " + h)
+		}
+	}
+	for _, h := range bad {
+		if !ScriptLink(h) {
+			t.Fatal("script allowed: " + h)
+		}
+	}
+}
