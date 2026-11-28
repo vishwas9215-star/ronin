@@ -155,6 +155,17 @@ class AgentDeviceTest {
         assertTrue(tool("click", "ref" to ref("Exit All")).optString("error").contains("READ-ONLY"))
     }
 
+    @Test fun webSocketToThisDeviceIsRefusedByTheProxy() {
+        open("https://news.example.com/")
+        val p = AgentActivity.proxy
+        if (p == null || !AgentActivity.proxyOn) { mech("proxy", false); Log.i("RoninAgent", "MECH proxy-not-supported"); return }
+        val b0 = p.refused.get()
+        page("(function(){try{new WebSocket('wss://127.0.0.1:8443/x')}catch(e){};try{new WebSocket('wss://localhost:8443/y')}catch(e){};return 1})()")
+        Thread.sleep(3000)
+        mech("proxy", p.refused.get() > b0)
+        assertTrue("a page's WebSocket to this device is refused by Ronin's proxy", p.refused.get() > b0)
+    }
+
     @Test fun linksAddressesAndHumanChecks() {
         open("https://news.example.com/")
         assertTrue(tool("click", "ref" to ref("Read more")).optString("error").contains("script link"))

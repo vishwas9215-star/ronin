@@ -17,7 +17,12 @@ import android.widget.TextView
  * Keeps the screen on while charging, so a tablet on its stand stays ready all day.
  */
 class AgentActivity : Activity() {
-    companion object { @Volatile var driver: AgentDriver? = null; @Volatile var link: AgentLink? = null }
+    companion object {
+        @Volatile var driver: AgentDriver? = null; @Volatile var link: AgentLink? = null
+        /** Ronin's local proxy: every connection of this app's pages goes through it (one per process). */
+        @Volatile var proxy: AgentProxy? = null
+        @Volatile var proxyOn = false
+    }
 
     private lateinit var status: TextView
     private lateinit var web: AgentWebView
@@ -67,9 +72,30 @@ class AgentActivity : Activity() {
         dr.attach()
         dr.onOwnerAsked = { reason -> runOnUiThread { status.text = "✋ आपकी बारी: ${reason.ifBlank { "काम पूरा करके DONE दबाएँ" }}" } }
         driver = dr
+        startProxy()
         web.loadUrl("about:blank")
         refresh()
         startLink(dr)
+    }
+
+    /**
+     * Every connection of the Claude tab through Ronin's local proxy, which checks the address it really connects
+     * to: DNS rebinding, WebSockets, service workers and page scripts can never reach the home network / this phone.
+     * Needs a WebView that supports proxy override (Android System WebView 72+); without it the guard stays alone.
+     */
+    private fun startProxy() {
+        if (proxy != null) return
+        val p = AgentProxy(blocked = { android.util.Log.i("RoninAgent", "blocked: private address (proxy)") })
+        val port = try { p.start() } catch (e: Exception) { android.util.Log.i("RoninAgent", "proxy: ${e.javaClass.simpleName}"); return }
+        proxy = p
+        if (!androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.PROXY_OVERRIDE)) {
+            android.util.Log.i("RoninAgent", "proxy: not supported by this WebView"); return
+        }
+        val cfg = androidx.webkit.ProxyConfig.Builder().addProxyRule("127.0.0.1:$port").removeImplicitRules().build()
+        androidx.webkit.ProxyController.getInstance().setProxyOverride(cfg, { it.run() }) {
+            proxyOn = true
+            android.util.Log.i("RoninAgent", "proxy: on")
+        }
     }
 
     /** The link to the owner's relay: address + relay public key baked into the app (assets/agent/relay.json). */
