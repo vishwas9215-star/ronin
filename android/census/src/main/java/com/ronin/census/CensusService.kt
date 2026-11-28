@@ -117,7 +117,7 @@ class CensusService : AccessibilityService() {
         try { windows.forEach { w -> w.root?.let { r ->
             val pkg = r.packageName?.toString()
             val ok = if (want != null) pkg == want else w.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION
-            if (ok && pkg != packageName) out.add(r) } } } catch (_: Exception) {}
+            if (ok) out.add(r) } } } catch (_: Exception) {}
         if (out.isEmpty()) rootInActiveWindow?.let { if (want == null || it.packageName?.toString() == want) out.add(it) }
         return out // our own panel is an accessibility overlay window, never one of these
     }
