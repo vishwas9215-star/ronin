@@ -677,3 +677,7 @@ confirmed - owner's decision. Android developer verification: not in India yet (
 - Windows CI self-test 17/17 (real window), and on the owner's laptop 17/17. Installed at
   `C:\Ronin Ecosystem\RoninAgentLab\` (`0-update-and-start.bat` updates: keeps the previous exe as RoninAgentLab-old.exe).
   Paired as "laptop" with the live relay, online.
+- 28 Nov 06:40–07:00: the live relay was updated (verified: /authorize/wait answers; all three devices re-linked).
+  Phone / tablet now also use a local proxy (AgentProxy, WebView proxy override) that checks the real connect
+  address; real devices 12/12, "proxy: on", online. Pairing window on the server still open until ~23:50 today
+  (names can not be taken over; closing it = server chat).
