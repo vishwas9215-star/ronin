@@ -28,7 +28,9 @@ class TestFormActivity : Activity() {
         l.addView(TextView(this).apply { text = "सदस्यों की संख्या" })
         members = EditText(this).apply { inputType = android.text.InputType.TYPE_CLASS_NUMBER }; l.addView(members)
         // a dropdown like the Census app's "मकान का वर्तमान उपयोग": a box that opens a list in its own popup window
-        l.addView(TextView(this).apply { text = "मकान का वर्तमान उपयोग" })
+        // label on the left, box on its right: one row, so the form still fits a landscape tablet
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row.addView(TextView(this).apply { text = "मकान का वर्तमान उपयोग" })
         val drop = EditText(this).apply { isFocusable = false; isClickable = true; hint = "चुनें" }
         drop.setOnClickListener {
             val pop = android.widget.ListPopupWindow(this)
@@ -38,7 +40,7 @@ class TestFormActivity : Activity() {
             pop.setOnItemClickListener { _, _, i, _ -> use = items[i]; drop.setText(items[i]); pop.dismiss() }
             pop.show()
         }
-        l.addView(drop)
+        row.addView(drop, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)); l.addView(row)
         for (o in listOf("आवासीय", "आवासीय-सह-अन्य उपयोग", "खाली")) l.addView(Button(this).apply { text = o; setOnClickListener { chosen = o } })
         l.addView(Button(this).apply { text = "आगे बढ़ें"; setOnClickListener { nextPressed++ } })
         setContentView(l)
