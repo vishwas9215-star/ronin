@@ -49,7 +49,7 @@ class CensusService : AccessibilityService() {
         Log.i(TAG, "census helper: on")
     }
 
-    override fun onDestroy() { instance = null; recognizer?.destroy(); super.onDestroy() }
+    override fun onDestroy() { instance = null; handsFree = false; recognizer?.destroy(); tts?.shutdown(); super.onDestroy() }
     override fun onInterrupt() {}
     override fun onAccessibilityEvent(e: AccessibilityEvent?) {}
 
@@ -73,20 +73,32 @@ class CensusService : AccessibilityService() {
     private fun textOf(n: AccessibilityNodeInfo): String =
         (n.text ?: n.contentDescription ?: "").toString().replace('\n', ' ').trim()
 
-    /** the label of a box: its hint, else its description, else the text shown just before it */
+    /**
+     * The label of a box: its hint, else its description, else the text drawn just above it / to its left (by
+     * position on screen: Flutter's order in the tree is not always the order on screen). Boxes not on screen
+     * (isVisibleToUser false) are never used.
+     */
     fun boxes(): List<Box> {
         val out = ArrayList<Box>()
         for (r in roots()) {
-            var lastText = ""
+            val texts = ArrayList<Pair<String, android.graphics.Rect>>()
+            val edits = ArrayList<AccessibilityNodeInfo>()
             walk(r) { n ->
+                if (!n.isVisibleToUser) return@walk
+                if (n.isEditable) edits.add(n)
+                else { val t = textOf(n); if (t.isNotEmpty() && t.length < 60) texts.add(t to android.graphics.Rect().also { n.getBoundsInScreen(it) }) }
+            }
+            for (n in edits) {
                 val hint = if (Build.VERSION.SDK_INT >= 26) n.hintText?.toString()?.trim().orEmpty() else ""
-                if (n.isEditable) {
-                    val label = hint.ifEmpty { n.contentDescription?.toString()?.trim().orEmpty() }.ifEmpty { lastText }
-                    if (label.isNotEmpty()) out.add(Box(label.lines().first(), n))
-                } else {
-                    val t = textOf(n)
-                    if (t.isNotEmpty() && t.length < 60) lastText = t
+                var label = hint.ifEmpty { n.contentDescription?.toString()?.trim().orEmpty() }
+                if (label.isEmpty()) {
+                    val b = android.graphics.Rect().also { n.getBoundsInScreen(it) }
+                    label = texts.filter { (_, t) ->
+                        (t.bottom <= b.top + 8 && t.bottom > b.top - 200 && t.right > b.left && t.left < b.right) || // just above
+                        (t.right <= b.left + 8 && t.centerY() in b.top..b.bottom)                                     // on its left
+                    }.minByOrNull { (_, t) -> (b.top - t.bottom).coerceAtLeast(0) + (b.left - t.right).coerceAtLeast(0) }?.first.orEmpty()
                 }
+                if (label.isNotEmpty()) out.add(Box(label.lines().first().removeSuffix("*").trim(), n))
             }
         }
         return out
@@ -96,7 +108,7 @@ class CensusService : AccessibilityService() {
     fun options(): List<Box> {
         val out = ArrayList<Box>()
         for (r in roots()) walk(r) { n ->
-            if ((n.isClickable || n.isCheckable) && !n.isEditable) {
+            if ((n.isClickable || n.isCheckable) && !n.isEditable && n.isVisibleToUser) {
                 var t = textOf(n)
                 if (t.isEmpty()) { // the text may sit in a child (Flutter / list rows)
                     val sb = StringBuilder(); walk(n) { c -> if (c !== n) textOf(c).takeIf { it.isNotEmpty() }?.let { if (sb.length < 60) sb.append(it).append(' ') } }
@@ -123,8 +135,14 @@ class CensusService : AccessibilityService() {
         val b = boxes(); val o = options()
         val c = Commands.parse(heard, b.map { it.label }, o.map { it.label })
         val m = when (c) {
-            is Command.Fill -> fill(b.first { it.label == c.label }, c.value)
-            is Command.Choose -> o.first { it.label == c.text }.let { press(it, c.text) }
+            is Command.Fill -> b.filter { it.label == c.label }.let { same ->
+                // two boxes with the same name on screen: never guess which one
+                if (same.size == 1) fill(same[0], c.value) else "⚠ \"${c.label}\" नाम के ${same.size} खाने हैं: उस खाने पर tap करके बोलें"
+            }
+            is Command.Choose -> o.filter { it.label == c.text }.let { same ->
+                if (same.size == 1) press(same[0], c.text) else "⚠ \"${c.text}\" ${same.size} जगह है: tap करके चुनें"
+            }
+            Command.Undo -> undo()
             is Command.Press -> o.firstOrNull { Commands.norm(it.label).contains(Commands.norm(c.text)) }?.let { press(it, it.label) }
                 ?: "\"${c.text}\" बटन screen पर नहीं दिखा"
             Command.Confirm -> confirm()
@@ -137,10 +155,24 @@ class CensusService : AccessibilityService() {
         return m
     }
 
-    private fun fill(box: Box, value: String): String {
-        val n = box.node
+    private var lastBox: AccessibilityNodeInfo? = null
+    private var lastBefore = ""
+    private var lastLabel = ""
+
+    private fun numeric(box: Box) = Regex("संख्या|उम्र|आयु|वर्ष|नंबर|क्रमांक|सदस्य|कमरे").containsMatchIn(box.label) ||
+        (box.node.inputType and android.text.InputType.TYPE_MASK_CLASS) == android.text.InputType.TYPE_CLASS_NUMBER ||
+        (box.node.inputType and android.text.InputType.TYPE_MASK_CLASS) == android.text.InputType.TYPE_CLASS_PHONE
+
+    private fun fill(box: Box, said: String): String {
+        val value = if (numeric(box)) Commands.digits(said) else said
+        var n = box.node
+        lastBefore = n.text?.toString()?.takeIf { it != (if (Build.VERSION.SDK_INT >= 26) n.hintText?.toString() else null) }.orEmpty()
         n.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         n.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        // write into the box that really has the focus now (Flutter can hand focus to an inner node)
+        try { Thread.sleep(150) } catch (_: InterruptedException) {}
+        (n.window?.root ?: rootInActiveWindow)?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable }?.let { n = it }
+        lastBox = n; lastLabel = box.label
         val args = Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value) }
         var ok = n.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
         n.refresh()
@@ -156,8 +188,38 @@ class CensusService : AccessibilityService() {
         }
         val done = n.text?.toString() == value
         Log.i(TAG, "census fill \"${box.label.take(40)}\": ${if (done) "ok" else if (ok) "unverified" else "refused"}")
-        return if (done) "✅ ${box.label}: $value" else if (ok) "⚠ ${box.label} में लिखा, पर पढ़कर मिला नहीं: एक बार देख लें" else "❌ ${box.label} में नहीं लिख पाया"
+        if (done) speak("${box.label}: $value")
+        return if (done) "✅ ${box.label}: $value  (ग़लत हो तो \"गलत\" बोलें)" else if (ok) "⚠ ${box.label} में लिखा, पर पढ़कर मिला नहीं: एक बार देख लें" else "❌ ${box.label} में नहीं लिख पाया"
     }
+
+    private fun undo(): String {
+        val n = lastBox ?: return "अभी कुछ भरा नहीं था"
+        val args = Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, lastBefore) }
+        val ok = n.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        lastBox = null
+        Log.i(TAG, "census undo \"${lastLabel.take(40)}\": ${if (ok) "ok" else "refused"}")
+        return if (ok) "↩ ${lastLabel} पहले जैसा कर दिया" else "❌ ${lastLabel} वापस नहीं हुआ: हाथ से देख लें"
+    }
+
+    // read-back in Hindi, on the phone (Android's own voice); listening waits while it speaks
+    private var tts: android.speech.tts.TextToSpeech? = null
+    private var ttsReady = false
+    private fun speak(t: String) {
+        val e = tts
+        if (e == null) {
+            tts = android.speech.tts.TextToSpeech(this) { st -> ttsReady = st == android.speech.tts.TextToSpeech.SUCCESS &&
+                tts?.setLanguage(java.util.Locale("hi", "IN"))?.let { it >= 0 } == true
+                tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                    override fun onStart(id: String?) {}
+                    override fun onDone(id: String?) { main.post { if (handsFree) listen() } }
+                    @Deprecated("old") override fun onError(id: String?) { main.post { if (handsFree) listen() } }
+                })
+                if (ttsReady) speak(t) }
+            return
+        }
+        if (ttsReady) { speaking = true; e.speak(t, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "c${System.nanoTime()}") }
+    }
+    @Volatile private var speaking = false
 
     private fun press(o: Box, text: String): String {
         if (Commands.needsConfirm(text)) {
@@ -195,7 +257,8 @@ class CensusService : AccessibilityService() {
         fun btn(t: String, f: () -> Unit) = Button(this).apply { text = t; textSize = 18f; minWidth = 0; minimumWidth = 0; setPadding((6 * d).toInt(), 0, (6 * d).toInt(), 0); setOnClickListener { f() } }
         val p = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.argb(200, 13, 118, 128)); setPadding((4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt()) }
         said = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; maxLines = 4; maxWidth = (160 * d).toInt(); visibility = android.view.View.GONE }
-        p.addView(btn("🎤") { listen() }.apply { tag = "census-mic" })
+        // 🎤: hands-free — after each sentence it listens again by itself; tap again (or say "बस") to stop
+        p.addView(btn("🎤") { handsFree = !handsFree; if (handsFree) listen() else { recognizer?.cancel(); show("🎤 बंद") } }.apply { tag = "census-mic" })
         p.addView(btn("📋") { handle("स्क्रीन पढ़ो") }.apply { tag = "census-scan" })
         yes = btn("✓") { handle("हाँ") }.apply { visibility = android.view.View.GONE; setBackgroundColor(Color.rgb(27, 127, 58)); setTextColor(Color.WHITE) }
         no = btn("✕") { handle("नहीं") }.apply { visibility = android.view.View.GONE }
@@ -221,7 +284,12 @@ class CensusService : AccessibilityService() {
 
     // ---------------- speech: on the phone only ----------------
 
+    @Volatile var handsFree = false
+    private val STOP = setOf("बस", "रुको", "बंद करो", "बंद", "स्टॉप")
+    private fun again() { if (handsFree && !speaking) main.postDelayed({ if (handsFree) listen() }, 500) }
+
     private fun listen() {
+        speaking = false
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             show("माइक की अनुमति नहीं: 'जनगणना सहायक' app खोलकर अनुमति दें"); return
         }
@@ -233,12 +301,17 @@ class CensusService : AccessibilityService() {
         r.setRecognitionListener(object : RecognitionListener {
             override fun onResults(b: Bundle?) {
                 val t = b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+                if (t.isNotEmpty() && Commands.norm(t) in STOP.map(Commands::norm)) { handsFree = false; show("🎤 बंद"); return }
+                speaking = false
                 if (t.isNotEmpty()) handle(t) else show("कुछ सुनाई नहीं दिया")
+                if (tts == null || !ttsReady || lastMessage.startsWith("✅").not()) again() // after a read-back, TTS restarts listening
             }
             override fun onError(error: Int) {
                 show(if (error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE || error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED)
                     "Hindi का offline pack नहीं है: 'जनगणना सहायक' app में कदम देखें" else "फिर से 🎤 दबाकर बोलें (त्रुटि $error)")
                 Log.i(TAG, "census speech error $error")
+                if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) again()
+                else if (error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE || error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED) handsFree = false
             }
             override fun onReadyForSpeech(p: Bundle?) { show("🎤 बोलिए…") }
             override fun onBeginningOfSpeech() {}

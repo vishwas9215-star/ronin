@@ -38,4 +38,17 @@ class CommandsTest {
         // a label with no value is not a fill
         assertTrue(Commands.parse("टिप्पणियाँ", labels, options) !is Command.Fill)
     }
+
+    @Test fun numbers() {
+        assertEquals("35", Commands.digits("पैंतीस"))
+        assertEquals("250", Commands.digits("दो सौ पचास"))
+        assertEquals("5", Commands.digits("पांच"))
+        assertEquals("5", Commands.digits("पाँच"))
+        assertEquals("1985", Commands.digits("एक हज़ार नौ सौ पचासी"))
+        assertEquals("35", Commands.digits("३५"))
+        assertEquals("राम प्रसाद", Commands.digits("राम प्रसाद"))
+        assertEquals("दो भाई", Commands.digits("दो भाई"))
+    }
+
+    @Test fun undo() { assertEquals(Command.Undo, Commands.parse("गलत", labels, options)) }
 }

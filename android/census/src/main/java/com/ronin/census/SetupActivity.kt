@@ -16,6 +16,31 @@ import android.widget.TextView
 /** One screen: the three things to switch on once, each with one big button, and whether each is done. */
 class SetupActivity : Activity() {
     private lateinit var box: LinearLayout
+    private var hindi = "देख रहे हैं…"
+    private var checked = false
+
+    private fun hindiIntent() = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+        .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+
+    private fun checkHindi() {
+        if (checked || Build.VERSION.SDK_INT < 33) return
+        checked = true
+        val r = SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+        r.checkRecognitionSupport(hindiIntent(), mainExecutor, object : android.speech.RecognitionSupportCallback {
+            override fun onSupportResult(s: android.speech.RecognitionSupport) {
+                val hi = { l: List<String> -> l.any { it.lowercase().startsWith("hi") } }
+                hindi = when {
+                    hi(s.installedOnDeviceLanguages) -> "✅ इसी phone पर है"
+                    hi(s.pendingOnDeviceLanguages) -> "⏳ download हो रहा है"
+                    hi(s.supportedOnDeviceLanguages) -> "❌ अभी नहीं है (download कर सकते हैं)"
+                    else -> "❌ इस phone का recogniser हिन्दी offline नहीं देता: Gboard 🎤 इस्तेमाल करें"
+                }
+                r.destroy(); draw()
+            }
+            override fun onError(e: Int) { hindi = "जाँच नहीं हो पाई ($e)"; r.destroy(); draw() }
+        })
+    }
 
     override fun onCreate(s: Bundle?) {
         super.onCreate(s)
@@ -23,7 +48,7 @@ class SetupActivity : Activity() {
         setContentView(ScrollView(this).apply { addView(box) })
     }
 
-    override fun onResume() { super.onResume(); draw() }
+    override fun onResume() { super.onResume(); checked = false; draw() }
 
     private fun draw() {
         box.removeAllViews()
@@ -39,7 +64,16 @@ class SetupActivity : Activity() {
 
         val offline = Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
         text((if (offline) "✅" else "2️⃣") + " इसी phone पर आवाज़ पहचान (offline)")
-        if (!offline) text("Google app → Settings → Voice → Offline speech recognition → हिन्दी download करें। तब तक Gboard के 🎤 से बोलकर लिखें।", 15f, Color.DKGRAY)
+        if (Build.VERSION.SDK_INT >= 33 && offline) {
+            // is हिन्दी installed on the phone? (asked of Android's recogniser; nothing leaves the phone from this app)
+            text("हिन्दी pack: $hindi", 15f, Color.DKGRAY)
+            if (hindi != "✅ इसी phone पर है") button("हिन्दी pack download करें (Wi-Fi पर, एक बार)") {
+                val r = SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+                r.triggerModelDownload(hindiIntent()); hindi = "download शुरू: कुछ मिनट बाद यह screen फिर खोलें"; draw()
+            }
+            checkHindi()
+        }
+        if (!offline) text("इस phone पर offline आवाज़ पहचान नहीं मिली। Google app → Settings → Voice → Offline speech recognition → हिन्दी download करें। तब तक Gboard के 🎤 से बोलकर लिखें।", 15f, Color.DKGRAY)
 
         val on = CensusService.instance != null
         text((if (on) "✅" else "3️⃣") + " सहायक चालू (Accessibility)")
