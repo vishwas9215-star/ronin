@@ -735,3 +735,13 @@ confirmed - owner's decision. Android developer verification: not in India yet (
 5. Deploy the new laptop exe (ASP.NET postback links, handover for re-pair are in the code already).
 6. Auto-start the device helper and the laptop agent after a restart / sleep (both were found stopped at 10:06 today).
 7. Optional: laptop key in the TPM instead of DPAPI.
+
+### 28 Nov 2026 (13:11–13:50) — background AJAX (EPDS IFSC Search) fixed
+- AgentWebView: setRendererPriorityPolicy(IMPORTANT, false); window/view visibility reported VISIBLE to the engine
+  while Claude works (keepAwake(): 10 min after each command, + onResume/resumeTimers). Data Saver logged.
+  Reviewed in AI Fiesta Compare (Qwen 3.8 Max, Gemini 3.1 Pro, DeepSeek V4.1). Tests ajaxFinishesWhileRoninIsReallyBehindAnotherApp,
+  ajaxFinishesWithTheScreenOff (timer beats ≥7 in 10 s). Real phone + tablet 21/21.
+- Found + fixed: read-only (money) check used the event-tracked URL; a late about:blank let typing through on the
+  broker test page (was the "flaky" brokerIsReadOnly test). Now committed web.url + page location + event URL.
+- Multi-tab work started: relay tool schema change (tab / new_tab / close) is in `git stash` — do NOT ship it before the
+  devices understand `tab` (an old device would act on its main tab).
