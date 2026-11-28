@@ -45,7 +45,7 @@ class AgentDriver(
 
     // ---- state the owner controls (banner / notification buttons) ----
     @Volatile var stopped = false
-    @Volatile var paused = false          // the owner touched the page: stays paused until he taps RESUME
+    @Volatile var paused = false          // the owner pressed PAUSE: stays paused until he taps RESUME
     @Volatile var ownerHolding = false    // ask_owner: the owner has the screen
     @Volatile private var ownerResult: String? = null
     @Volatile var pace = "normal"         // "slow" or "normal", as the owner says in chat
@@ -77,7 +77,9 @@ class AgentDriver(
     fun attach() {
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
-        web.onOwnerTouch = { if (!ownerHolding) { paused = true; log("owner touched: paused") } }
+        // owner, 28 Nov: "a tap by mistake must not pause the work; only my PAUSE / STOP buttons". A touch or scroll
+        // only makes Claude's next tap / typing wait until his finger is off the page (no fight over the screen).
+        web.onOwnerTouch = { log("owner touched the page (work goes on)") }
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? = intercept(req)
             override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean {
@@ -277,7 +279,11 @@ class AgentDriver(
         onCommand?.invoke()
         synchronized(done) { done[id] }?.let { return it }
         if (stopped) return err("the owner pressed STOP on this device. Claude must wait until he turns Claude on again.")
-        if ((paused || ownerHolding) && tool != "ask_owner") return err(if (paused) "the owner took over the screen. Claude waits until he taps RESUME." else "the owner is using the screen right now: wait and try again")
+        if ((paused || ownerHolding) && tool != "ask_owner") return err(if (paused) "the owner pressed PAUSE. Claude waits until he taps RESUME." else "the owner is using the screen right now: wait and try again")
+        // his finger is on the page (scrolling to watch): wait for it to lift, at most 8 s, then go on
+        val until = SystemClock.uptimeMillis() + 8000
+        while ((web.ownerFingerDown || SystemClock.uptimeMillis() - web.ownerFingerAt < 400) && SystemClock.uptimeMillis() < until) Thread.sleep(100)
+        if (web.ownerFingerDown && tool !in setOf("snapshot", "get_text", "screenshot", "tabs", "downloads", "wait_for", "devices", "ask_owner")) return err("the owner is touching the screen right now: wait a moment and try again")
         // write-ahead journal: if Ronin died during this command, it is NEVER pressed again blindly
         // done before (the answer was lost on the way, then the app restarted): the same answer again, never a second tap
         if (journal.getString("j_$id", null) == "done") return journal.getString("r_$id", null)?.let { try { JSONObject(it) } catch (e: Exception) { null } }
@@ -476,5 +482,6 @@ class AgentDriver(
     fun ownerDone() { ownerResult = "done"; ownerHolding = false }
     fun ownerStop() { ownerResult = "stop"; ownerHolding = false; stopped = true }
     fun resume() { paused = false; stopped = false }
+    fun ownerPause() { paused = true; log("owner pressed PAUSE") }
     fun checked() { blockedActs.clear() }
 }

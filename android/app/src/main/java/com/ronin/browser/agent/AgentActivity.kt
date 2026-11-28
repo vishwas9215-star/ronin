@@ -96,6 +96,7 @@ class AgentActivity : Activity() {
         root.addView(rows)
         rows.addView(row(
             btn("DONE", "agent-done", "✅ DONE: Claude को बता दिया") { driver?.ownerDone() },
+            btn("PAUSE", "agent-pause", "⏸ Claude रुका: RESUME दबाने तक") { driver?.ownerPause() },
             btn("RESUME", "agent-resume", "▶ Claude फिर चालू") { driver?.resume() },
             btn("STOP", "agent-stop", "⏹ Claude रोक दिया") { driver?.ownerStop() }))
         // "Claude जोड़ें" opens a 3-minute window for ONE Connect card on this device (a stranger's Claude can never
@@ -211,7 +212,7 @@ class AgentActivity : Activity() {
             left > 0 -> "🔗 Claude जोड़ें खुला है: ${left / 60}:${"%02d".format(left % 60)} बाकी। अब Claude में Connect करें, फिर यहाँ code मिलाकर Allow दबाकर रखें"
             System.currentTimeMillis() - removedAt < 10_000 -> "⛔ Claude हटा दिया गया (सभी devices से)"
             dr.stopped -> "⏹ Claude रुका है (RESUME से चालू)"
-            dr.paused -> "⏸ आपने छुआ: Claude रुका है (RESUME दबाएँ)"
+            dr.paused -> "⏸ आपने PAUSE दबाया: Claude रुका है (RESUME दबाएँ)"
             dr.ownerHolding -> "✋ आपकी बारी: काम करके DONE दबाएँ"
             else -> "🤖 Claude काम कर सकता है"
         }

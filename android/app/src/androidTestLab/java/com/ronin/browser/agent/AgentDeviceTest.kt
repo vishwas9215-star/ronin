@@ -183,6 +183,9 @@ class AgentDeviceTest {
         assertTrue(d.stopped)
         assertTrue(press("agent-resume").contains("काम कर सकता"))
         assertTrue(!d.stopped)
+        assertTrue(press("agent-pause").contains("रुका"))
+        assertTrue(d.paused)
+        press("agent-resume"); assertTrue(!d.paused)
         press("agent-connect") // no link in tests: must not crash, says so
         mech("banner", true)
     }
@@ -250,9 +253,22 @@ class AgentDeviceTest {
         assertTrue(tool("screenshot").optString("error").contains("refused"))
     }
 
-    @Test fun ownerTouchPausesUntilResumeAndStopHolds() {
+    // owner, 28 Nov: "a tap by mistake stops the work at once; it must go on until I press stop / pause myself"
+    @Test fun ownerTouchDoesNotPauseOnlyPauseAndStopDo() {
         open("https://news.example.com/")
-        d.paused = true // what a real touch does (onOwnerTouch)
+        scenario.onActivity { a ->
+            fun find(v: android.view.View): android.webkit.WebView? = v as? android.webkit.WebView
+                ?: (v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).firstNotNullOfOrNull { find(g.getChildAt(it)) } }
+            val w = find(a.window.decorView)!!
+            val t = android.os.SystemClock.uptimeMillis()
+            listOf(android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_UP).forEach { act ->
+                val e = android.view.MotionEvent.obtain(t, android.os.SystemClock.uptimeMillis(), act, 50f, 200f, 0)
+                e.source = android.view.InputDevice.SOURCE_TOUCHSCREEN; w.dispatchTouchEvent(e); e.recycle()
+            }
+        }
+        assertTrue("a touch must not pause", !d.paused)
+        assertTrue("work goes on after the owner's tap", !tool("snapshot").has("error"))
+        d.ownerPause()
         assertTrue(tool("snapshot").optString("error").contains("RESUME"))
         d.resume()
         assertTrue(!tool("snapshot").has("error"))
