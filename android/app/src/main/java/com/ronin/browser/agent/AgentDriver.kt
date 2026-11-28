@@ -186,8 +186,17 @@ class AgentDriver(
     }
 
     private fun q(s: String) = JSONObject.quote(s)
-    private fun host() = AgentRules.host(currentUrl)
+    // the page's address as the engine has committed it (the page-start / page-finish events can arrive late or out of
+    // order: a late about:blank once hid a broker page from the read-only check, CI 28 Nov)
+    private fun pageUrl(): String = try { onMain(3000) { web.url } } catch (e: Exception) { null } ?: currentUrl
+    private fun host() = AgentRules.host(pageUrl())
     private fun money(h: String = host()) = AgentRules.mode(h, isMoney) == AgentRules.Mode.MONEY
+    /** read-only if ANY view of where the page is says money: the committed address, the last event, the page itself */
+    private fun moneyAnywhere(): Boolean {
+        if (money() || money(AgentRules.host(currentUrl))) return true
+        val loc = js("location.href")?.trim('"') ?: return false
+        return money(AgentRules.host(loc))
+    }
     private fun err(m: String) = JSONObject().put("error", m)
     private fun slow() = pace == "slow"
 
@@ -302,7 +311,7 @@ class AgentDriver(
             if (t.isNotEmpty()) blockedActs.add(t)
             return JSONObject().put("uncertain", "the last $tool was interrupted (app restarted). It may or may not have happened. Take a snapshot and check the page; the same action stays blocked until the owner taps CHECKED.")
         }
-        if (tool in INPUT && money()) return err("${host()} is READ-ONLY for Claude (money / trading / bank site): no taps or typing at all. Tell the owner what to press.")
+        if (tool in INPUT && moneyAnywhere()) return err("${host()} is READ-ONLY for Claude (money / trading / bank site): no taps or typing at all. Tell the owner what to press.")
         if (tool !in READ) {
             val c = try { call("{c: window.__roninAgent.challenge()}").optString("c") } catch (e: Exception) { "" }
             if (c.isNotEmpty()) return err("$c: Claude does not solve human checks. Call ask_owner.")
@@ -331,8 +340,8 @@ class AgentDriver(
         "select" -> call("window.__roninAgent.selectOption(${q(a.optString("ref"))}, ${q(a.optString("option"))})")
         "press" -> press(a.optString("key"))
         "scroll" -> { js("window.scrollBy(0, ${if (a.optString("direction") == "up") "-" else ""}Math.round(innerHeight*0.8))"); JSONObject().put("done", "scrolled") }
-        "back" -> { onMain { if (web.canGoBack()) web.goBack() }; Thread.sleep(800); JSONObject().put("url", currentUrl) }
-        "tabs" -> JSONObject().put("tabs", org.json.JSONArray().put(JSONObject().put("index", 0).put("url", currentUrl).put("claude", true)))
+        "back" -> { onMain { if (web.canGoBack()) web.goBack() }; Thread.sleep(800); JSONObject().put("url", pageUrl()) }
+        "tabs" -> JSONObject().put("tabs", org.json.JSONArray().put(JSONObject().put("index", 0).put("url", pageUrl()).put("claude", true)))
         "screenshot" -> screenshot()
         "wait_for" -> waitFor(a.optString("text"), a.optInt("seconds", 10))
         "ask_owner" -> askOwner(a.optString("reason"))
@@ -346,9 +355,13 @@ class AgentDriver(
         AgentRules.openRefusal(url, isMoney, readPages, taint)?.let { return err("$it: refused") }
         val h = AgentRules.host(url)
         if (testPages.isEmpty() && isPrivate(h)) return err("home-network / server addresses are never opened by Claude")
+        val before = pageUrl()
         pageLatch = CountDownLatch(1)
         onMain { web.loadUrl(url) }
         pageLatch.await(30, TimeUnit.SECONDS)
+        // a late "finished" of the PREVIOUS page can open the latch early: wait until the engine is really on the new site
+        val until = SystemClock.uptimeMillis() + 5000
+        while (pageUrl().let { it == before || it == "about:blank" } && before != url && SystemClock.uptimeMillis() < until) Thread.sleep(100)
         Thread.sleep(if (slow()) 1200 else 300)
         val s = snapshot()
         val ch = s.optString("challenge")
@@ -357,7 +370,7 @@ class AgentDriver(
             val now = System.currentTimeMillis(); list.removeAll { now - it > 600_000 }; list.add(now)
             if (list.size >= 3) return err("$h asked for a human check ${list.size} times in 10 minutes: stopping here. Tell the owner.")
         }
-        return JSONObject().put("url", currentUrl).put("title", s.optString("title")).put("challenge", ch.ifEmpty { null })
+        return JSONObject().put("url", pageUrl()).put("title", s.optString("title")).put("challenge", ch.ifEmpty { null })
             .put("hint", if (ch.isNotEmpty()) "human check: call ask_owner" else "call snapshot to read it")
     }
 
@@ -406,7 +419,7 @@ class AgentDriver(
             try { call("window.__roninAgent.press(${q(ref)})"); Thread.sleep(if (slow()) 700 else 400) } finally { claudeUntil = SystemClock.uptimeMillis() + 2000 }
         } else tap(at.optDouble("x"), at.optDouble("y"))
         if (blocked.size > b0) return err("tapped \"$name\", but the page then tried ${blocked.subList(b0, blocked.size).joinToString("; ")}. BLOCKED on the device. Tell the owner.")
-        return JSONObject().put("done", "tapped ${at.optString("kind")} \"$name\"").put("url", currentUrl).put("method", if (bg) "background-press" else "tap")
+        return JSONObject().put("done", "tapped ${at.optString("kind")} \"$name\"").put("url", pageUrl()).put("method", if (bg) "background-press" else "tap")
     }
 
     private fun type(ref: String, text: String, submit: Boolean): JSONObject {
