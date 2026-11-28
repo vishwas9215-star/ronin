@@ -22,7 +22,7 @@ class AgentWebView(context: Context) : RoninWebView(context) {
     init {
         if (android.os.Build.VERSION.SDK_INT >= 26) setRendererPriorityPolicy(RENDERER_PRIORITY_IMPORTANT, false)
     }
-    /** what the page engine was last told (tests) */
+    override fun onWindowVisibilityChanged(visibility: Int) { super.onWindowVisibilityChanged(android.view.View.VISIBLE) }
     override fun onVisibilityChanged(changedView: android.view.View, visibility: Int) { super.onVisibilityChanged(changedView, android.view.View.VISIBLE) }
 
     @Volatile var lastInputType = 0
