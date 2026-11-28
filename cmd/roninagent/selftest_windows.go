@@ -138,7 +138,7 @@ func (a *app) selfTest(data string) {
 	r = run("snapshot", map[string]any{"tab": "t2"})
 	check(r["error"] != nil, "tab t2 refused on the laptop", r)
 	// minimized: the page's timers keep their pace (EPDS AJAX behind other windows)
-	a.page.Call("window.beats=0;setInterval(function(){window.beats++},1000);0")
+	a.page.Call("(window.beats=0,setInterval(function(){window.beats++},1000),0)")
 	runOnUI(func() { pShowWindow.Call(a.hwnd, 6) }) // SW_MINIMIZE
 	time.Sleep(1500 * time.Millisecond)
 	beat0, _ := a.page.Call("window.beats")
