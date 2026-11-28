@@ -171,7 +171,12 @@ class CensusService : AccessibilityService() {
         n.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         // write into the box that really has the focus now (Flutter can hand focus to an inner node)
         try { Thread.sleep(150) } catch (_: InterruptedException) {}
-        (n.window?.root ?: rootInActiveWindow)?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable }?.let { n = it }
+        // ...but only if that focused box lies INSIDE the box we meant: a focus that has not moved yet would point at
+        // the previous box, and the value would land in the wrong box (caught by the device test)
+        val want = android.graphics.Rect().also { box.node.getBoundsInScreen(it) }
+        (n.window?.root ?: rootInActiveWindow)?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { f ->
+            f.isEditable && android.graphics.Rect().also { f.getBoundsInScreen(it) }.let { want.contains(it) }
+        }?.let { n = it }
         lastBox = n; lastLabel = box.label
         val args = Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value) }
         var ok = n.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
@@ -208,7 +213,7 @@ class CensusService : AccessibilityService() {
         val e = tts
         if (e == null) {
             tts = android.speech.tts.TextToSpeech(this) { st -> ttsReady = st == android.speech.tts.TextToSpeech.SUCCESS &&
-                tts?.setLanguage(java.util.Locale("hi", "IN"))?.let { it >= 0 } == true
+                tts?.setLanguage(java.util.Locale.forLanguageTag("hi-IN"))?.let { it >= 0 } == true
                 tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
                     override fun onStart(id: String?) {}
                     override fun onDone(id: String?) { main.post { if (handsFree) listen() } }
