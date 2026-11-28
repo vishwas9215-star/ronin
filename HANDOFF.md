@@ -714,3 +714,13 @@ confirmed - owner's decision. Android developer verification: not in India yet (
   2-Ronin-Agent-Lab.bat).
 - NEXT (owner, 12:31): Census 2027 enumerator duty — plan voice-dictated entry. Facts: enumerators use the official
   native mobile app (HLO app now, PE app Feb 2027), not a web page; Census data is confidential. Plan before building.
+
+### 28 Nov 2026 (12:52–13:10) — EPDS "IFSC Search" refused
+- Cause (phone log): "click … refused" = AgentRules.scriptLink refused `javascript:__doPostBack('…','')` (ASP.NET
+  LinkButton). Now a strict postback-only pattern is allowed (Android + Go), anything more stays refused. Test
+  postbackLinkIsPressedInFrontAndBehind + unit tests. Tablet installed (r25); PHONE NOT YET — owner is doing EPDS on it,
+  install only when he says "phone पर लगाओ".
+- Census idea (owner 13:00): helper watching the official enumerator app on screen and filling from his dictation
+  (Hindi), plus 3–4 enumerator IDs on other phones joined to his hotspot and driven from his phone. Wait for his
+  screenshots of the app after login before designing. Needs: Android AccessibilityService helper (native app, not web),
+  check FLAG_SECURE / app rules, Census data confidentiality (keep data on device).
