@@ -19,6 +19,8 @@ import android.widget.TextView
 class AgentActivity : Activity() {
     companion object {
         @Volatile var driver: AgentDriver? = null; @Volatile var link: AgentLink? = null
+        /** all tabs (C's and the owner's); [driver] is the main C tab's */
+        @Volatile var tabs: AgentTabs? = null
         /** Ronin's local proxy: every connection of this app's pages goes through it (one per process). */
         @Volatile var proxy: AgentProxy? = null
         @Volatile var proxyOn = false
@@ -48,6 +50,11 @@ class AgentActivity : Activity() {
     private val ticker = android.os.Handler(android.os.Looper.getMainLooper())
     private val tick = object : Runnable { override fun run() { refresh(); ticker.postDelayed(this, 1000) } }
     private lateinit var web: AgentWebView
+    private lateinit var area: android.widget.FrameLayout
+    private lateinit var tabRow: LinearLayout
+    private lateinit var tabTools: LinearLayout
+    private lateinit var address: android.widget.EditText
+    private var agentJs = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,10 +106,10 @@ class AgentActivity : Activity() {
         rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = android.view.View.GONE }
         root.addView(rows)
         rows.addView(row(
-            btn("DONE", "agent-done", "✅ DONE: C को बता दिया") { driver?.ownerDone() },
-            btn("PAUSE", "agent-pause", "⏸ C रुका: RESUME दबाने तक") { driver?.ownerPause() },
-            btn("RESUME", "agent-resume", "▶ C फिर चालू") { driver?.resume() },
-            btn("STOP", "agent-stop", "⏹ C रोक दिया") { driver?.ownerStop() }))
+            btn("DONE", "agent-done", "✅ DONE: C को बता दिया") { tabs?.ownerDone() },
+            btn("PAUSE", "agent-pause", "⏸ C रुका: RESUME दबाने तक") { tabs?.ownerPause() },
+            btn("RESUME", "agent-resume", "▶ C फिर चालू") { tabs?.resume() },
+            btn("STOP", "agent-stop", "⏹ C रोक दिया") { tabs?.ownerStop() }))
         // "C जोड़ें" opens a 3-minute window for ONE Connect card on this device (a stranger's Claude can never
         // show a card); "C हटाएँ" disconnects Claude from all his devices.
         rows.addView(row(
@@ -121,9 +128,35 @@ class AgentActivity : Activity() {
                 repairSaid = "🔁 देख रहे हैं..."; repairAt = System.currentTimeMillis()
                 kotlin.concurrent.thread { val m = l.approveRepair(); runOnUiThread { repairSaid = m; repairAt = System.currentTimeMillis(); refresh(); android.widget.Toast.makeText(this, m, android.widget.Toast.LENGTH_LONG).show() } }
             }))
+        // tabs: 🤖 C's, 👤 the owner's own. The shown one fills the screen; the others keep working behind it.
+        tabRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.rgb(9, 90, 98)) }
+        rows.addView(android.widget.HorizontalScrollView(this).apply { addView(tabRow) })
+        address = android.widget.EditText(this).apply {
+            hint = "पता या खोज (आपका tab)"; tag = "agent-address"; setSingleLine(); textSize = 15f; setTextColor(Color.WHITE); setHintTextColor(Color.rgb(200, 230, 230))
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_GO
+            setOnEditorActionListener { v, _, _ ->
+                val ts = tabs; val t = ts?.tab(ts.shown)
+                val q = v.text.toString().trim()
+                if (t != null && !t.claude && q.isNotEmpty()) {
+                    val url = if (Regex("^[a-z]+://", RegexOption.IGNORE_CASE).containsMatchIn(q)) q
+                        else if (!q.contains(' ') && q.contains('.')) "https://$q"
+                        else "https://www.google.com/search?q=" + android.net.Uri.encode(q)
+                    t.driver.web.loadUrl(url); v.text = ""; showButtons(false)
+                }
+                true
+            }
+        }
+        tabTools = row(
+            btn("C को दें", "agent-tab-share", "🔁 tab बदला") {
+                val ts = tabs ?: return@btn; val t = ts.tab(ts.shown) ?: return@btn
+                if (!ts.setClaude(t.id, !t.claude)) android.widget.Toast.makeText(this, "C के पहले से ${ts.maxClaude} tab हैं", android.widget.Toast.LENGTH_SHORT).show()
+            },
+            btn("✕ tab बंद", "agent-tab-close", "✕ tab बंद किया") { tabs?.let { it.close(it.shown) } })
+        rows.addView(address)
+        rows.addView(tabTools)
         web = AgentWebView(this)
         // the page fills the screen; a small 🤖 on its right edge opens the status and the buttons
-        val area = android.widget.FrameLayout(this)
+        area = android.widget.FrameLayout(this)
         area.addView(web, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         fab = TextView(this).apply {
             text = "🤖"; tag = "agent-fab"; textSize = 20f; gravity = Gravity.CENTER; alpha = 0.75f
@@ -136,22 +169,17 @@ class AgentActivity : Activity() {
         setContentView(root)
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
-        val js = assets.open("agent/agent.js").bufferedReader().use { it.readText() }
-        val rules = (application as? com.ronin.browser.RoninApp)?.rules
-        val dr = AgentDriver(web, getSharedPreferences("agent-journal", MODE_PRIVATE), js) { h -> rules?.isBankHost(h) == true }
-        dr.attach()
-        dr.onOwnerAsked = { reason -> runOnUiThread { showButtons(true); ticker.removeCallbacks(autoHide); status.text = "✋ आपकी बारी: ${reason.ifBlank { "काम पूरा करके DONE दबाएँ" }}" } }
+        agentJs = assets.open("agent/agent.js").bufferedReader().use { it.readText() }
+        val dr = setUpPage(web, getSharedPreferences("agent-journal", MODE_PRIVATE))
         driver = dr
         startProxy()
-        dr.onCommand = { runOnUiThread { working() } }
-        dr.onDone = { line -> if (link != null) AgentKeepAlive.update(applicationContext, line) }
-        try { // pages that offer a dark look use it at night
-            if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.ALGORITHMIC_DARKENING))
-                androidx.webkit.WebSettingsCompat.setAlgorithmicDarkeningAllowed(web.settings, true)
-        } catch (e: Throwable) {}
+        val ts = AgentTabs(makeTab = { claude -> onUi { newPage(claude) } }, first = dr)
+        ts.onChanged = { runOnUiThread { showTabs() } }
+        tabs = ts
         showStartPage()
+        showTabs()
         refresh()
-        startLink(dr)
+        startLink(ts)
     }
 
     /**
@@ -175,7 +203,81 @@ class AgentActivity : Activity() {
     }
 
     /** The link to the owner's relay: address + relay public key baked into the app (assets/agent/relay.json). */
-    private fun startLink(dr: AgentDriver) {
+    /** A page's driver with everything the owner sees wired in (status, screen on, notification). Main thread. */
+    private fun setUpPage(w: AgentWebView, journal: android.content.SharedPreferences): AgentDriver {
+        val rules = (application as? com.ronin.browser.RoninApp)?.rules
+        val dr = AgentDriver(w, journal, agentJs) { h -> rules?.isBankHost(h) == true }
+        dr.attach()
+        dr.onOwnerAsked = { reason -> runOnUiThread {
+            tabs?.tabs?.firstOrNull { it.driver === dr }?.let { tabs?.show(it.id) } // his turn: show THAT tab
+            showButtons(true); ticker.removeCallbacks(autoHide); status.text = "✋ आपकी बारी: ${reason.ifBlank { "काम पूरा करके DONE दबाएँ" }}" } }
+        dr.onCommand = { runOnUiThread { working() } }
+        dr.onDone = { line -> if (link != null) AgentKeepAlive.update(applicationContext, line) }
+        CookieManager.getInstance().setAcceptThirdPartyCookies(w, true)
+        try { // pages that offer a dark look use it at night
+            if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.ALGORITHMIC_DARKENING))
+                androidx.webkit.WebSettingsCompat.setAlgorithmicDarkeningAllowed(w.settings, true)
+        } catch (e: Throwable) {}
+        return dr
+    }
+
+    /** One more tab (a page under the 🤖 button). Its own journal, fresh each time. Main thread. */
+    private fun newPage(claude: Boolean): AgentDriver {
+        val w = AgentWebView(this)
+        w.visibility = android.view.View.INVISIBLE
+        area.addView(w, area.indexOfChild(fab), android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        val j = getSharedPreferences("agent-journal-${System.nanoTime()}", MODE_PRIVATE)
+        val dr = setUpPage(w, j)
+        driver?.testPages?.let { if (it.isNotEmpty()) dr.testPages.putAll(it) } // device tests
+        if (!claude) w.loadUrl("https://www.google.com/")
+        return dr
+    }
+
+    private fun <T> onUi(f: () -> T): T? {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) return f()
+        var out: T? = null
+        val latch = java.util.concurrent.CountDownLatch(1)
+        runOnUiThread { try { out = f() } finally { latch.countDown() } }
+        latch.await(10, java.util.concurrent.TimeUnit.SECONDS)
+        return out
+    }
+
+    /** The tab chips inside the 🤖 panel, and only the shown tab's page on screen. Main thread. */
+    private fun showTabs() {
+        val ts = tabs ?: return
+        for (t in ts.tabs) t.driver.web.visibility = if (t.id == ts.shown) android.view.View.VISIBLE else android.view.View.INVISIBLE
+        // pages of closed tabs leave the screen and free their memory
+        for (i in area.childCount - 1 downTo 0) { val v = area.getChildAt(i); if (v is AgentWebView && ts.tabs.none { it.driver.web === v }) { area.removeView(v); v.destroy() } }
+        tabRow.removeAllViews()
+        val d = resources.displayMetrics.density
+        for (t in ts.tabs) {
+            val host = try { android.net.Uri.parse(t.driver.currentUrl).host?.removePrefix("www.") ?: "" } catch (_: Exception) { "" }
+            tabRow.addView(Button(this).apply {
+                text = (if (t.claude) "🤖 " else "👤 ") + t.id.removePrefix("t") + (if (host.isNotEmpty()) " " + host.take(14) else "")
+                tag = "agent-tab-${t.id}"; isAllCaps = false; textSize = 13f; minWidth = 0; minHeight = (40 * d).toInt()
+                alpha = if (t.id == ts.shown) 1f else 0.6f
+                setOnClickListener { ts.show(t.id); refresh() }
+            })
+        }
+        tabRow.addView(Button(this).apply {
+            text = "+ मेरा tab"; tag = "agent-tab-new"; isAllCaps = false; textSize = 13f; minWidth = 0; minHeight = (40 * d).toInt()
+            setOnClickListener {
+                val t = ts.add(false)
+                if (t == null) android.widget.Toast.makeText(this@AgentActivity, "और tab नहीं खुल सकता (सीमा ${ts.maxAll})", android.widget.Toast.LENGTH_SHORT).show()
+                else ts.show(t.id)
+            }
+        })
+        val cur = ts.tab(ts.shown) ?: return
+        val mine = !cur.claude
+        address.visibility = if (mine) android.view.View.VISIBLE else android.view.View.GONE
+        tabTools.findViewWithTag<Button>("agent-tab-share")?.apply {
+            visibility = if (cur.id == "t1") android.view.View.GONE else android.view.View.VISIBLE
+            text = if (mine) "C को दें" else "वापस लें"
+        }
+        tabTools.findViewWithTag<Button>("agent-tab-close")?.visibility = if (cur.id == "t1") android.view.View.GONE else android.view.View.VISIBLE
+    }
+
+    private fun startLink(dr: AgentRunner) {
         val lab = packageName.endsWith(".agentlab") && (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
         var url = ""; var pub = ""
         try { val j = org.json.JSONObject(assets.open("agent/relay.json").bufferedReader().use { it.readText() }); url = j.optString("url"); pub = j.optString("pub") } catch (_: Exception) {}
@@ -220,13 +322,14 @@ class AgentActivity : Activity() {
     /** things the owner must see without opening the 🤖 menu: a code to compare, his turn, an open connect window */
     private fun mustShow(): Boolean {
         val dr = driver ?: return false
-        return link?.repairCode != null || dr.ownerHolding || ((link?.connectUntil ?: 0L) > System.currentTimeMillis())
+        return link?.repairCode != null || dr.ownerHolding || tabs?.ownerHolding == true || ((link?.connectUntil ?: 0L) > System.currentTimeMillis())
     }
 
     private fun refresh() {
         val dr = driver ?: return
         top.visibility = if (buttonsShown || mustShow()) android.view.View.VISIBLE else android.view.View.GONE
-        fab.text = when { dr.stopped -> "⏹"; dr.paused -> "⏸"; dr.ownerHolding -> "✋"; else -> "🤖" }
+        val holding = tabs?.ownerHolding ?: dr.ownerHolding
+        fab.text = when { dr.stopped -> "⏹"; dr.paused -> "⏸"; holding -> "✋"; else -> "🤖" }
         val left = ((link?.connectUntil ?: 0L) - System.currentTimeMillis()) / 1000
         val code = link?.repairCode
         status.text = when {
@@ -236,7 +339,7 @@ class AgentActivity : Activity() {
             System.currentTimeMillis() - removedAt < 10_000 -> "⛔ C हटा दिया गया (सभी devices से)"
             dr.stopped -> "⏹ C रुका है (RESUME से चालू)"
             dr.paused -> "⏸ आपने PAUSE दबाया: C रुका है (RESUME दबाएँ)"
-            dr.ownerHolding -> "✋ आपकी बारी: काम करके DONE दबाएँ"
+            holding -> "✋ आपकी बारी: काम करके DONE दबाएँ"
             else -> "🤖 C काम कर सकता है"
         }
         linkLine.text = when {
@@ -325,5 +428,18 @@ class AgentActivity : Activity() {
     override fun onPause() { ticker.removeCallbacks(tick); super.onPause() }
 
     override fun onStop() { super.onStop(); CookieManager.getInstance().flush() }
-    override fun onDestroy() { if (driver?.web === web) { driver = null; link?.stop(); link = null }; web.destroy(); super.onDestroy() }
+    override fun onDestroy() {
+        val mine = driver?.web === web
+        val pages = tabs?.tabs?.map { it.driver.web } ?: listOf(web)
+        if (mine) { driver = null; tabs = null; link?.stop(); link = null }
+        pages.forEach { try { it.destroy() } catch (_: Exception) {} }
+        super.onDestroy()
+    }
+
+    // the system back key goes back in the tab on screen
+    @Deprecated("Activity back handling")
+    override fun onBackPressed() {
+        val w = tabs?.let { it.tab(it.shown)?.driver?.web } ?: web
+        if (w.canGoBack()) w.goBack() else @Suppress("DEPRECATION") super.onBackPressed()
+    }
 }

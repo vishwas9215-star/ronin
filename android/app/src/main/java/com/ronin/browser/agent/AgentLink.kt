@@ -39,7 +39,7 @@ class AgentLink(
     private val relayPubPem: String,        // baked into the app at build time
     private val name: String,               // "tablet" / "phone"
     private val prefs: SharedPreferences,
-    private val driver: AgentDriver,
+    private val driver: AgentRunner,
     private val approve: (String) -> Boolean, // the native "Connect Claude?" card (press and hold)
     private val alias: String = "ronin-agent-$name", // Keystore key name (tests use their own)
 ) {

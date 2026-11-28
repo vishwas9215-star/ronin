@@ -305,6 +305,72 @@ class AgentDeviceTest {
         mech("screen-off", true)
     }
 
+    // owner, 28 Nov: several jobs at once. C works in its own tabs; the owner's tabs are his, unseen and untouchable by
+    // C unless he taps "C को दें"; a tab off screen keeps working; at most 4 C tabs.
+    @Test fun tabsKeepClaudesWorkAndTheOwnersApart() {
+        val ts = AgentActivity.tabs!!
+        var n = 0
+        fun run(tool: String, vararg kv: Pair<String, Any>): JSONObject {
+            val a = JSONObject(); kv.forEach { (k, v) -> a.put(k, v) }
+            val r = ts.run("tabs-${System.nanoTime()}-${n++}", tool, a); Log.i("RoninAgent", "TABS $tool -> ${r.toString().take(200)}"); return r
+        }
+        fun refIn(tab: String, re: String): String {
+            val els = run("snapshot", "tab" to tab).optJSONArray("elements")!!
+            for (i in 0 until els.length()) { val l = els.getString(i); if (Regex(re).containsMatchIn(l)) return Regex("\\[(e\\d+)]").find(l)!!.groupValues[1] }
+            error("no $re")
+        }
+        try {
+            run("open", "url" to "https://news.example.com/")
+            val o = run("open", "url" to "https://epds.example.gov.in/", "new_tab" to true)
+            val t2 = o.optString("tab")
+            assertEquals("a new C tab", "t2", t2)
+            // the owner opens his own tab and looks at it: C's tab t2 is now off screen
+            val mine = ts.add(false)!!
+            ts.show(mine.id); Thread.sleep(500)
+            assertTrue("typing in an off-screen C tab", !run("type", "tab" to t2, "ref" to refIn(t2, "Employee name"), "text" to "राम कुमार").has("error"))
+            assertEquals("\"राम कुमार\"", t2.let { ts.tab(it)!!.driver.pageValue("document.getElementById('nm').value") })
+            assertTrue("main tab untouched", run("snapshot").optString("url").contains("news.example.com"))
+            // the owner's tab: not listed, not reachable
+            val list = run("tabs").optJSONArray("tabs")!!
+            assertTrue("owner's tab hidden from C", (0 until list.length()).none { list.getJSONObject(it).optString("tab") == mine.id })
+            assertTrue(run("snapshot", "tab" to mine.id).optString("error").contains("owner"))
+            // he shares it, then takes it back
+            assertTrue(ts.setClaude(mine.id, true))
+            assertTrue(!run("snapshot", "tab" to mine.id).has("error"))
+            assertTrue(ts.setClaude(mine.id, false))
+            assertTrue(run("snapshot", "tab" to mine.id).optString("error").contains("owner"))
+            // at most 4 C tabs
+            run("open", "url" to "https://news.example.com/", "new_tab" to true)
+            run("open", "url" to "https://news.example.com/", "new_tab" to true)
+            assertTrue("5th C tab refused", run("open", "url" to "https://news.example.com/", "new_tab" to true).optString("error").contains("4 tabs"))
+            // PAUSE / STOP reach every C tab
+            ts.ownerPause(); assertTrue(run("snapshot", "tab" to t2).optString("error").contains("RESUME")); ts.resume()
+            assertTrue(run("tabs", "close" to t2).optJSONArray("tabs")!!.length() == 3)
+            assertTrue(run("snapshot", "tab" to t2).optString("error").contains("no such tab"))
+        } finally {
+            ts.tabs.filter { it.id != "t1" }.forEach { ts.close(it.id) }
+            ts.show("t1"); Thread.sleep(300)
+        }
+        mech("tabs", true)
+    }
+
+    @Test fun ownerOpensHisOwnTabFromTheRobotMenu() {
+        scenario.onActivity { a -> a.window.decorView.findViewWithTag<android.view.View>("agent-fab").performClick() }
+        scenario.onActivity { a -> a.window.decorView.findViewWithTag<android.widget.Button>("agent-tab-new").performClick() }
+        Thread.sleep(500)
+        var addr = false; var chips = 0
+        scenario.onActivity { a ->
+            addr = a.window.decorView.findViewWithTag<android.view.View>("agent-address").visibility == android.view.View.VISIBLE
+            chips = listOf("agent-tab-t1", "agent-tab-t2").count { a.window.decorView.findViewWithTag<android.view.View>(it) != null }
+        }
+        val ts = AgentActivity.tabs!!
+        try {
+            assertEquals("his tab is on screen", 2, ts.tabs.size)
+            assertTrue("the address box shows for his tab", addr)
+            assertEquals("both tabs listed", 2, chips)
+        } finally { ts.tabs.filter { it.id != "t1" }.forEach { ts.close(it.id) }; ts.show("t1") }
+    }
+
     // the owner works in the Claude app while Ronin runs behind it (28 Nov): typing and taps must still work
     @Test fun worksWhileTheOwnerIsInAnotherApp() {
         open("https://epds.example.gov.in/")

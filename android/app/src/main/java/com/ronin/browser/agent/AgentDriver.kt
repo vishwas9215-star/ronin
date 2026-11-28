@@ -40,11 +40,11 @@ class AgentDriver(
     private val journal: SharedPreferences,
     private val agentJs: String,
     private val isMoney: (String) -> Boolean = { false },
-) {
+) : AgentRunner {
     private val main = Handler(Looper.getMainLooper())
 
     // ---- state the owner controls (banner / notification buttons) ----
-    @Volatile var stopped = false
+    @Volatile override var stopped = false
     @Volatile var paused = false          // the owner pressed PAUSE: stays paused until he taps RESUME
     @Volatile var ownerHolding = false    // ask_owner: the owner has the screen
     @Volatile private var ownerResult: String? = null
@@ -287,7 +287,7 @@ class AgentDriver(
     /** The last thing Claude did, in one line (shown in the notification so the owner sees it from any app). */
     var onDone: ((String) -> Unit)? = null
 
-    fun run(id: String, tool: String, args: JSONObject): JSONObject {
+    override fun run(id: String, tool: String, args: JSONObject): JSONObject {
         val r = runInner(id, tool, args)
         try { r?.optString("done")?.takeIf { it.isNotEmpty() && tool != "snapshot" }?.let { onDone?.invoke(it.take(80)) } } catch (_: Exception) {}
         return r
