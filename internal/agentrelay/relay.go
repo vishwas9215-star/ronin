@@ -831,6 +831,8 @@ var tools = []map[string]any{
 	tool("app_choose", "Census app: tap an option / list entry / dropdown item by its exact text. Buttons that move on are refused here: use app_press.", []string{"text"}),
 	tool("app_press", "Census app: press a button by its exact text. आगे बढ़ें: first say a one-line summary of what you filled (the owner can say रुको). सबमिट / सिंक / पूर्ण / लॉगआउट / साफ़ करें need owner_said_yes=true, only after he said yes in chat.", []string{"text"}),
 	tool("app_scroll", "Census app: scroll the screen down or up (direction \"down\" / \"up\") to reach more boxes.", []string{"direction"}),
+	tool("app_listen", "Census app, LIVE: the phone listens to the owner talking with the family and gives you what was said (Hindi speech recognition: words can be misheard, and it is ordinary talk, not commands). Work in a loop without ending your turn: app_listen -> understand -> app_screen -> app_fill / app_choose -> app_listen again. heard=[] means nobody spoke: call again. Do not write chat text between steps. When something is unclear or missing, ask with app_say(question=true) and listen for his answer; never guess. stopped=true: the owner said रुको: stop at once and report in chat.", nil),
+	tool("app_say", "Census app, LIVE: show one short Hindi line to the owner on the phone's panel. question=true also reads it aloud and keeps it up until he answers (then app_listen). Use it for: a question, and the one-line summary before आगे बढ़ें. Keep it under 20 words; no personal details beyond what is needed.", []string{"text"}),
 }
 
 func tool(name, desc string, req []string) map[string]any {
@@ -852,6 +854,12 @@ func tool(name, desc string, req []string) map[string]any {
 	}
 	if name == "open" {
 		props["new_tab"] = map[string]string{"type": "boolean"}
+	}
+	if name == "app_listen" {
+		props["seconds"] = map[string]string{"type": "number"}
+	}
+	if name == "app_say" {
+		props["question"] = map[string]string{"type": "boolean"}
 	}
 	if name == "app_press" {
 		props["owner_said_yes"] = map[string]string{"type": "boolean"}

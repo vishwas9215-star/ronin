@@ -124,6 +124,32 @@ class CensusServiceTest {
         var n = -1; sc.onActivity { n = it.nextPressed }; assertEquals(1, n)
     }
 
+    // owner, 28 Nov: "अपने मन से भरो" -> "समझ में नहीं आया". Now what is heard goes to C, who fills and asks; रुको stops him
+    @Test fun liveWhatIsHeardGoesToCAndStopStops() {
+        val sv = CensusService.instance!!
+        val got = java.util.Collections.synchronizedList(ArrayList<org.json.JSONObject>())
+        fun listen(sec: Int) = onMain { sv.bridgeAsync("app_listen", org.json.JSONObject().put("seconds", sec)) { got.add(it) } }
+        fun waitFor(n: Int) { val end = System.currentTimeMillis() + 8000; while (got.size < n && System.currentTimeMillis() < end) Thread.sleep(100) }
+        listen(30); Thread.sleep(500)
+        assertTrue("waits until something is said", got.isEmpty()); assertTrue(sv.live)
+        onMain { sv.onHeard("इनका नाम रामलाल है और घर में चार लोग हैं") }; waitFor(1)
+        assertEquals("इनका नाम रामलाल है और घर में चार लोग हैं", got[0].getJSONArray("heard").getString(0))
+        var m = "x"; sc.onActivity { m = it.mohalla.text.toString() }
+        assertEquals("ordinary talk is not treated as a command", "", m)
+        var said = org.json.JSONObject(); onMain { sv.bridgeAsync("app_say", org.json.JSONObject().put("text", "उम्र कितनी है?").put("question", true)) { said = it } }; Thread.sleep(300)
+        assertTrue(said.has("done")); var pt = ""; onMain { pt = sv.panelText }
+        assertTrue("the question is on the panel: $pt", "उम्र कितनी है?" in pt)
+        listen(1); waitFor(2)
+        assertEquals("nobody spoke", 0, got[1].getJSONArray("heard").length())
+        listen(30); Thread.sleep(300); onMain { sv.onHeard("रुको") }; waitFor(3)
+        assertTrue("रुको reaches C", got[2].optBoolean("stopped")); assertTrue(!sv.live)
+        listen(5); waitFor(4)
+        assertTrue("C may not listen again by himself", got[3].has("error"))
+        onMain { sv.toggleLive() }; listen(1); waitFor(5)
+        assertTrue("after the owner's 🤖 he may", got[4].has("heard") && !got[4].has("error"))
+        Log.i("RoninAgent", "CENSUS live: listen, say, stop PASS")
+    }
+
     // owner, 28 Nov: the helper stays on every screen. Now: off until turned on by hand; off by itself when he leaves the app
     @Test fun onOnlyByHandAndOffWhenHeLeaves() {
         onMain { CensusService.instance!!.setOn(false) }; Thread.sleep(300)

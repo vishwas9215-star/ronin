@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit
  * only passes through (nothing is stored; only tool names are logged). Called from the link's worker thread.
  */
 class CensusBridge(private val ctx: Context) {
-    companion object { val TOOLS = setOf("app_screen", "app_fill", "app_choose", "app_press", "app_scroll") }
+    companion object { val TOOLS = setOf("app_screen", "app_fill", "app_choose", "app_press", "app_scroll", "app_listen", "app_say") }
 
     private val replies = HandlerThread("census-replies").apply { start() }
     @Volatile private var remote: Messenger? = null
@@ -49,7 +49,8 @@ class CensusBridge(private val ctx: Context) {
         val replyTo = Messenger(Handler(replies.looper) { r -> out = r.data.getString("out"); latch.countDown(); true })
         val msg = Message.obtain().apply { data = Bundle().apply { putString("tool", tool); putString("args", args.toString()) }; this.replyTo = replyTo }
         try { m.send(msg) } catch (e: Exception) { remote = null; return JSONObject().put("error", "सहायक से जुड़ाव टूटा: फिर से कोशिश करें") }
-        if (!latch.await(15, TimeUnit.SECONDS)) return JSONObject().put("error", "सहायक ने 15 सेकंड में जवाब नहीं दिया")
+        val wait = if (tool == "app_listen") 50L else 15L // listening answers when something is said (at most 40 s)
+        if (!latch.await(wait, TimeUnit.SECONDS)) return JSONObject().put("error", "सहायक ने $wait सेकंड में जवाब नहीं दिया")
         return try { JSONObject(out ?: "{}") } catch (e: Exception) { JSONObject().put("error", "सहायक का जवाब पढ़ा नहीं गया") }
     }
 }

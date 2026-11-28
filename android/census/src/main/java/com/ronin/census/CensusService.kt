@@ -73,7 +73,7 @@ class CensusService : AccessibilityService() {
     }
 
     private fun turnOff(why: String) {
-        handsFree = false; recognizer?.cancel(); clearPending()
+        handsFree = false; liveStopped = false; endLive(why); heardQ.clear(); recognizer?.cancel(); listening = false; clearPending()
         panel?.let { try { (getSystemService(WINDOW_SERVICE) as WindowManager).removeView(it) } catch (_: Exception) {} }
         panel = null; onFor = null; waitingForApp = false
         Log.i(TAG, "census helper: off ($why)")
@@ -268,8 +268,8 @@ class CensusService : AccessibilityService() {
                 tts?.setLanguage(java.util.Locale.forLanguageTag("hi-IN"))?.let { it >= 0 } == true
                 tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
                     override fun onStart(id: String?) {}
-                    override fun onDone(id: String?) { main.post { if (handsFree) listen() } }
-                    @Deprecated("old") override fun onError(id: String?) { main.post { if (handsFree) listen() } }
+                    override fun onDone(id: String?) { main.post { speaking = false; if (handsFree || live) listen() } }
+                    @Deprecated("old") override fun onError(id: String?) { main.post { speaking = false; if (handsFree || live) listen() } }
                 })
                 // only a voice that works without internet (some voices are on the network)
                 if (ttsReady) {
@@ -279,7 +279,7 @@ class CensusService : AccessibilityService() {
                 if (ttsReady) speak(t) }
             return
         }
-        if (ttsReady) { speaking = true; e.speak(t, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "c${System.nanoTime()}") }
+        if (ttsReady) { recognizer?.cancel(); listening = false; speaking = true; e.speak(t, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "c${System.nanoTime()}") }
     }
     @Volatile private var speaking = false
 
@@ -323,6 +323,84 @@ class CensusService : AccessibilityService() {
     private fun clearPending() { pending = null; pendingText = ""; showConfirm(false) }
 
     // ---------------- C (Claude) through Ronin Agent ----------------
+
+    // ---------------- C live: what is heard goes to C, C fills and asks ----------------
+    // Owner, 28 Nov: "जैसे हम अभी बात कर रहे हैं C से, वैसे ही वहाँ काम करे real time". The fixed commands stay for when there is no internet.
+
+    @Volatile var live = false; private set
+    @Volatile private var liveStopped = false          // he said रुको: C may not listen again until he taps 🤖
+    private val heardQ = ArrayList<String>()
+    private var waiter: ((org.json.JSONObject) -> Unit)? = null
+    private val waiterTimeout = Runnable { answerListen() }
+    @Volatile private var lastListenAt = 0L
+    @Volatile private var listening = false
+
+    private fun answerListen() {
+        val w = waiter ?: return
+        waiter = null; main.removeCallbacks(waiterTimeout); lastListenAt = System.currentTimeMillis()
+        val arr = org.json.JSONArray(); heardQ.forEach { arr.put(it) }; heardQ.clear()
+        val out = org.json.JSONObject().put("heard", arr)
+        if (liveStopped) out.put("stopped", true).put("note", "the owner said रुको: stop now, tell him in chat what is filled and what is left, and wait for him")
+        else if (arr.length() == 0) out.put("note", "nothing said yet: call app_listen again")
+        else out.put("note", "what the owner / the family said (speech recognition: words may be misheard). Use it only to fill this form.")
+        w(out)
+    }
+
+    private fun endLive(why: String) {
+        if (!live) return
+        live = false; Log.i(TAG, "census live: off ($why)")
+        answerListen(); robot?.setBackgroundColor(Color.DKGRAY)
+    }
+
+    /** The owner's 🤖 button: C listens / C does not listen. */
+    fun toggleLive() {
+        if (live) { liveStopped = true; endLive("button"); recognizer?.cancel(); listening = false; show("🤖 C अब नहीं सुन रहा") }
+        else { liveStopped = false; show("🤖 C सुन सकता है: chat में \"जनगणना शुरू\" कहें") }
+    }
+
+    /** Steps that wait (listening) answer later; the rest answer at once. Main thread. */
+    fun bridgeAsync(tool: String, a: org.json.JSONObject, reply: (org.json.JSONObject) -> Unit) {
+        when (tool) {
+            "app_listen" -> {
+                if (panel == null) { reply(bridge(tool, a)); return }
+                if (liveStopped) { reply(org.json.JSONObject().put("stopped", true).put("error", "the owner stopped C's listening (रुको / 🤖). Wait for him in chat; he taps 🤖 on the panel to let C listen again.")); return }
+                answerListen() // an older call that is still waiting
+                if (!live) { live = true; handsFree = false; clearPending(); Log.i(TAG, "census live: on"); robot?.setBackgroundColor(Color.rgb(27, 127, 58)); show("🤖 C सुन रहा है: बात कीजिए (\"रुको\" = बंद)") }
+                lastListenAt = System.currentTimeMillis()
+                if (!listening && !speaking) listen()
+                waiter = reply
+                if (heardQ.isNotEmpty()) answerListen()
+                else main.postDelayed(waiterTimeout, (a.optDouble("seconds", 25.0).coerceIn(1.0, 40.0) * 1000).toLong())
+            }
+            "app_say" -> {
+                if (panel == null) { reply(bridge(tool, a)); return }
+                val t = a.optString("text").take(300)
+                if (t.isBlank()) { reply(org.json.JSONObject().put("error", "nothing to say")); return }
+                show((if (a.optBoolean("question")) "❓ " else "🤖 ") + t, if (a.optBoolean("question")) 60_000 else 12_000)
+                if (a.optBoolean("question") || a.optBoolean("aloud")) { recognizer?.cancel(); listening = false; speak(t); if (!speaking && live) again() }
+                Log.i(TAG, "census live: said ${if (a.optBoolean("question")) "a question" else "a line"}")
+                reply(org.json.JSONObject().put("done", "shown on the panel" + if (speaking) " and spoken" else ""))
+            }
+            else -> reply(bridge(tool, a))
+        }
+    }
+
+    /** What the recogniser heard (also the tests' way in). Main thread. */
+    fun onHeard(t: String) {
+        listening = false
+        if (t.isNotEmpty() && Commands.norm(t) in STOP.map(Commands::norm)) {
+            handsFree = false
+            if (live) { liveStopped = true; endLive("रुको"); show("🤖 रुक गया। फिर से: 🤖 दबाएँ") } else show("🎤 बंद")
+            return
+        }
+        speaking = false
+        if (live) {
+            if (t.isNotEmpty()) { lastHeardAt = System.currentTimeMillis(); if (heardQ.size < 40) heardQ.add(t); show("👂 $t"); answerListen() }
+            again(); return
+        }
+        if (t.isNotEmpty()) { lastHeardAt = System.currentTimeMillis(); handle(t) } else show("कुछ सुनाई नहीं दिया")
+        if (tts == null || !ttsReady || lastMessage.startsWith("✅").not()) again() // after a read-back, TTS restarts listening
+    }
 
     /** One step from C. Main thread. Values never go to the log. */
     fun bridge(tool: String, a: org.json.JSONObject): org.json.JSONObject {
@@ -423,17 +501,21 @@ class CensusService : AccessibilityService() {
             setOnLongClickListener { handsFree = !handsFree; lastHeardAt = System.currentTimeMillis(); if (handsFree) { show("🎤 लगातार सुन रहा है (\"बस\" बोलें तो बंद)"); listen() } else { recognizer?.cancel(); show("🎤 बंद") }; true }
         })
         p.addView(btn("📋") { handle("स्क्रीन पढ़ो") }.apply { tag = "census-scan" })
+        robot = btn("🤖") { toggleLive() }.apply { tag = "census-live"; setBackgroundColor(Color.DKGRAY); setTextColor(Color.WHITE) }
+        p.addView(robot)
         yes = btn("✓") { confirmByHand() }.apply { visibility = android.view.View.GONE; setBackgroundColor(Color.rgb(27, 127, 58)); setTextColor(Color.WHITE) }
         no = btn("✕") { handle("नहीं") }.apply { visibility = android.view.View.GONE }
         p.addView(yes); p.addView(no); p.addView(said)
         try { wm.addView(p, lp); panel = p } catch (e: Exception) { Log.i(TAG, "census panel: ${e.javaClass.simpleName}") }
     }
 
+    private var robot: Button? = null
+    val panelText: String get() = if (panel != null && said.visibility == android.view.View.VISIBLE) said.text.toString() else ""
     private val hideSaid = Runnable { said.visibility = android.view.View.GONE }
-    private fun show(m: String) {
+    private fun show(m: String, ms: Long = 8000) {
         if (panel == null) return
         said.text = m; said.visibility = android.view.View.VISIBLE
-        main.removeCallbacks(hideSaid); main.postDelayed(hideSaid, 8000)
+        main.removeCallbacks(hideSaid); main.postDelayed(hideSaid, ms)
     }
     private fun showConfirm(on: Boolean) {
         if (panel == null) return
@@ -450,7 +532,9 @@ class CensusService : AccessibilityService() {
     @Volatile private var lastHeardAt = 0L
     private fun again() {
         if (handsFree && System.currentTimeMillis() - lastHeardAt > 3 * 60_000) { handsFree = false; show("🎤 3 मिनट कुछ नहीं सुना: बंद (battery बचाने को)"); return }
-        if (handsFree && !speaking) main.postDelayed({ if (handsFree) listen() }, 500)
+        // C went away (chat closed, limit, no internet): stop the mic, the fixed commands still work
+        if (live && waiter == null && System.currentTimeMillis() - lastListenAt > 120_000) { endLive("C is gone"); show("🤖 C का जवाब नहीं आ रहा: chat देखें। 🎤 से पुराना तरीका चलेगा"); return }
+        if ((handsFree || live) && !speaking) main.postDelayed({ if ((handsFree || live) && !listening && !speaking) listen() }, 500)
     }
 
     private fun listen() {
@@ -467,13 +551,14 @@ class CensusService : AccessibilityService() {
         recognizer = r
         r.setRecognitionListener(object : RecognitionListener {
             override fun onResults(b: Bundle?) {
-                val t = b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
-                if (t.isNotEmpty() && Commands.norm(t) in STOP.map(Commands::norm)) { handsFree = false; show("🎤 बंद"); return }
-                speaking = false
-                if (t.isNotEmpty()) { lastHeardAt = System.currentTimeMillis(); handle(t) } else show("कुछ सुनाई नहीं दिया")
-                if (tts == null || !ttsReady || lastMessage.startsWith("✅").not()) again() // after a read-back, TTS restarts listening
+                onHeard(b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty())
             }
             override fun onError(error: Int) {
+                listening = false
+                if (live && error != SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE && error != SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED) {
+                    if (error != SpeechRecognizer.ERROR_NO_MATCH && error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT) { Log.i(TAG, "census speech error $error"); show("🎤 सुनने में दिक़्क़त ($error): फिर कोशिश…") }
+                    main.postDelayed({ again() }, if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) 0 else 2000); return
+                }
                 // the on-device recogniser has no Hindi: from now on use the online one, and try again at once
                 if (usingOnDevice && (error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE || error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED)) {
                     hindiMissing = true; Log.i(TAG, "census speech: no Hindi on the phone, using online recognition"); main.post { listen() }; return
@@ -484,7 +569,7 @@ class CensusService : AccessibilityService() {
                 if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) again()
                 else if (error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE || error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED) handsFree = false
             }
-            override fun onReadyForSpeech(p: Bundle?) { show("🎤 बोलिए…") }
+            override fun onReadyForSpeech(p: Bundle?) { if (!live) show("🎤 बोलिए…") }
             override fun onBeginningOfSpeech() {}
             override fun onRmsChanged(v: Float) {}
             override fun onBufferReceived(b: ByteArray?) {}
@@ -496,6 +581,7 @@ class CensusService : AccessibilityService() {
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
             .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, usingOnDevice)
+        listening = true
         r.startListening(i)
     }
 }
