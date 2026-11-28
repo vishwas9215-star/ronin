@@ -15,20 +15,21 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class CensusServiceTest {
     private lateinit var sc: ActivityScenario<TestFormActivity>
-    private val ua get() = InstrumentationRegistry.getInstrumentation().uiAutomation
+    // a plain UiAutomation switches every other accessibility service off while it is connected
+    private val ua get() = InstrumentationRegistry.getInstrumentation().getUiAutomation(android.app.UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
     private fun sh(c: String) = ua.executeShellCommand(c).close()
     private fun onMain(f: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(f)
 
     @Before fun on() {
         sh("settings put secure enabled_accessibility_services com.ronin.census/com.ronin.census.CensusService")
         sh("settings put secure accessibility_enabled 1")
-        var w = 0; while (CensusService.instance == null && w < 100) { Thread.sleep(100); w++ }
+        var w = 0; while (CensusService.instance == null && w < 150) { Thread.sleep(100); w++ }
         assertTrue("the helper started", CensusService.instance != null)
         sc = ActivityScenario.launch(TestFormActivity::class.java)
         Thread.sleep(1500)
     }
 
-    @After fun off() { sc.close(); sh("settings put secure enabled_accessibility_services ''") }
+    @After fun off() { if (::sc.isInitialized) sc.close(); sh("settings put secure enabled_accessibility_services ''") }
 
     private fun say(t: String): String { var m = ""; onMain { m = CensusService.instance!!.handle(t) }; Thread.sleep(400); Log.i("RoninAgent", "CENSUS \"$t\" -> $m"); return m }
 
