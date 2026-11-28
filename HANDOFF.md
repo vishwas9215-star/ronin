@@ -763,3 +763,17 @@ confirmed - owner's decision. Android developer verification: not in India yet (
   *-claude-device-helper.bat in ..\scrcpy, minimized).
 - LEFT: 4 laptop tabs (laptop refuses tab ≠ t1 meanwhile), 7 TPM key (optional).
 - Owner 14:48: phone + tablet in personal use (daughter studying on the tablet) — do not touch them until he says.
+
+### 28 Nov 2026 (14:53–16:30) — जनगणना सहायक (census helper) v0.1, module android/census (com.ronin.census)
+- Owner's Census 2027 PE training app (C-DAC, v1.0.28, FLAG_SECURE — never bypassed; expires 2026-11-29).
+  Supervisor/trainer approved the helper (owner, 14:57).
+- AccessibilityService reads labels (hint / description / text above-left by bounds), fills by ACTION_SET_TEXT
+  (paste fallback, clipboard cleared), read-back verify, refuses duplicate labels, writes only into the meant box,
+  Hindi number words → digits, "गलत" undo, offline Hindi TTS read-back, options by exact text, आगे बढ़ें/सबमिट only
+  after "हाँ" within 15 s (hands-free: "हाँ आगे बढ़ो" or ✓). On-device speech only (hi-IN), Hindi pack check/download in
+  the setup screen. NO INTERNET permission (CI fails the build if it appears). Log: labels / counts only.
+- Reviewed twice in AI Fiesta via the phone's Ronin Agent (5 models: Qwen 3.8 Max, Gemini 3.1 Pro, DeepSeek V4.1,
+  GPT-6.1 Sol, Claude Sonnet 5.5).
+- CI: unit tests + device tests (TestFormActivity in src/debug) green on both emulators.
+- Install job r30 queued for the phone (helper said phone NOT connected at 16:27). Owner then enables mic,
+  Accessibility, Hindi offline pack himself; tests the training app TODAY with 📋 on each of the ~40-question screens.
