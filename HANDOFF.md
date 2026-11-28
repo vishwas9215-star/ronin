@@ -724,3 +724,14 @@ confirmed - owner's decision. Android developer verification: not in India yet (
   (Hindi), plus 3–4 enumerator IDs on other phones joined to his hotspot and driven from his phone. Wait for his
   screenshots of the app after login before designing. Needs: Android AccessibilityService helper (native app, not web),
   check FLAG_SECURE / app rules, Census data confidentiality (keep data on device).
+
+### LAPTOP — बाक़ी काम (owner asked to keep this list, 28 Nov 13:10)
+1. Owner's clicks / keys must NOT pause Claude (laptop still pauses on owner input) — same rule as Android: only PAUSE / STOP.
+2. Background: WebView2 must keep timers / AJAX running when Ronin is minimized or behind other windows
+   (AdditionalBrowserArguments: --disable-background-timer-throttling --disable-renderer-backgrounding
+   --disable-backgrounding-occluded-windows) + a test.
+3. "C" instead of "Claude" in every on-screen text of the laptop banner; status/buttons behind a small 🤖.
+4. Multi-tab (C tabs + owner tabs, "C को दें") — after phone / tablet.
+5. Deploy the new laptop exe (ASP.NET postback links, handover for re-pair are in the code already).
+6. Auto-start the device helper and the laptop agent after a restart / sleep (both were found stopped at 10:06 today).
+7. Optional: laptop key in the TPM instead of DPAPI.
