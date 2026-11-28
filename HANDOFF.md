@@ -745,3 +745,13 @@ confirmed - owner's decision. Android developer verification: not in India yet (
   broker test page (was the "flaky" brokerIsReadOnly test). Now committed web.url + page location + event URL.
 - Multi-tab work started: relay tool schema change (tab / new_tab / close) is in `git stash` — do NOT ship it before the
   devices understand `tab` (an old device would act on its main tab).
+
+### 28 Nov 2026 (13:50–14:40) — multi-tab (phone / tablet) built, NOT installed (owner: "install बाद में")
+- AgentTabs (new): t1 = main C tab; open new_tab=true → new C tab (max 4, all tabs max 8), answers `tab`; every tool
+  takes `tab` (missing = t1, never another); `tabs` lists only C's tabs, close=<id>. Owner tabs ("+ मेरा tab" in the
+  🤖 panel, address box) are invisible / unreachable to C until "C को दें"; "वापस लें" takes back. PAUSE/STOP/RESUME/DONE
+  reach all tabs; ask_owner shows that tab. Off-screen C tabs run in background mode. Resent new_tab = same tab.
+- Relay schema: tab / new_tab / close (needs the server-chat relay update, together with the re-pair update).
+  Laptop refuses any tab but t1 (until laptop tabs are built).
+- Tests: tabsKeepClaudesWorkAndTheOwnersApart, ownerOpensHisOwnTabFromTheRobotMenu (emulators PASS).
+- Known limit: if the owner takes a tab back while a C command is running in it, that one command still finishes.
