@@ -200,7 +200,6 @@ class AgentActivity : Activity() {
     private fun fullScreen() {
         try {
             if (android.os.Build.VERSION.SDK_INT >= 30) {
-                window.setDecorFitsSystemWindows(true)
                 window.insetsController?.let {
                     it.hide(android.view.WindowInsets.Type.systemBars())
                     it.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -208,8 +207,6 @@ class AgentActivity : Activity() {
             }
         } catch (e: Exception) {}
     }
-
-    override fun onWindowFocusChanged(has: Boolean) { super.onWindowFocusChanged(has); if (has) fullScreen() }
 
     /**
      * Work goes on while the owner uses other apps: a small notification keeps Ronin alive, and once the phone is
