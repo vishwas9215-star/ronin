@@ -76,4 +76,13 @@ class CensusServiceTest {
         val perms = ctx.packageManager.getPackageInfo(ctx.packageName, android.content.pm.PackageManager.GET_PERMISSIONS).requestedPermissions?.toList() ?: emptyList()
         assertTrue("no INTERNET: $perms", "android.permission.INTERNET" !in perms)
     }
+
+    @Test fun numberWordsBecomeDigitsAndWrongIsUndone() {
+        assertTrue(say("सदस्यों की संख्या पांच").startsWith("✅"))
+        var v = ""; sc.onActivity { v = it.members.text.toString() }
+        assertEquals("5", v)
+        say("गलत")
+        sc.onActivity { v = it.members.text.toString() }
+        assertEquals("undone", "", v)
+    }
 }
