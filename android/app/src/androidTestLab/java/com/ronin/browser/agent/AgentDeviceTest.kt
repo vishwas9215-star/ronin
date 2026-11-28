@@ -278,6 +278,20 @@ class AgentDeviceTest {
         mech("owner", true)
     }
 
+    // STOP in the notification (from any app) stops Claude at once; the last step shows there
+    @Test fun notificationStopStopsClaude() {
+        val c = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+        val n = AgentKeepAlive.note(c, "आख़िरी काम: typed into \"क्रम\"")
+        assertEquals(2, n.actions.size)
+        assertEquals("STOP", n.actions[0].title.toString())
+        c.startService(android.content.Intent(c, AgentKeepAlive::class.java).setAction("stop"))
+        var w = 0; while (!d.stopped && w < 50) { Thread.sleep(100); w++ }
+        assertTrue("STOP in the notification stopped Claude", d.stopped)
+        assertTrue(tool("snapshot").optString("error").contains("STOP"))
+        d.resume()
+        mech("notification-stop", true)
+    }
+
     @Test fun interruptedSaveIsNeverPressedAgain() {
         open("https://epds.example.gov.in/")
         val prefs = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.getSharedPreferences("agent-journal", 0)

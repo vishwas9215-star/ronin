@@ -275,7 +275,16 @@ class AgentDriver(
     /** Called when a command from Claude arrives (the screen wakes up for the work). */
     var onCommand: (() -> Unit)? = null
 
+    /** The last thing Claude did, in one line (shown in the notification so the owner sees it from any app). */
+    var onDone: ((String) -> Unit)? = null
+
     fun run(id: String, tool: String, args: JSONObject): JSONObject {
+        val r = runInner(id, tool, args)
+        try { r?.optString("done")?.takeIf { it.isNotEmpty() && tool != "snapshot" }?.let { onDone?.invoke(it.take(80)) } } catch (_: Exception) {}
+        return r
+    }
+
+    private fun runInner(id: String, tool: String, args: JSONObject): JSONObject {
         onCommand?.invoke()
         synchronized(done) { done[id] }?.let { return it }
         if (stopped) return err("the owner pressed STOP on this device. Claude must wait until he turns Claude on again.")

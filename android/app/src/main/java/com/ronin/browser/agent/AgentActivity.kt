@@ -130,6 +130,7 @@ class AgentActivity : Activity() {
         driver = dr
         startProxy()
         dr.onCommand = { runOnUiThread { working() } }
+        dr.onDone = { line -> if (link != null) AgentKeepAlive.update(applicationContext, line) }
         try { // pages that offer a dark look use it at night
             if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.ALGORITHMIC_DARKENING))
                 androidx.webkit.WebSettingsCompat.setAlgorithmicDarkeningAllowed(web.settings, true)
