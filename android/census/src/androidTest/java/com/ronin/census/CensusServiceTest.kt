@@ -124,6 +124,23 @@ class CensusServiceTest {
         var n = -1; sc.onActivity { n = it.nextPressed }; assertEquals(1, n)
     }
 
+    // owner, 28 Nov: "dropdown खोल सके, खुद tap करके चुने"
+    @Test fun opensADropdownAndChoosesFromItsList() {
+        val sv = CensusService.instance!!
+        fun b(tool: String, vararg kv: Pair<String, Any>): org.json.JSONObject {
+            val a = org.json.JSONObject(); kv.forEach { (k, v) -> a.put(k, v) }
+            var r = org.json.JSONObject(); onMain { r = sv.bridge(tool, a) }; Thread.sleep(800); return r
+        }
+        assertTrue("opens the dropdown", b("app_choose", "text" to "मकान का वर्तमान उपयोग").has("done"))
+        val s = b("app_screen")
+        val all = s.toString()
+        assertTrue("the open list is seen: $all", "दुकान/कार्यालय" in all)
+        assertTrue("chooses from it", b("app_choose", "text" to "दुकान/कार्यालय").has("done"))
+        var u = ""; sc.onActivity { u = it.use }
+        assertEquals("दुकान/कार्यालय", u)
+        Log.i("RoninAgent", "CENSUS dropdown PASS")
+    }
+
     // owner, 28 Nov: "अपने मन से भरो" -> "समझ में नहीं आया". Now what is heard goes to C, who fills and asks; रुको stops him
     @Test fun liveWhatIsHeardGoesToCAndStopStops() {
         val sv = CensusService.instance!!

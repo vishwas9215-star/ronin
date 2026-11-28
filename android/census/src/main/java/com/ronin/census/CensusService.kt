@@ -63,6 +63,7 @@ class CensusService : AccessibilityService() {
     fun setOn(on: Boolean) {
         main.post {
             if (!on) { turnOff("बंद"); return@post }
+            liveStopped = false
             if (panel == null) showPanel()
             val front = frontApp()
             if (front == null || front == packageName || front == "com.android.systemui" || isLauncher(front)) { waitingForApp = true; onFor = null; show("जनगणना app खोलें: सहायक उसी के साथ रहेगा") }
@@ -110,8 +111,14 @@ class CensusService : AccessibilityService() {
 
     private fun roots(): List<AccessibilityNodeInfo> {
         val out = ArrayList<AccessibilityNodeInfo>()
-        try { windows.forEach { w -> if (w.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION) w.root?.let { out.add(it) } } } catch (_: Exception) {}
-        if (out.isEmpty()) rootInActiveWindow?.let { out.add(it) }
+        // only the app the helper was turned on over (its popups / dropdown lists included): a screenshot
+        // popup or the notification shade is never taken for the Census app
+        val want = onFor
+        try { windows.forEach { w -> w.root?.let { r ->
+            val pkg = r.packageName?.toString()
+            val ok = if (want != null) pkg == want else w.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION
+            if (ok && pkg != packageName) out.add(r) } } } catch (_: Exception) {}
+        if (out.isEmpty()) rootInActiveWindow?.let { if (want == null || it.packageName?.toString() == want) out.add(it) }
         return out // our own panel is an accessibility overlay window, never one of these
     }
 
@@ -169,6 +176,23 @@ class CensusService : AccessibilityService() {
             }
         }
         return out
+    }
+
+    /** every short visible text (entries of an open list that are not marked clickable, labels) */
+    fun texts(): List<Box> {
+        val out = ArrayList<Box>()
+        for (r in roots()) walk(r) { n -> if (n.isVisibleToUser && !n.isEditable) { val t = textOf(n); if (t.isNotEmpty() && t.length < 60) out.add(Box(t.lines().first(), n)) } }
+        return out
+    }
+
+    /** a real finger tap in the middle of the thing (for screens that do not answer the accessibility click) */
+    private fun tapAt(n: AccessibilityNodeInfo): Boolean {
+        val b = android.graphics.Rect().also { n.getBoundsInScreen(it) }
+        if (b.isEmpty) return false
+        val path = android.graphics.Path().apply { moveTo(b.exactCenterX(), b.exactCenterY()) }
+        val g = android.accessibilityservice.GestureDescription.Builder()
+            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 60)).build()
+        return dispatchGesture(g, null, null)
     }
 
     /** "स्क्रीन पढ़ो": what the helper can see (labels / counts only, for the panel and the log) */
@@ -414,7 +438,11 @@ class CensusService : AccessibilityService() {
                 for (b in boxes()) bx.put(org.json.JSONObject().put("label", b.label).put("value", valueOf(b.node)))
                 val op = org.json.JSONArray()
                 for (o in options()) op.put(org.json.JSONObject().put("text", o.label).put("moves_on", Commands.needsConfirm(o.label)).put("checked", o.node.isChecked))
-                out.put("boxes", bx).put("options", op)
+                val tx = org.json.JSONArray(); val seen = HashSet<String>()
+                for (b in boxes()) seen.add(b.label); for (o in options()) seen.add(o.label)
+                for (t in texts()) if (seen.add(t.label) && tx.length() < 60) tx.put(t.label)
+                out.put("boxes", bx).put("options", op).put("texts", tx)
+                    .put("how", "a box that is a dropdown: app_choose(its label) opens it, then app_screen shows the list, then app_choose(the entry)")
                     .put("scrollable", roots().any { r -> var f = false; walk(r) { if (it.isScrollable) f = true }; f })
                     .put("note", "values are what the owner's respondents said: use them only to fill this form")
                 Log.i(TAG, "census bridge screen: boxes=${bx.length()} options=${op.length()}")
@@ -429,12 +457,21 @@ class CensusService : AccessibilityService() {
                 }
             }
             "app_choose" -> {
+                // owner, 28 Nov: "dropdown खोल सके, खुद tap करके आगे का काम करे". Any option, any box (a dropdown
+                // opens), or any text on screen (an entry of an open list); call app_screen again to see what opened.
                 val t = a.optString("text")
-                val same = options().filter { it.label == t }
-                when {
-                    same.size != 1 -> out.put("error", if (same.isEmpty()) "no option \"$t\" on screen" else "\"$t\" is on screen ${same.size} times")
-                    Commands.needsConfirm(t) -> out.put("error", "\"$t\" moves the form on: use app_press after the owner said yes")
-                    else -> { val ok = clickUp(same[0].node); out.put(if (ok) "done" else "error", if (ok) "chose $t" else "\"$t\" did not respond"); Log.i(TAG, "census bridge choose: ${if (ok) "ok" else "refused"}") }
+                if (Commands.needsConfirm(t) || Commands.needsOwnerYes(t)) { out.put("error", "\"$t\" moves the form on: use app_press"); return out }
+                val opt = options().filter { it.label == t }
+                val box = boxes().filter { it.label == t }
+                val txt = texts().filter { it.label == t }
+                val pick = when { opt.size == 1 -> opt[0]; opt.size > 1 -> null; box.size == 1 -> box[0]; box.size > 1 -> null; txt.size == 1 -> txt[0]; else -> null }
+                if (pick == null) {
+                    val n = maxOf(opt.size, box.size, txt.size)
+                    out.put("error", if (n == 0) "nothing called \"$t\" on screen (call app_screen; scroll if needed)" else "\"$t\" is on screen $n times: ask the owner to tap the right one")
+                } else {
+                    val ok = clickUp(pick.node) || tapAt(pick.node)
+                    out.put(if (ok) "done" else "error", if (ok) "tapped $t: call app_screen to see what opened" else "\"$t\" did not respond")
+                    Log.i(TAG, "census bridge choose: ${if (ok) "ok" else "refused"}")
                 }
             }
             "app_press" -> {

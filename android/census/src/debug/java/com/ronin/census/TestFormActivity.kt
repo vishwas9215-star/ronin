@@ -15,6 +15,7 @@ class TestFormActivity : Activity() {
     lateinit var remarks: EditText
     lateinit var head: EditText
     lateinit var members: EditText
+    @Volatile var use = ""
 
     override fun onCreate(s: Bundle?) {
         super.onCreate(s)
@@ -26,6 +27,18 @@ class TestFormActivity : Activity() {
         // a box with its label ABOVE it (no hint), as Flutter screens often draw it
         l.addView(TextView(this).apply { text = "सदस्यों की संख्या" })
         members = EditText(this).apply { inputType = android.text.InputType.TYPE_CLASS_NUMBER }; l.addView(members)
+        // a dropdown like the Census app's "मकान का वर्तमान उपयोग": a box that opens a list in its own popup window
+        l.addView(TextView(this).apply { text = "मकान का वर्तमान उपयोग" })
+        val drop = EditText(this).apply { isFocusable = false; isClickable = true; hint = "चुनें" }
+        drop.setOnClickListener {
+            val pop = android.widget.ListPopupWindow(this)
+            val items = listOf("निवास", "दुकान/कार्यालय", "स्कूल/कॉलेज")
+            pop.setAdapter(android.widget.ArrayAdapter(this, android.R.layout.simple_list_item_1, items))
+            pop.anchorView = drop; pop.isModal = true
+            pop.setOnItemClickListener { _, _, i, _ -> use = items[i]; drop.setText(items[i]); pop.dismiss() }
+            pop.show()
+        }
+        l.addView(drop)
         for (o in listOf("आवासीय", "आवासीय-सह-अन्य उपयोग", "खाली")) l.addView(Button(this).apply { text = o; setOnClickListener { chosen = o } })
         l.addView(Button(this).apply { text = "आगे बढ़ें"; setOnClickListener { nextPressed++ } })
         setContentView(l)
