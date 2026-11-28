@@ -21,6 +21,8 @@ class CensusServiceTest {
     private fun onMain(f: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(f)
 
     @Before fun on() {
+        // an earlier test may have turned the screen off: wake it and take the lock screen away
+        sh("input keyevent KEYCODE_WAKEUP"); sh("wm dismiss-keyguard"); Thread.sleep(500)
         if (CensusService.instance == null) {
             sh("settings put secure enabled_accessibility_services com.ronin.census/com.ronin.census.CensusService")
             sh("settings put secure accessibility_enabled 1")

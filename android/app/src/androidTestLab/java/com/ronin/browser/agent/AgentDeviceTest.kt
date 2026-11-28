@@ -301,7 +301,7 @@ class AgentDeviceTest {
             var w = 0; while (d.pageValue("window.posted") != "1" && w < 150) { Thread.sleep(100); w++ }
             assertEquals("the AJAX finished with the screen off", "\"SBI SULTANPUR\"", d.pageValue("document.getElementById('bank').value"))
             assertTrue("timers kept their pace with the screen off (${b1 - b0} beats in 10 s)", b1 - b0 >= 7)
-        } finally { ua.executeShellCommand("input keyevent KEYCODE_WAKEUP").close(); Thread.sleep(800) }
+        } finally { ua.executeShellCommand("input keyevent KEYCODE_WAKEUP").close(); ua.executeShellCommand("wm dismiss-keyguard").close(); Thread.sleep(800) }
         mech("screen-off", true)
     }
 
