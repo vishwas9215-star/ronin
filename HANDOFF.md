@@ -681,3 +681,10 @@ confirmed - owner's decision. Android developer verification: not in India yet (
   Phone / tablet now also use a local proxy (AgentProxy, WebView proxy override) that checks the real connect
   address; real devices 12/12, "proxy: on", online. Pairing window on the server still open until ~23:50 today
   (names can not be taken over; closing it = server chat).
+- 28 Nov 07:00–08:15: connector "Ronin Agent" added in the owner's Claude (Connectors moved to **Plugins → Add →
+  Add custom connector**) and connected; Claude drove all three devices (Google opened on each). Phone/tablet:
+  buttons folded into a thin strip, dark start page at night, screen on only while Claude works, foreground
+  service + one-time battery Allow (owner allowed), and BACKGROUND work: when Ronin is not on screen, typing /
+  presses go through the page helper (same refusals) — verified on the real tablet (Hindi search typed + submitted
+  while Ronin Browser was in front). Immersive full screen broke the keyboard connection on emulators: not used.
+  Phone r17 test run was cut by adb dropping (phone left Wi-Fi); re-run when it is back.
