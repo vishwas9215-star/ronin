@@ -7,3 +7,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "RoninAndroid"
 include(":app")
+include(":census")

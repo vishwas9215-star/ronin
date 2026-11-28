@@ -30,7 +30,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Rules unit tests + lab app + its device tests
         working-directory: android
-        run: ./gradlew --no-daemon testLabDebugUnitTest --tests 'com.ronin.browser.agent.*' assembleLabDebug assembleLabDebugAndroidTest
+        run: ./gradlew --no-daemon testLabDebugUnitTest --tests 'com.ronin.browser.agent.*' assembleLabDebug assembleLabDebugAndroidTest :census:testDebugUnitTest :census:assembleDebug :census:assembleDebugAndroidTest
       - name: Test summary
         if: always()
         run: |
@@ -52,10 +52,14 @@ jobs:
         run: |
           cp android/app/build/outputs/apk/lab/debug/*.apk RoninAgentLab.apk
           cp android/app/build/outputs/apk/androidTest/lab/debug/*.apk RoninAgentLab-test.apk
+          cp android/census/build/outputs/apk/debug/*.apk RoninCensus.apk
+          cp android/census/build/outputs/apk/androidTest/debug/*.apk RoninCensus-test.apk
+          # the census helper must never ask for the internet
+          if unzip -p RoninCensus.apk AndroidManifest.xml | strings | grep -q "android.permission.INTERNET"; then echo "census helper asks for INTERNET"; exit 1; fi
           gh release view agent-lab >/dev/null 2>&1 || gh release create agent-lab --title "Ronin Agent Lab (pilot test build)" --notes "Pilot test app (com.ronin.agentlab). Not a Ronin release, never offered as an update." --prerelease || true
           for A in amd64 arm64; do CGO_ENABLED=0 GOOS=linux GOARCH=$A go build -trimpath -ldflags "-s -w" -o roninrelay-linux-$A ./cmd/roninrelay; sha256sum roninrelay-linux-$A | cut -d' ' -f1 > roninrelay-linux-$A.sha256; done
           go test ./internal/agentrelay ./internal/agentcore
-          gh release upload agent-lab RoninAgentLab.apk RoninAgentLab-test.apk roninrelay-linux-amd64 roninrelay-linux-amd64.sha256 roninrelay-linux-arm64 roninrelay-linux-arm64.sha256 --clobber
+          gh release upload agent-lab RoninAgentLab.apk RoninAgentLab-test.apk RoninCensus.apk RoninCensus-test.apk roninrelay-linux-amd64 roninrelay-linux-amd64.sha256 roninrelay-linux-arm64 roninrelay-linux-arm64.sha256 --clobber
 
   # the laptop agent: built and run for real on Windows (WebView2), on made-up pages, before anything ships
   windows:
@@ -122,6 +126,7 @@ jobs:
           working-directory: android
           script: |
             timeout 25m ./gradlew --no-daemon connectedLabDebugAndroidTest || echo failed > ../agent-tests-failed
+            timeout 10m ./gradlew --no-daemon :census:connectedDebugAndroidTest || echo failed > ../agent-tests-failed
             sh ../tools/agentsim/ci-e2e.sh || echo failed > ../agent-tests-failed
             timeout 60 adb logcat -d -s RoninAgent > ../agent-log.txt || true
             grep -E 'TEST|MECH|blocked|refused|owner' ../agent-log.txt | tail -250 || true

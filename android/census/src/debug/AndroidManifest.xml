@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- device tests only: a form shaped like the Census app's "जनगणना मकान की गणना" screen -->
+        <activity android:name=".TestFormActivity" android:exported="false" />
+    </application>
+</manifest>
