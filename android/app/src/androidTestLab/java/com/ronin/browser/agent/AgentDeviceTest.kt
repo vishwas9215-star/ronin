@@ -324,6 +324,11 @@ class AgentDeviceTest {
             val o = run("open", "url" to "https://epds.example.gov.in/", "new_tab" to true)
             val t2 = o.optString("tab")
             assertEquals("a new C tab", "t2", t2)
+            // the same command id again (lost answer, the link sends it again): no second tab
+            val again = JSONObject().put("url", "https://epds.example.gov.in/").put("new_tab", true)
+            val r1 = ts.run("same-id", "open", again); val r2 = ts.run("same-id", "open", again)
+            assertEquals("a resent command opens no second tab", r1.optString("tab"), r2.optString("tab"))
+            ts.close(r1.optString("tab"))
             // the owner opens his own tab and looks at it: C's tab t2 is now off screen
             val mine = ts.add(false)!!
             ts.show(mine.id); Thread.sleep(500)

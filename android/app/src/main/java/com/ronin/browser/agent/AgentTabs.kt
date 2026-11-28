@@ -28,6 +28,7 @@ class AgentTabs(
 
     val tabs = CopyOnWriteArrayList(listOf(Tab("t1", first, true)))
     @Volatile var shown = "t1"
+    private val newTabFor = object : LinkedHashMap<String, String>() { override fun removeEldestEntry(e: MutableMap.MutableEntry<String, String>?) = size > 50 }
     @Volatile private var seq = 1
     /** the tabs or the shown tab changed (UI) */
     var onChanged: (() -> Unit)? = null
@@ -94,7 +95,9 @@ class AgentTabs(
         }
         if (tool == "open" && args.optBoolean("new_tab")) {
             if (main.driver.stopped) return main.driver.run(id, tool, args) // the same STOP answer
-            val t = add(true) ?: return JSONObject().put("error", "Claude already has $maxClaude tabs on this device: close one first (tabs close=<id>)")
+            // the same command again (its answer was lost on the way): the same tab, never a second new one
+            val t = synchronized(newTabFor) { newTabFor[id]?.let { tab(it) } ?: add(true)?.also { newTabFor[id] = it.id } }
+                ?: return JSONObject().put("error", "Claude already has $maxClaude tabs on this device: close one first (tabs close=<id>)")
             return t.driver.run(id, tool, args).put("tab", t.id)
         }
         val want = args.optString("tab").ifEmpty { "t1" }
