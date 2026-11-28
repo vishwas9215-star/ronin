@@ -688,3 +688,16 @@ confirmed - owner's decision. Android developer verification: not in India yet (
   presses go through the page helper (same refusals) — verified on the real tablet (Hindi search typed + submitted
   while Ronin Browser was in front). Immersive full screen broke the keyboard connection on emulators: not used.
   Phone r17 test run was cut by adb dropping (phone left Wi-Fi); re-run when it is back.
+
+### 28 Nov 2026 (08:37–09:15) — re-pair after a phone format (no server step) + strip below the status bar
+- Owner will format his phone soon. New flow: the new install asks `/agent/pair` with a random 6-digit code; the name
+  is taken, so the relay keeps it WAITING (10 min) and the new phone shows "🔁 Code NNNNNN …". On the tablet:
+  बटन ▾ → **नया device जोड़ें** (agent-repair) → press-and-hold card with the same code. The tablet signs
+  `handover|name|hex sha(new pub)|hex sha(old pub)|code|ts`; the relay checks waiting key + code + old key + time +
+  signature, swaps the key, ends the old session, saves the handover. New phone pairs (same-device path), keeps the old
+  key as `prev_self` for older grants; other devices take the new key at hello (`handovers`, only from a known signer,
+  never self-signed, newest only). Laptop (Go) applies handovers too. Tests: relay repair_test.go, agentcore
+  TestHandoverFromAKnownDeviceOnly, E2E formattedDeviceIsAllowedBackFromTheOtherDevice.
+- Android 15 edge-to-edge: root pads by system bars / cutout / keyboard, so the strip is below the status bar
+  (owner: "the top bar mixed with the page"). Test bannerStartsBelowTheStatusBar.
+- Needs ONE relay update by the server chat (re-run tools/relay-deploy/install.sh) before the format.
