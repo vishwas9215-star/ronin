@@ -21,21 +21,26 @@ class CensusServiceTest {
     private fun onMain(f: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(f)
 
     @Before fun on() {
-        sh("settings put secure enabled_accessibility_services com.ronin.census/com.ronin.census.CensusService")
-        sh("settings put secure accessibility_enabled 1")
+        if (CensusService.instance == null) {
+            sh("settings put secure enabled_accessibility_services com.ronin.census/com.ronin.census.CensusService")
+            sh("settings put secure accessibility_enabled 1")
+        }
         var w = 0; while (CensusService.instance == null && w < 150) { Thread.sleep(100); w++ }
         assertTrue("the helper started", CensusService.instance != null)
         sc = ActivityScenario.launch(TestFormActivity::class.java)
-        Thread.sleep(1500)
+        // the form is on screen and the helper sees it
+        var n = 0; w = 0
+        while (n < 3 && w < 80) { onMain { n = CensusService.instance?.boxes()?.size ?: 0 }; if (n < 3) Thread.sleep(100); w++ }
     }
 
-    @After fun off() { if (::sc.isInitialized) sc.close(); sh("settings put secure enabled_accessibility_services ''") }
+    @After fun off() { if (::sc.isInitialized) sc.close() } // the helper stays on between tests (switching it costs seconds)
 
     private fun say(t: String): String { var m = ""; onMain { m = CensusService.instance!!.handle(t) }; Thread.sleep(400); Log.i("RoninAgent", "CENSUS \"$t\" -> $m"); return m }
 
     @Test fun readsTheBoxesWithoutAPicture() {
         var labels = listOf<String>()
-        onMain { labels = CensusService.instance!!.boxes().map { it.label } }
+        var w = 0
+        while (w < 50) { onMain { labels = CensusService.instance!!.boxes().map { it.label } }; if (labels.size >= 3) break; Thread.sleep(100); w++ }
         assertTrue("sees the boxes: $labels", labels.containsAll(listOf("परिवार के मुखिया का नाम", "टिप्पणियाँ", "मुहल्ला/बस्ती")))
     }
 
