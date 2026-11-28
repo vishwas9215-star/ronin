@@ -34,10 +34,12 @@ type Page interface {
 
 // Driver carries out Claude's tools with every rule enforced on the device. One command at a time.
 type Driver struct {
-	P       Page
-	IsMoney IsMoney
-	Journal string // file: the write-ahead journal (an input that was cut off is never pressed again blindly)
-	Log     func(string)
+	// OwnerBusy: the owner is using the page this moment (his click / key): Claude's next step waits for it
+	OwnerBusy func() bool
+	P         Page
+	IsMoney   IsMoney
+	Journal   string // file: the write-ahead journal (an input that was cut off is never pressed again blindly)
+	Log       func(string)
 
 	mu           sync.Mutex
 	Stopped      bool
@@ -335,6 +337,13 @@ func (d *Driver) Run(id, tool string, args map[string]any) (out map[string]any) 
 	}
 	stopped, paused, holding := d.Stopped, d.Paused, d.OwnerHolding
 	d.mu.Unlock()
+	// the owner is clicking / pressing on the page right now: wait for him to finish (max 8 s), never pause
+	// (owner, 28 Nov: only PAUSE / STOP stop Claude)
+	if d.OwnerBusy != nil && tool != "ask_owner" {
+		for end := time.Now().Add(8 * time.Second); d.OwnerBusy() && time.Now().Before(end); {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
 	// the laptop has one Claude tab (t1) for now: a call meant for another tab never lands on this one
 	if t, _ := args["tab"].(string); t != "" && t != "t1" {
 		return e("this device has only Claude's main tab (t1): tab " + t + " does not exist here")

@@ -15,13 +15,17 @@
 </style></head>
 <body>
 <div id="bar">
+  <button id="robot" title="बटन दिखाएँ / छिपाएँ">🤖</button>
   <div id="status">Ronin Agent</div>
-  <button id="done" title="Claude ने जो माँगा था वह हो गया">DONE</button>
+  <span id="more" style="display:none">
+  <button id="done" title="C ने जो माँगा था वह हो गया">DONE</button>
+  <button id="pause">PAUSE</button>
   <button id="resume">RESUME</button>
   <button id="checked" title="मैंने page देख लिया">CHECKED</button>
-  <button id="connect">Claude जोड़ें</button>
-  <button id="disconnect">Claude हटाएँ</button>
+  <button id="connect">C जोड़ें</button>
+  <button id="disconnect">C हटाएँ</button>
   <button id="stop">STOP</button>
+  </span>
 </div>
 <div id="card">
   <p id="cardtext"></p>
@@ -30,7 +34,13 @@
 </div>
 <script>
   const post = (m) => window.chrome.webview.postMessage(m);
-  for (const id of ['done','resume','checked','connect','disconnect','stop','deny']) document.getElementById(id).onclick = () => post(id);
+  for (const id of ['done','pause','resume','checked','connect','disconnect','stop','deny']) document.getElementById(id).onclick = () => post(id);
+  // the buttons stay behind 🤖 (owner, 28 Nov); they fold away again by themselves after 30 s
+  let fold = null;
+  const more = document.getElementById('more');
+  const showMore = (on) => { more.style.display = on ? 'inline' : 'none'; clearTimeout(fold); if (on) fold = setTimeout(() => showMore(false), 30000); };
+  document.getElementById('robot').onclick = () => showMore(more.style.display === 'none');
+  window.showButtons = () => showMore(true);
   // Allow only after holding the button for 2 seconds (no accidental Allow)
   const hold = document.getElementById('hold'), fill = document.getElementById('fill');
   let t0 = 0, timer = null;
@@ -40,7 +50,7 @@
   hold.onpointerdown = (e) => { hold.setPointerCapture(e.pointerId); t0 = performance.now(); tick(); };
   hold.onpointerup = hold.onpointercancel = hold.onpointerleave = stopHold;
   window.setStatus = (s) => { document.getElementById('status').textContent = s; };
-  window.showCard = (s) => { document.getElementById('cardtext').textContent = s; document.getElementById('card').style.display = 'block'; };
+  window.showCard = (s) => { showMore(true); document.getElementById('cardtext').textContent = s; document.getElementById('card').style.display = 'block'; };
   window.hideCard = () => { document.getElementById('card').style.display = 'none'; stopHold(); };
 </script>
 </body></html>

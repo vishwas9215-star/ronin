@@ -19,6 +19,7 @@ import (
 	"unsafe"
 
 	"github.com/wailsapp/go-webview2/pkg/edge"
+	"golang.org/x/sys/windows/registry"
 
 	"roninbrowser/internal/agentcore"
 )
@@ -49,6 +50,7 @@ type app struct {
 	cardOpen     bool
 	approveCh    chan bool
 	lastInput    uint32
+	busyUntil    atomic.Int64 // the owner clicked / pressed on the page until then (unix ms)
 	status       string
 	asked        string
 	testPages    map[string]string
@@ -73,7 +75,7 @@ func main() {
 		return
 	}
 	a := &app{approveCh: make(chan bool, 1)}
-	a.hwnd = createMainWindow("Ronin Agent Lab — Claude (laptop)")
+	a.hwnd = createMainWindow("Ronin Agent Lab — C (laptop)")
 	onMainMsg = a.msg
 	if *selftest {
 		pShowWindow.Call(a.hwnd, swShow)
@@ -87,9 +89,10 @@ func main() {
 	}
 	a.drv = &agentcore.Driver{P: a.page, Journal: filepath.Join(data, "journal.json"), Log: logLine}
 	a.drv.OnOwnerAsked = func(reason string) {
-		runOnUI(func() { a.asked = reason; a.refresh() })
+		runOnUI(func() { a.asked = reason; a.ui.Eval("showButtons()"); a.refresh() })
 	}
 	a.lastInput = lastInputTick() // only input AFTER this moment counts as the owner's
+	a.drv.OwnerBusy = func() bool { return time.Now().UnixMilli() < a.busyUntil.Load() }
 	a.selftest = *selftest
 	pSetTimer.Call(a.hwnd, 1, 300, 0)
 	if *selftest {
@@ -110,6 +113,7 @@ func main() {
 			}
 			a.link.Start()
 		}()
+		go autoStart(exe)
 	}
 	runMessageLoop()
 	if a.link != nil {
@@ -146,7 +150,9 @@ func (a *app) makeViews(data string) bool {
 	web := edge.NewChromium()
 	web.DataPath = filepath.Join(data, "profile") // logins stay (cookies) like a normal browser
 	web.AdditionalBrowserArgs = []string{"--proxy-server=http://" + a.proxy.Addr, "--proxy-bypass-list=<-loopback>",
-		"--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--disable-quic"}
+		"--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--disable-quic",
+		// Ronin minimized / behind other windows: the page's timers and AJAX keep their pace (owner, 28 Nov: EPDS)
+		"--disable-background-timer-throttling", "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows"}
 	web.SetErrorCallback(func(err error) { logf("page: %v", err) })
 	web.SetPermission(edge.CoreWebView2PermissionKindNotifications, edge.CoreWebView2PermissionStateDeny)
 	web.SetPermission(edge.CoreWebView2PermissionKindGeolocation, edge.CoreWebView2PermissionStateDeny)
@@ -184,7 +190,7 @@ func (a *app) makeViews(data string) bool {
 		}
 	}
 	a.ownNav++
-	web.NavigateToString(`<!doctype html><meta charset="utf-8"><body style="font:18px 'Nirmala UI',sans-serif;padding:40px;color:#333"><h2>Ronin Agent Lab</h2><p>यह window Claude के लिए है। Claude यहाँ काम करेगा; आप ऊपर के बटन से रोक / चालू कर सकते हैं।</p>`)
+	web.NavigateToString(`<!doctype html><meta charset="utf-8"><body style="font:18px 'Nirmala UI',sans-serif;padding:40px;color:#333"><h2>Ronin Agent Lab</h2><p>यह window C के लिए है। C यहाँ काम करेगा; ऊपर 🤖 दबाकर रोक / चालू कर सकते हैं।</p>`)
 	a.layout()
 	return true
 }
@@ -226,9 +232,9 @@ func (a *app) msg(hwnd, msg, wparam, lparam uintptr) (uintptr, bool) {
 	return 0, false
 }
 
-// watchOwner: the owner used the page (a click, a key, the wheel in this window, over the page) -> Claude pauses
-// at once. Only moving the mouse across does not count. Claude's own input goes through the browser, not Windows,
-// so it never counts here.
+// watchOwner: the owner uses the page (a click, a key, the wheel in this window, over the page): Claude's next step
+// waits a moment (never pauses: owner, 28 Nov - only PAUSE / STOP stop Claude). Moving the mouse does not count.
+// Claude's own input goes through the browser, not Windows, so it never counts here.
 func (a *app) watchOwner() {
 	t := lastInputTick()
 	x, y := cursorInClient(a.hwnd)
@@ -244,7 +250,7 @@ func (a *app) watchOwner() {
 		a.lastInput = t
 		fg, _, _ := pGetForegroundWindow.Call()
 		if fg == a.hwnd && y > a.barHeight() && a.drv != nil && (clicked || !moved) {
-			a.drv.OwnerTouched()
+			a.busyUntil.Store(time.Now().Add(1500 * time.Millisecond).UnixMilli())
 		}
 	}
 	a.refresh()
@@ -254,15 +260,15 @@ func (a *app) refresh() {
 	if a.ui == nil || a.drv == nil {
 		return
 	}
-	s := "🟢 Claude चालू"
+	s := "🟢 C चालू"
 	switch {
 	case a.drv.IsStopped():
-		s = "⛔ STOP: Claude रुका है (RESUME से चालू)"
+		s = "⛔ STOP: C रुका है (RESUME से चालू)"
 	case a.drv.IsPaused():
-		s = "✋ आपने page छुआ: Claude रुका है। RESUME दबाएँ"
+		s = "⏸ आपने PAUSE दबाया: C रुका है। RESUME दबाएँ"
 	case a.drv.Holding():
 		// the real address of the page (from the browser, not the page): check it before typing a password
-		s = "🙋 Claude कह रहा है: " + a.asked + " — कर लें, फिर DONE   |   site: " + siteOf(a.web.Source())
+		s = "🙋 C कह रहा है: " + a.asked + " — कर लें, फिर DONE   |   site: " + siteOf(a.web.Source())
 	case a.link != nil && !a.link.Online():
 		s = "… relay से जुड़ रहा है"
 	}
@@ -280,6 +286,8 @@ func (a *app) onBanner(m string) {
 		a.drv.OwnerDone()
 	case "resume":
 		a.drv.Resume()
+	case "pause":
+		a.drv.OwnerTouched()
 	case "stop":
 		a.drv.OwnerStop()
 	case "checked":
@@ -287,12 +295,12 @@ func (a *app) onBanner(m string) {
 	case "connect":
 		if a.link != nil {
 			a.link.OpenConnectWindow()
-			a.status = "🔗 3 मिनट: अब Claude में Connect दबाएँ, फिर यहाँ Allow दबाकर रखें"
+			a.status = "🔗 3 मिनट: अब C में Connect दबाएँ, फिर यहाँ Allow दबाकर रखें"
 		}
 	case "disconnect":
 		if a.link != nil {
 			a.link.DisconnectClaude()
-			a.status = "⛔ Claude हटा दिया गया (सभी devices से)"
+			a.status = "⛔ C हटा दिया गया (सभी devices से)"
 		}
 	case "allow", "deny":
 		if a.cardOpen {
@@ -422,3 +430,34 @@ func siteOf(u string) string {
 func writeResult(data, s string) { os.WriteFile(filepath.Join(data, "selftest.txt"), []byte(s), 0o600) }
 
 func logLine(s string) { logf("%s", s) }
+
+// autoStart: after a restart / sleep the laptop agent and the phone + tablet helper come back by themselves
+// (owner, 28 Nov: both were found stopped). Current user only (HKCU Run); paths found next to this program.
+func autoStart(exe string) {
+	k, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Run`, registry.SET_VALUE|registry.QUERY_VALUE)
+	if err != nil {
+		logf("autostart: %v", err)
+		return
+	}
+	defer k.Close()
+	set := func(name, cmd string) {
+		if old, _, _ := k.GetStringValue(name); old != cmd {
+			if err := k.SetStringValue(name, cmd); err == nil {
+				logf("autostart: %s on", name)
+			}
+		}
+	}
+	set("RoninAgentLab", `"`+exe+`"`)
+	// the newest "N-claude-device-helper.bat" in ..\scrcpy
+	dir := filepath.Join(filepath.Dir(filepath.Dir(exe)), "scrcpy")
+	newest, at := "", time.Time{}
+	m, _ := filepath.Glob(filepath.Join(dir, "*-claude-device-helper.bat"))
+	for _, f := range m {
+		if st, err := os.Stat(f); err == nil && st.ModTime().After(at) {
+			newest, at = f, st.ModTime()
+		}
+	}
+	if newest != "" {
+		set("RoninDeviceHelper", `cmd /c start "" /min "`+newest+`"`)
+	}
+}

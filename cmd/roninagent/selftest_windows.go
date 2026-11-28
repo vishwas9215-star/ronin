@@ -125,9 +125,29 @@ func (a *app) selfTest(data string) {
 	}
 	r = run("press", map[string]any{"key": "tab"})
 	check(r["error"] == nil, "a key press", r)
-	d.OwnerTouched()
+	// the owner clicks on the page: C waits a moment, never pauses (only PAUSE / STOP do)
+	a.busyUntil.Store(time.Now().Add(700 * time.Millisecond).UnixMilli())
+	t0 := time.Now()
 	r = run("snapshot", nil)
-	check(r["error"] != nil, "owner touch pauses Claude", r)
+	check(r["error"] == nil && time.Since(t0) >= 500*time.Millisecond && !d.IsPaused(), "owner's click: C waits, does not pause", r)
+	d.OwnerTouched() // what PAUSE does
+	r = run("snapshot", nil)
+	check(r["error"] != nil, "PAUSE pauses C", r)
 	d.Resume()
+	// another tab than t1 never lands on the laptop's only tab
+	r = run("snapshot", map[string]any{"tab": "t2"})
+	check(r["error"] != nil, "tab t2 refused on the laptop", r)
+	// minimized: the page's timers keep their pace (EPDS AJAX behind other windows)
+	a.page.Call("window.beats=0;setInterval(function(){window.beats++},1000);0")
+	runOnUI(func() { pShowWindow.Call(a.hwnd, 6) }) // SW_MINIMIZE
+	time.Sleep(1500 * time.Millisecond)
+	beat0, _ := a.page.Call("window.beats")
+	time.Sleep(8 * time.Second)
+	beat1, _ := a.page.Call("window.beats")
+	n0, n1 := 0, 0
+	fmt.Sscan(beat0, &n0)
+	fmt.Sscan(beat1, &n1)
+	check(n1-n0 >= 6, "timers keep their pace while minimized", fmt.Sprintf("%d beats in 8 s", n1-n0))
+	runOnUI(func() { pShowWindow.Call(a.hwnd, swShow) })
 	_ = agentcore.Host
 }
