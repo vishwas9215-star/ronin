@@ -270,7 +270,11 @@ class AgentDriver(
     private val READ = setOf("snapshot", "screenshot", "get_text", "scroll", "back", "tabs", "wait_for", "ask_owner", "open", "downloads", "set_pace")
 
     /** One command from Claude. [id] makes it idempotent: the same id never runs twice. */
+    /** Called when a command from Claude arrives (the screen wakes up for the work). */
+    var onCommand: (() -> Unit)? = null
+
     fun run(id: String, tool: String, args: JSONObject): JSONObject {
+        onCommand?.invoke()
         synchronized(done) { done[id] }?.let { return it }
         if (stopped) return err("the owner pressed STOP on this device. Claude must wait until he turns Claude on again.")
         if ((paused || ownerHolding) && tool != "ask_owner") return err(if (paused) "the owner took over the screen. Claude waits until he taps RESUME." else "the owner is using the screen right now: wait and try again")

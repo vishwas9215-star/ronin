@@ -33,7 +33,8 @@ class AgentActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // the screen stays on only while Claude is working (and 2 minutes after); otherwise it turns off normally.
+        // A command from Claude wakes it again (above the lock screen; the phone is never unlocked).
         // the pilot app (com.ronin.agentlab) wakes the screen and runs above the lock screen for the night's tests;
         // it never unlocks the phone. The real Ronin will ask the owner before doing this.
         if (packageName.endsWith(".agentlab") && android.os.Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true) }
@@ -85,7 +86,12 @@ class AgentActivity : Activity() {
         dr.onOwnerAsked = { reason -> runOnUiThread { status.text = "✋ आपकी बारी: ${reason.ifBlank { "काम पूरा करके DONE दबाएँ" }}" } }
         driver = dr
         startProxy()
-        web.loadUrl("about:blank")
+        dr.onCommand = { runOnUiThread { working() } }
+        try { // pages that offer a dark look use it at night
+            if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.ALGORITHMIC_DARKENING))
+                androidx.webkit.WebSettingsCompat.setAlgorithmicDarkeningAllowed(web.settings, true)
+        } catch (e: Throwable) {}
+        showStartPage()
         refresh()
         startLink(dr)
     }
@@ -161,6 +167,45 @@ class AgentActivity : Activity() {
             link?.online == true -> "🟢 relay से जुड़ा" + if (proxyOn) " · सुरक्षा proxy चालू" else ""
             else -> "🔴 relay से जुड़ रहा है…"
         }
+    }
+
+    private fun night() = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+
+    /** Ronin's own start page: dark at night, light by day (no white screen in a dark room). */
+    private fun showStartPage() {
+        val (bg, fg) = if (night()) "#121212" to "#d8d8d8" else "#ffffff" to "#333333"
+        window.decorView.setBackgroundColor(Color.parseColor(bg))
+        web.setBackgroundColor(Color.parseColor(bg))
+        web.loadDataWithBaseURL(null, "<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width'>" +
+            "<body style='background:$bg;color:$fg;font:18px sans-serif;padding:28px'><h2>🤖 Ronin Agent Lab</h2>" +
+            "<p>यह screen Claude के लिए है। Claude जब काम करेगा, screen अपने आप जलेगी; काम न हो तो screen बंद हो जाएगी।</p>" +
+            "<p>रोकना हो तो ऊपर STOP दबाएँ।</p></body>", "text/html", "utf-8", null)
+    }
+
+    override fun onConfigurationChanged(c: android.content.res.Configuration) {
+        super.onConfigurationChanged(c)
+        if (web.url == null || web.url == "about:blank") showStartPage() // day / night changed while idle
+    }
+
+    private var wake: android.os.PowerManager.WakeLock? = null
+    private val idle = Runnable {
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        try { wake?.let { if (it.isHeld) it.release() } } catch (e: Exception) {}
+    }
+
+    /** Claude is working: screen on (woken if it was off) until 2 minutes after the last command. */
+    private fun working() {
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
+        if (!pm.isInteractive) {
+            try {
+                @Suppress("DEPRECATION")
+                val w = pm.newWakeLock(android.os.PowerManager.SCREEN_DIM_WAKE_LOCK or android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP, "ronin:agent")
+                w.acquire(3 * 60_000L); wake = w
+            } catch (e: Exception) {}
+        }
+        ticker.removeCallbacks(idle)
+        ticker.postDelayed(idle, 2 * 60_000L)
     }
 
     override fun onResume() { super.onResume(); ticker.removeCallbacks(tick); ticker.post(tick) }
