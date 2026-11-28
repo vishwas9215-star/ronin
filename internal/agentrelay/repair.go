@@ -1,6 +1,8 @@
 package agentrelay
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"sort"
@@ -63,7 +65,7 @@ func (r *Relay) approveRepair(by string, a map[string]any) string {
 		return "a device can not hand over its own name"
 	case q == nil || now.After(q.Exp):
 		return "no new device is waiting"
-	case sha(q.Pub) != newH || q.Code != code:
+	case hexSha(q.Pub) != newH || q.Code != code:
 		return "the waiting device changed: look at the code again"
 	case ts < now.Add(-10*time.Minute).UnixMilli() || ts > now.Add(2*time.Minute).UnixMilli():
 		return "old approval"
@@ -78,7 +80,7 @@ func (r *Relay) approveRepair(by string, a map[string]any) string {
 			old, oldHash = d.Pub, h
 		}
 	}
-	if old == "" || sha(old) != oldH {
+	if old == "" || hexSha(old) != oldH {
 		return "the old key is not the one the relay has"
 	}
 	text := fmt.Sprintf("handover|%s|%s|%s|%s|%d", name, newH, oldH, code, ts)
@@ -106,4 +108,10 @@ func (r *Relay) handoversLocked() []map[string]any {
 	}
 	sort.Slice(out, func(i, j int) bool { return fmt.Sprint(out[i]["name"]) < fmt.Sprint(out[j]["name"]) })
 	return out
+}
+
+// hexSha: the key hashes inside a handover (the same on the relay, Android and the laptop).
+func hexSha(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:])
 }

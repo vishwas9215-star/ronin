@@ -28,7 +28,7 @@ func (d *fakeDevice) askRepair(code string) (int, map[string]any) {
 
 // approval as the tablet app makes it
 func (d *fakeDevice) approval(name, newPub, oldPub, code string, ts int64) map[string]any {
-	n, o := sha(newPub), sha(oldPub)
+	n, o := hexSha(newPub), hexSha(oldPub)
 	return map[string]any{"repairApprove": map[string]any{"name": name, "new": n, "old": o, "code": code, "ts": ts,
 		"sig": d.sign(fmt.Sprintf("handover|%s|%s|%s|%s|%d", name, n, o, code, ts))}}
 }
@@ -92,7 +92,7 @@ func TestFormattedPhoneIsAllowedBackByTheTabletWithoutTheServer(t *testing.T) {
 		t.Fatalf("new phone pairs: %d %v", c, m)
 	}
 	h := m["handover"].(map[string]any)
-	if !verifySig(tab.pubPEM(), fmt.Sprintf("handover|phone|%s|%s|482913|%d", sha(nw.pubPEM()), sha(oldPub), int64(num(h["ts"]))), h["sig"].(string)) {
+	if !verifySig(tab.pubPEM(), fmt.Sprintf("handover|phone|%s|%s|482913|%d", hexSha(nw.pubPEM()), hexSha(oldPub), int64(num(h["ts"]))), h["sig"].(string)) {
 		t.Fatal("handover signed by the tablet")
 	}
 	if nw.hello() != 200 {
