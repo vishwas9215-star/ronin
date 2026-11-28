@@ -95,7 +95,7 @@ class AgentLink(
 
     companion object {
         val PEER_NAMES = setOf("phone", "tablet")
-        val HANDOVER_NAMES = setOf("phone", "tablet", "laptop")
+        val HANDOVER_NAMES = setOf("phone", "tablet", "laptop") + (2..9).map { "phone$it" }
         fun sha(s: String): String = java.security.MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
         fun pemToKey(pem: String): PublicKey {
             val b64 = pem.lines().filter { !it.startsWith("-----") }.joinToString("")
@@ -325,7 +325,8 @@ class AgentLink(
         val q = list.getJSONObject(0)
         val n = q.optString("name"); val pub = q.optString("pub"); val code = q.optString("code"); val old = q.optString("old_pub")
         if (n == name || n !in HANDOVER_NAMES || !pub.contains("PUBLIC KEY") || !Regex("^[0-9]{6}$").matches(code)) return "गलत request: मना कर दिया"
-        val text = "नया $n जोड़ें? Code $code — नए $n की screen पर भी यही code होना चाहिए। अलग हो तो Deny दबाएँ। पुराना $n हट जाएगा।"
+        val text = if (old.isEmpty()) "नया device \"$n\" जोड़ें? Code $code — उस phone की screen पर भी यही code होना चाहिए। अलग हो तो Deny दबाएँ।"
+            else "नया $n जोड़ें? Code $code — नए $n की screen पर भी यही code होना चाहिए। अलग हो तो Deny दबाएँ। पुराना $n हट जाएगा।"
         if (driver.stopped || !approve(text)) return "मना कर दिया"
         val ts = now()
         val sig = sign("handover|$n|${sha(pub)}|${sha(old)}|$code|$ts")
@@ -350,7 +351,7 @@ class AgentLink(
         if (!verify(byPub, "handover|$n|${h.optString("new")}|${h.optString("old")}|${h.optString("code")}|$ts", h.optString("sig"))) return false
         if (n == name) {
             if (newPub.trim() != publicPem().trim()) return false
-            prefs.edit().putString("prev_self", oldPub).putLong("handover_$n", ts).commit()
+            prefs.edit().apply { if (oldPub.isNotEmpty()) putString("prev_self", oldPub) }.putLong("handover_$n", ts).commit()
         } else {
             if (n !in PEER_NAMES) return false
             prefs.edit().putString("peer_$n", newPub).putLong("handover_$n", ts).commit()

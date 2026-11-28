@@ -436,6 +436,7 @@ func (r *Relay) Handler() http.Handler {
 	m.HandleFunc("/agent/hello", r.hello)
 	m.HandleFunc("/agent/next", r.next)
 	m.HandleFunc("/agent/out", r.out)
+	m.HandleFunc("/get", r.getPage)
 	m.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "not found", 404) })
 	return http.MaxBytesHandler(m, 8<<20)
 }
@@ -967,7 +968,8 @@ func known(n string) bool {
 
 // ---------------- devices ----------------
 
-var reName = regexp.MustCompile(`^(laptop|tablet|phone)$`)
+// phone2 … phone9: the enumerator's other phones (one Census login per phone; owner, 28 Nov)
+var reName = regexp.MustCompile(`^(laptop|tablet|phone[2-9]?)$`)
 
 // pair: a NEW device registers its name, secret key (hashed here) and public signing key, only while the
 // server's owner has opened pairing (roninrelay -pair).
@@ -1013,6 +1015,14 @@ func (r *Relay) pair(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 	if r.cfg.Now().After(r.pairUntilLocked()) {
+		// a NEW device after the pairing window: it waits with its code until the owner allows it on one of his
+		// paired devices (the same press-and-hold card as after a format)
+		if reRepairCode.MatchString(m.Code) && len(r.devices) > 0 {
+			r.repairs[m.Name] = &repairReq{Name: m.Name, KeyHash: sha(m.Key), Pub: m.Pub, Code: m.Code, Exp: r.cfg.Now().Add(10 * time.Minute)}
+			r.note(m.Name, "new device waiting for the owner's OK on another device")
+			writeJSON(w, 409, map[string]any{"error": "pairing is closed", "repair": "waiting", "code": m.Code})
+			return
+		}
 		http.Error(w, "pairing is closed", 403)
 		return
 	}

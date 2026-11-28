@@ -135,3 +135,42 @@ func TestRepairRequestsAreRateLimited(t *testing.T) {
 		t.Fatal("no limit")
 	}
 }
+
+// the enumerator's other phones (phone2…phone9): after the pairing window, the owner allows each on a paired device
+func TestANewPhoneIsAllowedByTheOwnerAfterPairingClosed(t *testing.T) {
+	e := newEnv(t)
+	e.r.OpenPairing(time.Minute)
+	tab := e.device(t, "tablet")
+	if tab.pairAndHello() != 200 {
+		t.Fatal("pair")
+	}
+	e.mu.Lock()
+	e.now = e.now.Add(2 * time.Hour)
+	e.mu.Unlock()
+	tab.hello()
+	p2 := newDevice(t, e.srv.URL, "phone2")
+	if c, _ := p2.askRepair(""); c != 403 {
+		t.Fatal("without a code: pairing closed")
+	}
+	if c, m := p2.askRepair("731905"); c != 409 || m["repair"] != "waiting" {
+		t.Fatalf("waits: %d %v", c, m)
+	}
+	_, l := tab.sendBody(map[string]any{"repairList": true})
+	if list, _ := l["repairs"].([]any); len(list) != 1 || list[0].(map[string]any)["old_pub"] != "" {
+		t.Fatalf("listed as a new device: %v", l)
+	}
+	now := e.r.cfg.Now().UnixMilli()
+	if _, r := tab.sendBody(tab.approval("phone2", p2.pubPEM(), "", "731905", now)); r["ok"] != true {
+		t.Fatalf("approved: %v", r)
+	}
+	if c, _ := p2.askRepair("731905"); c != 200 || p2.hello() != 200 {
+		t.Fatal("phone2 online")
+	}
+	if c, _ := newDevice(t, e.srv.URL, "phone10").askRepair("111111"); c != 400 {
+		t.Fatal("phone10 is not a name")
+	}
+	res, _ := tab.req("GET", "/get", nil)
+	if res.StatusCode != 200 {
+		t.Fatal("download page")
+	}
+}

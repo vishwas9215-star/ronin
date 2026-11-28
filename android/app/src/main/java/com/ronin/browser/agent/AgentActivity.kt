@@ -278,6 +278,14 @@ class AgentActivity : Activity() {
         tabTools.findViewWithTag<Button>("agent-tab-close")?.visibility = if (cur.id == "t1") android.view.View.GONE else android.view.View.VISIBLE
     }
 
+    /** First start on a phone that is not paired: which phone is this? Big choices, one tap. */
+    private fun askWhichPhone(then: (String) -> Unit) {
+        val names = listOf("phone" to "मुख्य phone (पहला)", "phone2" to "दूसरा phone", "phone3" to "तीसरा phone", "phone4" to "चौथा phone", "phone5" to "पाँचवाँ phone")
+        android.app.AlertDialog.Builder(this).setTitle("यह कौन सा phone है?")
+            .setItems(names.map { it.second }.toTypedArray()) { _, i -> then(names[i].first) }
+            .setCancelable(false).show()
+    }
+
     private fun startLink(dr: AgentRunner) {
         val lab = packageName.endsWith(".agentlab") && (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
         var url = ""; var pub = ""
@@ -288,7 +296,11 @@ class AgentActivity : Activity() {
         val autoApprove = lab && intent.getBooleanExtra("autoApprove", false) // CI end-to-end test only (debug lab app)
         val tablet = android.os.Build.MODEL.equals("OPD2415", true) || resources.configuration.smallestScreenWidthDp >= 600
         val prefs = getSharedPreferences("agent-link", MODE_PRIVATE)
-        val l = AgentLink(url, pub, if (tablet) "tablet" else "phone", prefs, dr, approve = { text -> autoApprove || askApproval(text) })
+        // a phone that is not paired yet says which phone it is (owner, 28 Nov: one Census login per phone, so his other
+        // phones are phone2, phone3…). Never assumed: a second phone asking for "phone" would replace the main one.
+        var name = prefs.getString("deviceName", null) ?: if (tablet) "tablet" else if (prefs.getBoolean("paired", false) || autoApprove) "phone" else null
+        if (name == null) { askWhichPhone { chosen -> prefs.edit().putString("deviceName", chosen).commit(); startLink(dr) }; return }
+        val l = AgentLink(url, pub, name, prefs, dr, approve = { text -> autoApprove || askApproval(text) })
         link = l
         if (!autoApprove) keepWorkingInBackground()
         kotlin.concurrent.thread {
@@ -334,7 +346,7 @@ class AgentActivity : Activity() {
         val left = ((link?.connectUntil ?: 0L) - System.currentTimeMillis()) / 1000
         val code = link?.repairCode
         status.text = when {
-            code != null -> "🔁 Code $code · यह device पहले से जुड़ा था: tablet पर Ronin Agent → 🤖 → \"नया device जोड़ें\" दबाएँ"
+            code != null -> "🔁 Code $code · मुख्य phone या tablet पर Ronin Agent → 🤖 → \"नया device जोड़ें\" दबाएँ"
             System.currentTimeMillis() - repairAt < 15_000 && repairSaid.isNotEmpty() -> repairSaid
             left > 0 -> "🔗 C जोड़ें खुला है: ${left / 60}:${"%02d".format(left % 60)} बाकी। अब C में Connect करें, फिर यहाँ code मिलाकर Allow दबाकर रखें"
             System.currentTimeMillis() - removedAt < 10_000 -> "⛔ C हटा दिया गया (सभी devices से)"
