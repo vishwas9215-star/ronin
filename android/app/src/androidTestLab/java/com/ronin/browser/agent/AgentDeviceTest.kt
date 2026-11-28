@@ -195,20 +195,47 @@ class AgentDeviceTest {
     @Test fun bannerStartsBelowTheStatusBar() {
         var top = -1; var inset = -1; var bottomGap = -1; var navInset = -1
         scenario.onActivity { a ->
-            val strip = a.window.decorView.findViewWithTag<android.view.View>("agent-toggle").parent as android.view.View
-            val loc = IntArray(2); strip.getLocationOnScreen(loc); top = loc[1]
+            val web = findWeb(a.window.decorView)!!
             val ins = androidx.core.view.ViewCompat.getRootWindowInsets(a.window.decorView)!!
             inset = ins.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top
             navInset = ins.getInsets(androidx.core.view.WindowInsetsCompat.Type.navigationBars()).bottom
-            val w = a.window.decorView.findViewWithTag<android.view.View>("agent-toggle").rootView
-            val webLoc = IntArray(2); val web = (strip.parent.parent as android.view.ViewGroup).let { g -> (0 until g.childCount).map { g.getChildAt(it) }.first { it is android.webkit.WebView } }
-            web.getLocationOnScreen(webLoc); bottomGap = w.height - (webLoc[1] + web.height)
+            val loc = IntArray(2); web.getLocationOnScreen(loc); top = loc[1]
+            bottomGap = a.window.decorView.height - (loc[1] + web.height)
         }
-        Log.i("RoninAgent", "insets: strip top $top, status bar $inset, nav $navInset, page bottom gap $bottomGap")
-        assertTrue("the strip starts below the status bar ($top < $inset)", top >= inset)
+        Log.i("RoninAgent", "insets: page top $top, status bar $inset, nav $navInset, page bottom gap $bottomGap")
+        assertTrue("the page starts below the status bar ($top < $inset)", top >= inset)
         assertTrue("the page ends above the navigation bar ($bottomGap < $navInset)", bottomGap >= navInset)
         mech("insets", true)
     }
+
+    // owner, 28 Nov: "nobody should see whom I make work for me: keep the robot button, write C, and keep every
+    // setting inside the button so the page is full screen"
+    @Test fun pageIsFullScreenAndTheRobotOpensTheButtons() {
+        var stripShown = true; var pageH = 0; var rootH = 0; var text = ""
+        scenario.onActivity { a ->
+            val strip = a.window.decorView.findViewWithTag<android.view.View>("agent-toggle").parent.parent as android.view.View
+            stripShown = strip.visibility == android.view.View.VISIBLE
+            val web = findWeb(a.window.decorView)!!; pageH = web.height; rootH = (web.parent.parent as android.view.View).let { it.height - it.paddingTop - it.paddingBottom }
+        }
+        assertTrue("no strip over the page by default", !stripShown)
+        assertEquals("the page has the whole screen", rootH, pageH)
+        scenario.onActivity { a -> a.window.decorView.findViewWithTag<android.view.View>("agent-fab").performClick() }
+        Thread.sleep(300)
+        scenario.onActivity { a ->
+            val t = a.window.decorView.findViewWithTag<android.view.View>("agent-toggle")
+            stripShown = (t.parent.parent as android.view.View).visibility == android.view.View.VISIBLE
+            text = ((t.parent as android.view.ViewGroup).getChildAt(0) as android.widget.TextView).text.toString()
+            fun all(v: android.view.View): List<String> = (if (v is android.widget.TextView) listOf(v.text.toString()) else emptyList()) +
+                ((v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
+            text += " | " + all(a.window.decorView).joinToString(" | ")
+        }
+        assertTrue("the robot opens status and buttons", stripShown)
+        assertTrue("the name is never written on the screen: $text", !text.contains("Claude"))
+        mech("full-screen", true)
+    }
+
+    private fun findWeb(v: android.view.View): android.webkit.WebView? = v as? android.webkit.WebView
+        ?: (v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).firstNotNullOfOrNull { findWeb(g.getChildAt(it)) } }
 
     @Test fun repairButtonAnswersWithoutALink() {
         scenario.onActivity { a -> a.window.decorView.findViewWithTag<android.widget.Button>("agent-toggle").performClick() }

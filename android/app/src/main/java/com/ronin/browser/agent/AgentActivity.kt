@@ -28,6 +28,8 @@ class AgentActivity : Activity() {
     private lateinit var linkLine: TextView
     private lateinit var rows: LinearLayout
     private lateinit var toggle: Button
+    private lateinit var top: LinearLayout
+    private lateinit var fab: TextView
     private var buttonsShown = false
     private val autoHide = Runnable { showButtons(false) }
 
@@ -35,7 +37,9 @@ class AgentActivity : Activity() {
         buttonsShown = on
         rows.visibility = if (on) android.view.View.VISIBLE else android.view.View.GONE
         linkLine.visibility = rows.visibility
-        toggle.text = if (on) "बंद ▴" else "बटन ▾"
+        // owner, 28 Nov: the page gets the WHOLE screen; status and buttons live behind the small 🤖 button
+        top.visibility = if (on || mustShow()) android.view.View.VISIBLE else android.view.View.GONE
+        toggle.text = "बंद ▴"
         ticker.removeCallbacks(autoHide)
         if (on) ticker.postDelayed(autoHide, 30_000)
     }
@@ -64,14 +68,14 @@ class AgentActivity : Activity() {
         }
         // banner: a full-width status line (always readable on a phone), then the buttons in two rows.
         // Every press shows at once what happened (status + a short message), so a press never looks "dead".
-        val top = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(13, 118, 128)); setPadding((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), (4 * d).toInt()) }
+        top = LinearLayout(this).apply { visibility = android.view.View.GONE;  orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(13, 118, 128)); setPadding((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), (4 * d).toInt()) }
         // a thin strip by default (the page gets the whole screen); "बटन ▾" opens the buttons, they close again by
         // themselves after 30 s. They open by themselves when Claude hands the screen to the owner (DONE needed).
         val strip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        status = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; text = "🤖 Claude तैयार है"; maxLines = 3 }
+        status = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; text = "🤖 C तैयार है"; maxLines = 3 }
         strip.addView(status, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         toggle = Button(this).apply {
-            text = "बटन ▾"; tag = "agent-toggle"; isAllCaps = false; textSize = 13f; minHeight = (36 * d).toInt(); minimumHeight = (36 * d).toInt(); minWidth = 0
+            text = "बंद ▴"; tag = "agent-toggle"; isAllCaps = false; textSize = 13f; minHeight = (36 * d).toInt(); minimumHeight = (36 * d).toInt(); minWidth = 0
             setOnClickListener { showButtons(!buttonsShown) }
         }
         strip.addView(toggle)
@@ -95,18 +99,18 @@ class AgentActivity : Activity() {
         rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = android.view.View.GONE }
         root.addView(rows)
         rows.addView(row(
-            btn("DONE", "agent-done", "✅ DONE: Claude को बता दिया") { driver?.ownerDone() },
-            btn("PAUSE", "agent-pause", "⏸ Claude रुका: RESUME दबाने तक") { driver?.ownerPause() },
-            btn("RESUME", "agent-resume", "▶ Claude फिर चालू") { driver?.resume() },
-            btn("STOP", "agent-stop", "⏹ Claude रोक दिया") { driver?.ownerStop() }))
-        // "Claude जोड़ें" opens a 3-minute window for ONE Connect card on this device (a stranger's Claude can never
-        // show a card); "Claude हटाएँ" disconnects Claude from all his devices.
+            btn("DONE", "agent-done", "✅ DONE: C को बता दिया") { driver?.ownerDone() },
+            btn("PAUSE", "agent-pause", "⏸ C रुका: RESUME दबाने तक") { driver?.ownerPause() },
+            btn("RESUME", "agent-resume", "▶ C फिर चालू") { driver?.resume() },
+            btn("STOP", "agent-stop", "⏹ C रोक दिया") { driver?.ownerStop() }))
+        // "C जोड़ें" opens a 3-minute window for ONE Connect card on this device (a stranger's Claude can never
+        // show a card); "C हटाएँ" disconnects Claude from all his devices.
         rows.addView(row(
-            btn("Claude जोड़ें", "agent-connect", "🔗 3 मिनट खुला: अब Claude में Connect करें") {
+            btn("C जोड़ें", "agent-connect", "🔗 3 मिनट खुला: अब C में Connect करें") {
                 if (link == null) android.widget.Toast.makeText(this, "relay से link अभी नहीं है", android.widget.Toast.LENGTH_SHORT).show()
                 link?.openConnectWindow()
             },
-            btn("Claude हटाएँ", "agent-disconnect", "⛔ Claude सभी devices से हटा दिया") {
+            btn("C हटाएँ", "agent-disconnect", "⛔ C सभी devices से हटा दिया") {
                 link?.disconnectClaude(); removedAt = System.currentTimeMillis()
             }))
         // after a format the phone waits with a code: the owner allows it HERE (compare the code, press and hold)
@@ -118,7 +122,17 @@ class AgentActivity : Activity() {
                 kotlin.concurrent.thread { val m = l.approveRepair(); runOnUiThread { repairSaid = m; repairAt = System.currentTimeMillis(); refresh(); android.widget.Toast.makeText(this, m, android.widget.Toast.LENGTH_LONG).show() } }
             }))
         web = AgentWebView(this)
-        root.addView(web, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        // the page fills the screen; a small 🤖 on its right edge opens the status and the buttons
+        val area = android.widget.FrameLayout(this)
+        area.addView(web, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        fab = TextView(this).apply {
+            text = "🤖"; tag = "agent-fab"; textSize = 20f; gravity = Gravity.CENTER; alpha = 0.75f
+            background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(Color.rgb(13, 118, 128)) }
+            contentDescription = "Ronin buttons"
+            setOnClickListener { showButtons(!buttonsShown); refresh() }
+        }
+        area.addView(fab, android.widget.FrameLayout.LayoutParams((44 * d).toInt(), (44 * d).toInt(), Gravity.END or Gravity.CENTER_VERTICAL).apply { marginEnd = (4 * d).toInt() })
+        root.addView(area, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
@@ -203,19 +217,27 @@ class AgentActivity : Activity() {
         return ok
     }
 
+    /** things the owner must see without opening the 🤖 menu: a code to compare, his turn, an open connect window */
+    private fun mustShow(): Boolean {
+        val dr = driver ?: return false
+        return link?.repairCode != null || dr.ownerHolding || ((link?.connectUntil ?: 0L) > System.currentTimeMillis())
+    }
+
     private fun refresh() {
         val dr = driver ?: return
+        top.visibility = if (buttonsShown || mustShow()) android.view.View.VISIBLE else android.view.View.GONE
+        fab.text = when { dr.stopped -> "⏹"; dr.paused -> "⏸"; dr.ownerHolding -> "✋"; else -> "🤖" }
         val left = ((link?.connectUntil ?: 0L) - System.currentTimeMillis()) / 1000
         val code = link?.repairCode
         status.text = when {
-            code != null -> "🔁 Code $code · यह device पहले से जुड़ा था: tablet पर Ronin Agent → बटन ▾ → \"नया device जोड़ें\" दबाएँ"
+            code != null -> "🔁 Code $code · यह device पहले से जुड़ा था: tablet पर Ronin Agent → 🤖 → \"नया device जोड़ें\" दबाएँ"
             System.currentTimeMillis() - repairAt < 15_000 && repairSaid.isNotEmpty() -> repairSaid
-            left > 0 -> "🔗 Claude जोड़ें खुला है: ${left / 60}:${"%02d".format(left % 60)} बाकी। अब Claude में Connect करें, फिर यहाँ code मिलाकर Allow दबाकर रखें"
-            System.currentTimeMillis() - removedAt < 10_000 -> "⛔ Claude हटा दिया गया (सभी devices से)"
-            dr.stopped -> "⏹ Claude रुका है (RESUME से चालू)"
-            dr.paused -> "⏸ आपने PAUSE दबाया: Claude रुका है (RESUME दबाएँ)"
+            left > 0 -> "🔗 C जोड़ें खुला है: ${left / 60}:${"%02d".format(left % 60)} बाकी। अब C में Connect करें, फिर यहाँ code मिलाकर Allow दबाकर रखें"
+            System.currentTimeMillis() - removedAt < 10_000 -> "⛔ C हटा दिया गया (सभी devices से)"
+            dr.stopped -> "⏹ C रुका है (RESUME से चालू)"
+            dr.paused -> "⏸ आपने PAUSE दबाया: C रुका है (RESUME दबाएँ)"
             dr.ownerHolding -> "✋ आपकी बारी: काम करके DONE दबाएँ"
-            else -> "🤖 Claude काम कर सकता है"
+            else -> "🤖 C काम कर सकता है"
         }
         linkLine.text = when {
             link == null -> "relay link: बंद"
@@ -263,7 +285,7 @@ class AgentActivity : Activity() {
         web.setBackgroundColor(Color.parseColor(bg))
         web.loadDataWithBaseURL(null, "<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width'>" +
             "<body style='background:$bg;color:$fg;font:18px sans-serif;padding:28px'><h2>🤖 Ronin Agent Lab</h2>" +
-            "<p>यह screen Claude के लिए है। Claude जब काम करेगा, screen अपने आप जलेगी; काम न हो तो screen बंद हो जाएगी।</p>" +
+            "<p>यह screen C के लिए है। C जब काम करेगा, screen अपने आप जलेगी; काम न हो तो screen बंद हो जाएगी।</p>" +
             "<p>रोकना हो तो ऊपर STOP दबाएँ।</p></body>", "text/html", "utf-8", null)
     }
 

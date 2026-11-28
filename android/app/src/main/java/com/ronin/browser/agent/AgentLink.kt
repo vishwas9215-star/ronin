@@ -55,7 +55,7 @@ class AgentLink(
     /** After a format: this device waits with this code until the owner allows it on another of his devices. */
     @Volatile var repairCode: String? = null
     private val worker = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "ronin-agent-work").apply { isDaemon = true } }
-    /** "Claude जोड़ें": only while the owner opened it on THIS device (3 minutes) may a Connect card show here. */
+    /** "C जोड़ें": only while the owner opened it on THIS device (3 minutes) may a Connect card show here. */
     @Volatile var connectUntil = 0L
 
     private fun log(m: String) = Log.i("RoninAgent", "link: $m")
@@ -161,7 +161,7 @@ class AgentLink(
         if (!verify(relayPubPem, "relay|$nonce|$my|$theirs", m.getString("proof"))) { log("FAKE relay: stopping"); running = false; return false }
         val ka = KeyAgreement.getInstance("ECDH").apply { init(eph.private); doPhase(fromRaw(Base64.decode(theirs, Base64.DEFAULT), eph.public as ECPublicKey), true) }
         val key = java.security.MessageDigest.getInstance("SHA-256").digest(ka.generateSecret() + nonce.toByteArray())
-        // other devices: a NEW name is learnt only while the owner has "Claude जोड़ें" open here; a known one never changes
+        // other devices: a NEW name is learnt only while the owner has "C जोड़ें" open here; a known one never changes
         // (pilot: only "phone" / "tablet" exist; a "laptop" is learnt once the Windows agent ships, so a stranger who
         // paired that name while pairing was open is never trusted)
         if (now() < connectUntil) learnPeers(text)
@@ -195,7 +195,7 @@ class AgentLink(
         null
     }
 
-    /** Other devices' keys: a NEW name only while the owner has "Claude जोड़ें" open here; a known one never changes. */
+    /** Other devices' keys: a NEW name only while the owner has "C जोड़ें" open here; a known one never changes. */
     private fun learnPeers(reply: String) {
         if (now() >= connectUntil) return
         val p = try { JSONObject(reply).optJSONObject("peers") } catch (e: Exception) { null } ?: return
@@ -226,7 +226,7 @@ class AgentLink(
 
     fun stop() { running = false; generation.incrementAndGet(); online = false } // no lock: never waits on the network
 
-    /** The owner tapped "Claude जोड़ें" here: for 3 minutes a Claude sign-in may ask him on THIS device. */
+    /** The owner tapped "C जोड़ें" here: for 3 minutes a Claude sign-in may ask him on THIS device. */
     fun openConnectWindow() {
         connectUntil = now() + 180_000
         if (online) thread { send(JSONObject().put("connectOpen", true))?.let { learnPeers(it) } }
@@ -245,7 +245,7 @@ class AgentLink(
         when (tool) {
             // the owner's STOP and a new epoch never wait behind a running command
             "__stop" -> { driver.stopped = true; send(answer(id, JSONObject().put("ok", true))) }
-            "__epoch" -> { val ok = applyEpoch(args.optString("by"), args.optLong("epoch"), args.optString("sig")); send(answer(id, JSONObject().put("ok", ok).also { if (!ok) it.put("error", "unknown or wrong signer: open Claude जोड़ें on this device once") })) }
+            "__epoch" -> { val ok = applyEpoch(args.optString("by"), args.optLong("epoch"), args.optString("sig")); send(answer(id, JSONObject().put("ok", ok).also { if (!ok) it.put("error", "unknown or wrong signer: open C जोड़ें on this device once") })) }
             "__approve" -> worker.execute { send(answer(id, approveCard(args))) }
             else -> worker.execute {
                 val result = try {
@@ -259,11 +259,11 @@ class AgentLink(
 
     private fun answer(id: String, result: JSONObject) = JSONObject().put("id", id).put("result", result)
 
-    /** The one-time card. Never shown unless the owner opened "Claude जोड़ें" here a moment ago (one card per tap). */
+    /** The one-time card. Never shown unless the owner opened "C जोड़ें" here a moment ago (one card per tap). */
     private fun approveCard(args: JSONObject): JSONObject {
-        if (driver.stopped || now() >= connectUntil) { log("Connect card refused: \"Claude जोड़ें\" was not open here"); return JSONObject().put("ok", false) }
+        if (driver.stopped || now() >= connectUntil) { log("Connect card refused: \"C जोड़ें\" was not open here"); return JSONObject().put("ok", false) }
         connectUntil = 0
-        val text = "Claude को आपके Ronin से जोड़ें? Code ${args.optString("code")} (Claude के page पर भी यही code होना चाहिए). Devices: ${args.optString("scope")}"
+        val text = "C को आपके Ronin से जोड़ें? Code ${args.optString("code")} (C के page पर भी यही code होना चाहिए). Devices: ${args.optString("scope")}"
         val epoch = prefs.getLong("epoch", 0); val issued = now()
         return if (approve(text)) JSONObject().put("ok", true).put("epoch", epoch).put("issued", issued)
             .put("sig", sign(listOf("approve", args.optString("nonce"), args.optString("client"), args.optString("redirect"), args.optString("challenge"), args.optString("scope"), args.optString("code"), epoch, issued).joinToString("|")))

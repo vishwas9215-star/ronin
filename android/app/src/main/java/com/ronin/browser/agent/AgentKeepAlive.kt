@@ -14,7 +14,7 @@ import android.os.PowerManager
 
 /**
  * Keeps Ronin Agent Lab alive while the owner uses other apps (the Claude app, WhatsApp...): a small notification
- * "Claude के लिए Ronin चालू है" and a CPU wake lock, so the link to the relay and the Claude tab keep working in the
+ * "C के लिए Ronin चालू है" and a CPU wake lock, so the link to the relay and the Claude tab keep working in the
  * background and he can switch back any time to watch. Tapping the notification opens the Claude tab.
  */
 class AgentKeepAlive : Service() {
@@ -25,7 +25,7 @@ class AgentKeepAlive : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "stop") { // STOP in the notification: Claude stops at once on this device
             AgentActivity.driver?.ownerStop(); android.util.Log.i("RoninAgent", "owner pressed STOP in the notification")
-            getSystemService(NotificationManager::class.java).notify(7, note(this, "⏹ आपने STOP दबाया: Claude रुका है (Ronin खोलकर RESUME)"))
+            getSystemService(NotificationManager::class.java).notify(7, note(this, "⏹ आपने STOP दबाया: C रुका है (Ronin खोलकर RESUME)"))
             return START_STICKY
         }
         val n = note(this, "देखने के लिए दबाएँ · रोकना हो तो STOP")
@@ -46,7 +46,7 @@ class AgentKeepAlive : Service() {
             val open = PendingIntent.getActivity(c, 0, Intent(c, AgentActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT), PendingIntent.FLAG_IMMUTABLE)
             val stop = PendingIntent.getService(c, 1, Intent(c, AgentKeepAlive::class.java).setAction("stop"), PendingIntent.FLAG_IMMUTABLE)
             val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(c, "agent") else @Suppress("DEPRECATION") Notification.Builder(c)
-            return b.setSmallIcon(android.R.drawable.ic_menu_view).setContentTitle("🤖 Claude के लिए Ronin चालू है")
+            return b.setSmallIcon(android.R.drawable.ic_menu_view).setContentTitle("🤖 C के लिए Ronin चालू है")
                 .setContentText(line).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true)
                 .addAction(Notification.Action.Builder(null, "STOP", stop).build())
                 .addAction(Notification.Action.Builder(null, "देखें", open).build()).build()
