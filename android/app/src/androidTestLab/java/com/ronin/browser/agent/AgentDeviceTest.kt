@@ -258,10 +258,29 @@ class AgentDeviceTest {
                 assertTrue("pressed (bg=$bg): $r", !r.has("error"))
                 var w = 0; while (d.pageValue("window.posted") != "1" && w < 30) { Thread.sleep(100); w++ }
                 assertEquals("the page's postback ran (bg=$bg)", "1", d.pageValue("window.posted"))
+                assertEquals("the panel was filled (bg=$bg)", "\"SBI SULTANPUR\"", d.pageValue("document.getElementById('bank').value"))
                 assertTrue(tool("click", "ref" to ref("Bad link")).optString("error").contains("script link"))
             } finally { d.forceBackground = false }
         }
         mech("postback", true)
+    }
+
+    // EPDS, 28 Nov: Ronin REALLY behind another app (not only told so): "IFSC Search" + its AJAX + timers must finish
+    @Test fun ajaxFinishesWhileRoninIsReallyBehindAnotherApp() {
+        open("https://ifsc.example.gov.in/")
+        assertTrue(!tool("type", "ref" to ref("IFSC"), "text" to "SBIN0001234").has("error"))
+        val ctx = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+        ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        var w = 0; while (!d.background() && w < 50) { Thread.sleep(100); w++ }
+        assertTrue("Ronin is behind another app", d.background())
+        Thread.sleep(1500)
+        val r = tool("click", "ref" to ref("IFSC Search"))
+        assertEquals("background-press", r.optString("method"))
+        w = 0; while (d.pageValue("window.posted") != "1" && w < 100) { Thread.sleep(100); w++ }
+        assertEquals("the AJAX finished behind another app", "\"SBI SULTANPUR\"", d.pageValue("document.getElementById('bank').value"))
+        ctx.startActivity(android.content.Intent(ctx, AgentActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+        Thread.sleep(800)
+        mech("background-ajax", true)
     }
 
     // the owner works in the Claude app while Ronin runs behind it (28 Nov): typing and taps must still work

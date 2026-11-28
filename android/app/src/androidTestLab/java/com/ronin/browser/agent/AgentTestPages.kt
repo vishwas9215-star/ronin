@@ -42,7 +42,14 @@ Object.defineProperty(HTMLElement.prototype,'innerText',{get(){ return 'Help'; }
 <form id="form1"><input type="hidden" id="__EVENTTARGET" name="__EVENTTARGET"><label for="ifsc">IFSC</label><input id="ifsc" name="ifsc">
 <a id="lnkIFSC" href="javascript:__doPostBack('ctl00${'$'}lnkIFSC','')">IFSC Search</a> <a id="bad" href="javascript:fetch('/x')">Bad link</a>
 <label for="bank">Bank</label><input id="bank" name="bank" readonly></form>
-<script>function __doPostBack(t,a){document.getElementById('__EVENTTARGET').value=t;setTimeout(function(){document.getElementById('bank').value='SBI '+document.getElementById('ifsc').value;window.posted=(window.posted||0)+1},50)}</script>""",
+<script>
+// like ASP.NET's PageRequestManager: a chain of timers around an XMLHttpRequest, then the panel is updated
+function __doPostBack(t,a){document.getElementById('__EVENTTARGET').value=t;setTimeout(function(){
+  var x=new XMLHttpRequest();x.open('POST','/lookup?ifsc='+encodeURIComponent(document.getElementById('ifsc').value));
+  x.onload=function(){setTimeout(function(){setTimeout(function(){document.getElementById('bank').value=JSON.parse(x.responseText).bank;window.posted=(window.posted||0)+1},200)},200)};
+  x.send('__EVENTTARGET='+t)},100)}
+</script>""",
+        "ifsc.example.gov.in/lookup" to """{"bank":"SBI SULTANPUR"}""",
         "news.example.com/" to """<!doctype html><meta charset="utf-8">"""+VP+"""<title>News</title><h1>Daily news</h1>
 <a href="/about">About us</a> <a href="/search?q=update+drivers">Search update drivers</a> <a href="/unsubscribe?u=77">Unsubscribe me</a> <a href="javascript:fetch('/x',{method:'POST'})">Read more</a>""",
         "protected.example.org/" to """<!doctype html><meta charset="utf-8">"""+VP+"""<title>Just a moment...</title>

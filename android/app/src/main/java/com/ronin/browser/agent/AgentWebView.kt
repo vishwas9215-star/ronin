@@ -15,6 +15,16 @@ import com.ronin.browser.RoninWebView
  */
 @SuppressLint("ViewConstructor")
 class AgentWebView(context: Context) : RoninWebView(context) {
+    // Owner, 28 Nov (EPDS "IFSC Search", an ASP.NET UpdatePanel): with Ronin behind another app or the phone locked, the
+    // page's AJAX never finished. Android lowers a hidden WebView's page engine (its renderer process can be frozen,
+    // its timers throttled). The Claude tab keeps its page engine at full priority and always "visible" to the page,
+    // so JavaScript timers and network requests go on in the background (the foreground service keeps the app alive).
+    init {
+        if (android.os.Build.VERSION.SDK_INT >= 26) setRendererPriorityPolicy(RENDERER_PRIORITY_IMPORTANT, false)
+    }
+    /** what the page engine was last told (tests) */
+    override fun onVisibilityChanged(changedView: android.view.View, visibility: Int) { super.onVisibilityChanged(changedView, android.view.View.VISIBLE) }
+
     @Volatile var lastInputType = 0
     @Volatile var lastInputAt = 0L
     @Volatile var connection: InputConnection? = null
