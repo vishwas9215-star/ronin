@@ -701,3 +701,16 @@ confirmed - owner's decision. Android developer verification: not in India yet (
 - Android 15 edge-to-edge: root pads by system bars / cutout / keyboard, so the strip is below the status bar
   (owner: "the top bar mixed with the page"). Test bannerStartsBelowTheStatusBar.
 - Needs ONE relay update by the server chat (re-run tools/relay-deploy/install.sh) before the format.
+
+### 28 Nov 2026 (12:10–12:50) — owner's taps never pause; full screen; "C" on screen
+- A tap / scroll by the owner no longer pauses Claude (AgentWebView tracks the finger; Claude's tap/typing waits while
+  it is down, max 8 s). Only PAUSE / STOP (strip buttons or STOP in the notification) stop it. Tests
+  ownerTouchDoesNotPauseOnlyPauseAndStopDo, notificationStopStopsClaude.
+- Notification: STOP + "देखें" buttons, last step line ("आख़िरी काम: …").
+- Page is full screen; status and buttons sit behind a small 🤖 on the right edge (opens by itself for a code, ask_owner,
+  or an open connect window). Owner-visible text says "C" instead of the name. Test pageIsFullScreenAndTheRobotOpensTheButtons.
+- Real phone + tablet: 18/18. brokerIsReadOnlyAndOnlyListedPagesOpen flaked once on the phone emulator (passed on rerun).
+- The device helper had stopped at 10:06 and the laptop agent was offline: restarted both from Explorer (9-claude-device-helper.bat,
+  2-Ronin-Agent-Lab.bat).
+- NEXT (owner, 12:31): Census 2027 enumerator duty — plan voice-dictated entry. Facts: enumerators use the official
+  native mobile app (HLO app now, PE app Feb 2027), not a web page; Census data is confidential. Plan before building.
