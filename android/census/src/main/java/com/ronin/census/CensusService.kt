@@ -85,9 +85,10 @@ class CensusService : AccessibilityService() {
             ?: rootInActiveWindow?.packageName?.toString()
     } catch (_: Exception) { null }
 
+    // the launcher the phone really uses (Settings also has a "home" screen for start-up: it is not the launcher)
     private fun isLauncher(pkg: String): Boolean {
         val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-        return packageManager.queryIntentActivities(i, 0).any { it.activityInfo.packageName == pkg }
+        return packageManager.resolveActivity(i, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName == pkg
     }
 
     override fun onAccessibilityEvent(e: AccessibilityEvent?) {
@@ -95,7 +96,7 @@ class CensusService : AccessibilityService() {
         if (e.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && e.eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return
         // the app really in front (events alone can come from a dialog or a toast of another package)
         val pkg = frontApp() ?: e.packageName?.toString() ?: return
-        Log.i(TAG, "census front: $pkg")
+        if (e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) Log.i(TAG, "census front: $pkg")
         // the shade, the keyboard and our own panel are not "another app"
         if (pkg == packageName || pkg == "com.android.systemui" || pkg.contains("inputmethod") || pkg.contains("keyboard")) return
         if (waitingForApp && !isLauncher(pkg)) { onFor = pkg; waitingForApp = false; show("✅ सहायक इस app के साथ है"); return }
