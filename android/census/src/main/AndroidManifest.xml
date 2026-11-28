@@ -5,6 +5,7 @@
     <!-- only an app signed with the SAME key (Ronin Agent on this phone) may ask the helper to read / fill -->
     <permission android:name="com.ronin.census.permission.DRIVE" android:protectionLevel="signature" />
     <queries>
+        <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.HOME" /></intent>
         <intent><action android:name="android.speech.RecognitionService" /></intent>
     </queries>
     <application android:label="जनगणना सहायक" android:allowBackup="false" android:supportsRtl="true">
@@ -17,6 +18,12 @@
         <!-- C (Claude) through Ronin Agent: read the screen / fill / tap. This app itself still has no internet. -->
         <service android:name=".CensusBridgeService" android:exported="true"
             android:permission="com.ronin.census.permission.DRIVE" />
+        <!-- the owner turns the helper on by hand from Quick Settings -->
+        <service android:name=".CensusTile" android:exported="true" android:label="जनगणना सहायक"
+            android:icon="@android:drawable/ic_btn_speak_now"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+        </service>
         <service android:name=".CensusService" android:exported="false"
             android:label="जनगणना सहायक"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">

@@ -81,6 +81,15 @@ class SetupActivity : Activity() {
             text("नीचे का बटन दबाएँ → 'जनगणना सहायक' चुनें → चालू करें → अनुमति दें।", 15f, Color.DKGRAY)
             button("Accessibility खोलें") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         }
+        if (on) {
+            text("सहायक अपने आप नहीं दिखता: जनगणना app खोलकर ऊपर से notification नीचे खींचें → \"जनगणना सहायक\" दबाएँ। बंद करने को वही tile या पैनल का ⏻ दबाएँ; दूसरा app खोलते ही अपने आप बंद हो जाता है। ✥ पकड़कर पैनल कहीं भी खिसका सकते हैं।", 15f, Color.DKGRAY)
+            if (Build.VERSION.SDK_INT >= 33) button("Quick Settings में \"जनगणना सहायक\" जोड़ें") {
+                getSystemService(android.app.StatusBarManager::class.java).requestAddTileService(
+                    android.content.ComponentName(this, CensusTile::class.java), "जनगणना सहायक",
+                    android.graphics.drawable.Icon.createWithResource(this, android.R.drawable.ic_btn_speak_now), mainExecutor) { }
+            }
+            button("अभी चालू करें (अगला खुला app)") { CensusService.instance?.setOn(true) }
+        }
         if (mic && on) text("सब तैयार ✅ जनगणना app खोलें; दाईं तरफ़ 🎤 दबाकर बोलें, जैसे: \"मोहल्ला पूरब टोला\"। \"आगे बढ़ें\" बोलने पर सहायक पूछेगा, \"हाँ\" बोलें।", 16f, Color.rgb(27, 127, 58))
     }
 }

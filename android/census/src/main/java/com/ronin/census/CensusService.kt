@@ -45,13 +45,60 @@ class CensusService : AccessibilityService() {
 
     override fun onServiceConnected() {
         instance = this
-        showPanel()
+        // OFF until the owner turns it on by hand (owner, 28 Nov: it stayed on every screen and got in the way)
+        Log.i(TAG, "census helper: ready (off until turned on)")
         Log.i(TAG, "census helper: on")
     }
 
     override fun onDestroy() { instance = null; handsFree = false; recognizer?.destroy(); tts?.shutdown(); super.onDestroy() }
     override fun onInterrupt() {}
-    override fun onAccessibilityEvent(e: AccessibilityEvent?) {}
+    // ---------------- on only by hand, only for that app ----------------
+
+    /** the app the helper was turned on for; the panel goes away by itself when the owner leaves it */
+    @Volatile var onFor: String? = null; private set
+    @Volatile private var waitingForApp = false
+    val isOn get() = panel != null
+
+    /** Quick Settings tile / setup button. Turned on over an app: works for that app; from our own screen: for the next app opened. */
+    fun setOn(on: Boolean) {
+        main.post {
+            if (!on) { turnOff("बंद"); return@post }
+            if (panel == null) showPanel()
+            val front = frontApp()
+            if (front == null || front == packageName || isLauncher(front)) { waitingForApp = true; onFor = null; show("जनगणना app खोलें: सहायक उसी के साथ रहेगा") }
+            else { onFor = front; waitingForApp = false; show("✅ सहायक चालू") }
+            Log.i(TAG, "census helper: on")
+            CensusTile.refresh(this)
+        }
+    }
+
+    private fun turnOff(why: String) {
+        handsFree = false; recognizer?.cancel(); clearPending()
+        panel?.let { try { (getSystemService(WINDOW_SERVICE) as WindowManager).removeView(it) } catch (_: Exception) {} }
+        panel = null; onFor = null; waitingForApp = false
+        Log.i(TAG, "census helper: off ($why)")
+        CensusTile.refresh(this)
+    }
+
+    private fun frontApp(): String? = try {
+        windows.firstOrNull { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION && it.isActive }?.root?.packageName?.toString()
+            ?: rootInActiveWindow?.packageName?.toString()
+    } catch (_: Exception) { null }
+
+    private fun isLauncher(pkg: String): Boolean {
+        val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        return packageManager.queryIntentActivities(i, 0).any { it.activityInfo.packageName == pkg }
+    }
+
+    override fun onAccessibilityEvent(e: AccessibilityEvent?) {
+        if (e == null || panel == null || e.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        val pkg = e.packageName?.toString() ?: return
+        // the shade, the keyboard and our own panel are not "another app"
+        if (pkg == packageName || pkg == "com.android.systemui" || pkg.contains("inputmethod") || pkg.contains("keyboard")) return
+        if (waitingForApp && !isLauncher(pkg)) { onFor = pkg; waitingForApp = false; show("✅ सहायक इस app के साथ है"); return }
+        val f = onFor ?: return
+        if (pkg != f) turnOff("left the app")
+    }
 
     // ---------------- what is on the screen ----------------
 
@@ -276,6 +323,7 @@ class CensusService : AccessibilityService() {
     /** One step from C. Main thread. Values never go to the log. */
     fun bridge(tool: String, a: org.json.JSONObject): org.json.JSONObject {
         val out = org.json.JSONObject()
+        if (panel == null) return out.put("error", "जनगणना सहायक बंद है: owner turns it on over the Census app (Quick Settings tile \"जनगणना सहायक\")")
         val app = roots().firstOrNull()?.packageName?.toString().orEmpty()
         out.put("app", app)
         when (tool) {
@@ -345,6 +393,27 @@ class CensusService : AccessibilityService() {
         // 🎤: hands-free — after each sentence it listens again by itself; tap again (or say "बस") to stop
         // 🎤 tap: listen to ONE sentence (owner, 28 Nov: repeated taps switched hands-free on and off).
         // Long press: hands-free (listens again by itself; say "बस" or long-press again to stop).
+        val lp = WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT)
+        lp.gravity = Gravity.TOP or Gravity.START
+        lp.x = resources.displayMetrics.widthPixels - (64 * d).toInt(); lp.y = resources.displayMetrics.heightPixels / 3
+        // ✥ drag it anywhere with one finger; ✕ at the top turns the helper off
+        val handle = TextView(this).apply { text = "✥"; textSize = 20f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(0, (4 * d).toInt(), 0, (4 * d).toInt()); tag = "census-drag" }
+        var sx = 0f; var sy = 0f; var ox = 0; var oy = 0
+        handle.setOnTouchListener { _, ev ->
+            when (ev.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> { sx = ev.rawX; sy = ev.rawY; ox = lp.x; oy = lp.y; true }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    lp.x = (ox + (ev.rawX - sx)).toInt().coerceIn(0, resources.displayMetrics.widthPixels - (40 * d).toInt())
+                    lp.y = (oy + (ev.rawY - sy)).toInt().coerceIn(0, resources.displayMetrics.heightPixels - (120 * d).toInt())
+                    try { wm.updateViewLayout(p, lp) } catch (_: Exception) {}; true
+                }
+                else -> true
+            }
+        }
+        p.addView(handle)
+        p.addView(btn("⏻") { turnOff("owner") }.apply { tag = "census-off" })
         p.addView(btn("🎤") { handsFree = false; listen() }.apply {
             tag = "census-mic"
             setOnLongClickListener { handsFree = !handsFree; lastHeardAt = System.currentTimeMillis(); if (handsFree) { show("🎤 लगातार सुन रहा है (\"बस\" बोलें तो बंद)"); listen() } else { recognizer?.cancel(); show("🎤 बंद") }; true }
@@ -353,10 +422,6 @@ class CensusService : AccessibilityService() {
         yes = btn("✓") { confirmByHand() }.apply { visibility = android.view.View.GONE; setBackgroundColor(Color.rgb(27, 127, 58)); setTextColor(Color.WHITE) }
         no = btn("✕") { handle("नहीं") }.apply { visibility = android.view.View.GONE }
         p.addView(yes); p.addView(no); p.addView(said)
-        val lp = WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT)
-        lp.gravity = Gravity.END or Gravity.CENTER_VERTICAL
         try { wm.addView(p, lp); panel = p } catch (e: Exception) { Log.i(TAG, "census panel: ${e.javaClass.simpleName}") }
     }
 

@@ -30,6 +30,7 @@ class CensusServiceTest {
         var w = 0; while (CensusService.instance == null && w < 150) { Thread.sleep(100); w++ }
         assertTrue("the helper started", CensusService.instance != null)
         sc = ActivityScenario.launch(TestFormActivity::class.java)
+        onMain { CensusService.instance!!.setOn(true) }; Thread.sleep(300)
         // the form is on screen and the helper sees it
         var n = 0; w = 0
         while (n < 3 && w < 80) { onMain { n = CensusService.instance?.boxes()?.size ?: 0 }; if (n < 3) Thread.sleep(100); w++ }
@@ -121,5 +122,24 @@ class CensusServiceTest {
         assertTrue("moving on via choose refused", b("app_choose", "text" to "आगे बढ़ें").has("error"))
         assertTrue("आगे बढ़ें after the summary", b("app_press", "text" to "आगे बढ़ें").has("done"))
         var n = -1; sc.onActivity { n = it.nextPressed }; assertEquals(1, n)
+    }
+
+    // owner, 28 Nov: the helper stays on every screen. Now: off until turned on by hand; off by itself when he leaves the app
+    @Test fun onOnlyByHandAndOffWhenHeLeaves() {
+        onMain { CensusService.instance!!.setOn(false) }; Thread.sleep(300)
+        var on = true; onMain { on = CensusService.instance!!.isOn }
+        assertTrue("off", !on)
+        var r = org.json.JSONObject(); onMain { r = CensusService.instance!!.bridge("app_screen", org.json.JSONObject()) }
+        assertTrue("C can not fill while it is off", r.has("error"))
+        onMain { CensusService.instance!!.setOn(true) }; Thread.sleep(300)
+        onMain { on = CensusService.instance!!.isOn }
+        assertTrue("on by hand", on)
+        // he goes to another app, then home: the helper goes off by itself
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        Thread.sleep(1500)
+        sh("input keyevent KEYCODE_HOME"); Thread.sleep(1500)
+        onMain { on = CensusService.instance!!.isOn }
+        assertTrue("off after leaving the app", !on)
     }
 }
