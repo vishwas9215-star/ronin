@@ -2,7 +2,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Ronin Agent Lab: the pilot of "Claude works inside the owner's own Ronin" (27 Nov 2026). Separate app id
          (com.ronin.agentlab), so tests on the real phone / tablet never touch Ronin Browser or its data. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <application>
+        <!-- keeps the Claude tab and its link alive while the owner uses other apps (a small notification) -->
+        <service
+            android:name="com.ronin.browser.agent.AgentKeepAlive"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the owner's own browser tab linked so his assistant can finish the task he asked for while he uses other apps" />
+        </service>
         <activity
             android:name="com.ronin.browser.agent.AgentActivity"
             android:exported="true"

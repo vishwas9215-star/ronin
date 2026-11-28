@@ -26,6 +26,19 @@ class AgentActivity : Activity() {
 
     private lateinit var status: TextView
     private lateinit var linkLine: TextView
+    private lateinit var rows: LinearLayout
+    private lateinit var toggle: Button
+    private var buttonsShown = false
+    private val autoHide = Runnable { showButtons(false) }
+
+    private fun showButtons(on: Boolean) {
+        buttonsShown = on
+        rows.visibility = if (on) android.view.View.VISIBLE else android.view.View.GONE
+        linkLine.visibility = rows.visibility
+        toggle.text = if (on) "बंद ▴" else "बटन ▾"
+        ticker.removeCallbacks(autoHide)
+        if (on) ticker.postDelayed(autoHide, 30_000)
+    }
     private var removedAt = 0L
     private val ticker = android.os.Handler(android.os.Looper.getMainLooper())
     private val tick = object : Runnable { override fun run() { refresh(); ticker.postDelayed(this, 1000) } }
@@ -43,15 +56,25 @@ class AgentActivity : Activity() {
         // banner: a full-width status line (always readable on a phone), then the buttons in two rows.
         // Every press shows at once what happened (status + a short message), so a press never looks "dead".
         val top = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(13, 118, 128)); setPadding((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), (4 * d).toInt()) }
-        status = TextView(this).apply { setTextColor(Color.WHITE); textSize = 16f; text = "🤖 Claude तैयार है"; maxLines = 3 }
-        top.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        linkLine = TextView(this).apply { setTextColor(Color.rgb(220, 240, 240)); textSize = 13f }
+        // a thin strip by default (the page gets the whole screen); "बटन ▾" opens the buttons, they close again by
+        // themselves after 30 s. They open by themselves when Claude hands the screen to the owner (DONE needed).
+        val strip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        status = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; text = "🤖 Claude तैयार है"; maxLines = 2 }
+        strip.addView(status, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        toggle = Button(this).apply {
+            text = "बटन ▾"; tag = "agent-toggle"; isAllCaps = false; textSize = 13f; minHeight = (36 * d).toInt(); minimumHeight = (36 * d).toInt(); minWidth = 0
+            setOnClickListener { showButtons(!buttonsShown) }
+        }
+        strip.addView(toggle)
+        top.addView(strip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        linkLine = TextView(this).apply { setTextColor(Color.rgb(220, 240, 240)); textSize = 12f; visibility = android.view.View.GONE }
         top.addView(linkLine)
+        top.setPadding((8 * d).toInt(), (2 * d).toInt(), (4 * d).toInt(), (2 * d).toInt())
         root.addView(top)
         fun btn(label: String, tag: String, said: String, f: () -> Unit) = Button(this).apply {
             text = label; this.tag = tag; isAllCaps = false; textSize = 16f; minHeight = (52 * d).toInt(); minWidth = 0
             setOnClickListener {
-                f(); refresh()
+                f(); refresh(); showButtons(true)
                 android.widget.Toast.makeText(this@AgentActivity, said, android.widget.Toast.LENGTH_SHORT).show()
                 android.util.Log.i("RoninAgent", "owner pressed $tag")
             }
@@ -60,13 +83,15 @@ class AgentActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.rgb(9, 90, 98))
             for (x in b) addView(x, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
-        root.addView(row(
+        rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = android.view.View.GONE }
+        root.addView(rows)
+        rows.addView(row(
             btn("DONE", "agent-done", "✅ DONE: Claude को बता दिया") { driver?.ownerDone() },
             btn("RESUME", "agent-resume", "▶ Claude फिर चालू") { driver?.resume() },
             btn("STOP", "agent-stop", "⏹ Claude रोक दिया") { driver?.ownerStop() }))
         // "Claude जोड़ें" opens a 3-minute window for ONE Connect card on this device (a stranger's Claude can never
         // show a card); "Claude हटाएँ" disconnects Claude from all his devices.
-        root.addView(row(
+        rows.addView(row(
             btn("Claude जोड़ें", "agent-connect", "🔗 3 मिनट खुला: अब Claude में Connect करें") {
                 if (link == null) android.widget.Toast.makeText(this, "relay से link अभी नहीं है", android.widget.Toast.LENGTH_SHORT).show()
                 link?.openConnectWindow()
@@ -83,9 +108,10 @@ class AgentActivity : Activity() {
         val rules = (application as? com.ronin.browser.RoninApp)?.rules
         val dr = AgentDriver(web, getSharedPreferences("agent-journal", MODE_PRIVATE), js) { h -> rules?.isBankHost(h) == true }
         dr.attach()
-        dr.onOwnerAsked = { reason -> runOnUiThread { status.text = "✋ आपकी बारी: ${reason.ifBlank { "काम पूरा करके DONE दबाएँ" }}" } }
+        dr.onOwnerAsked = { reason -> runOnUiThread { showButtons(true); ticker.removeCallbacks(autoHide); status.text = "✋ आपकी बारी: ${reason.ifBlank { "काम पूरा करके DONE दबाएँ" }}" } }
         driver = dr
         startProxy()
+        fullScreen()
         dr.onCommand = { runOnUiThread { working() } }
         try { // pages that offer a dark look use it at night
             if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.ALGORITHMIC_DARKENING))
@@ -129,6 +155,7 @@ class AgentActivity : Activity() {
         val prefs = getSharedPreferences("agent-link", MODE_PRIVATE)
         val l = AgentLink(url, pub, if (tablet) "tablet" else "phone", prefs, dr) { text -> autoApprove || askApproval(text) }
         link = l
+        if (!autoApprove) keepWorkingInBackground()
         kotlin.concurrent.thread {
             if (!prefs.getBoolean("paired", false)) l.pair()
             l.start()
@@ -166,6 +193,39 @@ class AgentActivity : Activity() {
             link == null -> "relay link: बंद"
             link?.online == true -> "🟢 relay से जुड़ा" + if (proxyOn) " · सुरक्षा proxy चालू" else ""
             else -> "🔴 relay से जुड़ रहा है…"
+        }
+    }
+
+    /** The page gets the whole screen: status / navigation bars hide (a swipe from the edge shows them). */
+    private fun fullScreen() {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                window.setDecorFitsSystemWindows(true)
+                window.insetsController?.let {
+                    it.hide(android.view.WindowInsets.Type.systemBars())
+                    it.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
+            }
+        } catch (e: Exception) {}
+    }
+
+    override fun onWindowFocusChanged(has: Boolean) { super.onWindowFocusChanged(has); if (has) fullScreen() }
+
+    /**
+     * Work goes on while the owner uses other apps: a small notification keeps Ronin alive, and once the phone is
+     * asked (one Allow, only the first time) not to put Ronin Agent to sleep, its internet is not cut when idle.
+     */
+    private fun keepWorkingInBackground() {
+        AgentKeepAlive.start(this)
+        val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
+        val prefs = getSharedPreferences("agent-ui", MODE_PRIVATE)
+        if (android.os.Build.VERSION.SDK_INT >= 23 && !pm.isIgnoringBatteryOptimizations(packageName) && !prefs.getBoolean("askedBattery", false)) {
+            prefs.edit().putBoolean("askedBattery", true).apply()
+            try {
+                @android.annotation.SuppressLint("BatteryLife")
+                val i = android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, android.net.Uri.parse("package:$packageName"))
+                startActivity(i)
+            } catch (e: Exception) {}
         }
     }
 

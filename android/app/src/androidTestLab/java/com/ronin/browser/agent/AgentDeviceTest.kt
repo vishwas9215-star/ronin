@@ -175,9 +175,10 @@ class AgentDeviceTest {
                 (root.findViewWithTag<android.widget.Button>(tag) ?: error("no button $tag")).performClick()
             }
             Thread.sleep(300)
-            scenario.onActivity { a -> text = (a.window.decorView.findViewWithTag<android.view.View>("agent-connect").parent.parent as android.view.ViewGroup).let { r -> ((r.getChildAt(0) as android.view.ViewGroup).getChildAt(0) as android.widget.TextView).text.toString() } }
+            scenario.onActivity { a -> text = ((a.window.decorView.findViewWithTag<android.view.View>("agent-toggle").parent as android.view.ViewGroup).getChildAt(0) as android.widget.TextView).text.toString() }
             return text
         }
+        press("agent-toggle") // the buttons are folded away by default (full-screen page)
         assertTrue(press("agent-stop").contains("रुका"))
         assertTrue(d.stopped)
         assertTrue(press("agent-resume").contains("काम कर सकता"))
