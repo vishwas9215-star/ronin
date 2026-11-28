@@ -790,3 +790,5 @@ confirmed - owner's decision. Android developer verification: not in India yet (
 - Laptop is OFF (owner 17:06): no helper installs. Install on the Motorola by the release links: census FIRST, then
   Ronin Agent Lab (so the signature permission is granted). Relay update (server chat, install.sh) needed for app_*,
   tabs, re-pair, phone2…9 and /get.
+
+- 2026-11-28: जनगणना सहायक अब सिर्फ़ हाथ से चालू (Quick Settings tile / setup बटन), app छोड़ते ही अपने-आप बंद, panel ✥ से खिसकता है, ⏻ से बंद। launcher पहचान = phone का असली default home (Settings का FallbackHome नहीं). CI 4fbada3 हरा; RoninCensus.apk release में.
