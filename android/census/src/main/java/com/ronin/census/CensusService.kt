@@ -185,6 +185,20 @@ class CensusService : AccessibilityService() {
         return out
     }
 
+    /** the box (editable or tappable) drawn just under / right of a label */
+    private fun boxUnder(label: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val t = android.graphics.Rect().also { label.getBoundsInScreen(it) }
+        var best: AccessibilityNodeInfo? = null; var bestD = Int.MAX_VALUE
+        for (r in roots()) walk(r) { n ->
+            if (!n.isVisibleToUser || !(n.isEditable || n.isClickable) || n == label) return@walk
+            val b = android.graphics.Rect().also { n.getBoundsInScreen(it) }
+            val below = b.top >= t.bottom - 8 && b.top < t.bottom + 200 && b.right > t.left && b.left < t.right
+            val right = b.left >= t.right - 8 && t.centerY() in b.top..b.bottom
+            if (below || right) { val d = (b.top - t.bottom).coerceAtLeast(0) + (b.left - t.right).coerceAtLeast(0); if (d < bestD) { bestD = d; best = n } }
+        }
+        return best
+    }
+
     /** a real finger tap in the middle of the thing (for screens that do not answer the accessibility click) */
     private fun tapAt(n: AccessibilityNodeInfo): Boolean {
         val b = android.graphics.Rect().also { n.getBoundsInScreen(it) }
@@ -378,8 +392,13 @@ class CensusService : AccessibilityService() {
 
     /** The owner's 🤖 button: C listens / C does not listen. */
     fun toggleLive() {
-        if (live) { liveStopped = true; endLive("button"); recognizer?.cancel(); listening = false; show("🤖 C अब नहीं सुन रहा") }
-        else { liveStopped = false; show("🤖 C सुन सकता है: chat में \"जनगणना शुरू\" कहें") }
+        if (live) { liveStopped = true; endLive("button"); recognizer?.cancel(); listening = false; show("⏸ रुका") }
+        else {
+            // owner, 28 Nov: everything from here, nothing in chat. Listening starts at once; what is said waits for C
+            liveStopped = false; live = true; lastListenAt = System.currentTimeMillis()
+            robot?.setBackgroundColor(Color.rgb(27, 127, 58)); show("🎤 सुन रहा हूँ: बोलिए")
+            if (!listening && !speaking) listen()
+        }
     }
 
     /** Steps that wait (listening) answer later; the rest answer at once. Main thread. */
@@ -387,9 +406,9 @@ class CensusService : AccessibilityService() {
         when (tool) {
             "app_listen" -> {
                 if (panel == null) { reply(bridge(tool, a)); return }
-                if (liveStopped) { reply(org.json.JSONObject().put("stopped", true).put("error", "the owner stopped C's listening (रुको / 🤖). Wait for him in chat; he taps 🤖 on the panel to let C listen again.")); return }
+                if (liveStopped) { reply(org.json.JSONObject().put("stopped", true).put("error", "the owner paused (रुको / 🤖). Keep calling app_listen every few seconds: it works again as soon as he taps 🤖. Never ask him to type in chat.")); return }
                 answerListen() // an older call that is still waiting
-                if (!live) { live = true; handsFree = false; clearPending(); Log.i(TAG, "census live: on"); robot?.setBackgroundColor(Color.rgb(27, 127, 58)); show("🤖 C सुन रहा है: बात कीजिए (\"रुको\" = बंद)") }
+                if (!live) { live = true; handsFree = false; clearPending(); Log.i(TAG, "census live: on"); robot?.setBackgroundColor(Color.rgb(27, 127, 58)); show("🎤 सुन रहा हूँ: बोलिए") }
                 lastListenAt = System.currentTimeMillis()
                 if (!listening && !speaking) listen()
                 waiter = reply
@@ -400,7 +419,7 @@ class CensusService : AccessibilityService() {
                 if (panel == null) { reply(bridge(tool, a)); return }
                 val t = a.optString("text").take(300)
                 if (t.isBlank()) { reply(org.json.JSONObject().put("error", "nothing to say")); return }
-                show((if (a.optBoolean("question")) "❓ " else "🤖 ") + t, if (a.optBoolean("question")) 60_000 else 12_000)
+                show((if (a.optBoolean("question")) "❓ " else "✅ ") + t, if (a.optBoolean("question")) 60_000 else 12_000)
                 if (a.optBoolean("question") || a.optBoolean("aloud")) { recognizer?.cancel(); listening = false; speak(t); if (!speaking && live) again() }
                 Log.i(TAG, "census live: said ${if (a.optBoolean("question")) "a question" else "a line"}")
                 reply(org.json.JSONObject().put("done", "shown on the panel" + if (speaking) " and spoken" else ""))
@@ -414,7 +433,7 @@ class CensusService : AccessibilityService() {
         listening = false
         if (t.isNotEmpty() && Commands.norm(t) in STOP.map(Commands::norm)) {
             handsFree = false
-            if (live) { liveStopped = true; endLive("रुको"); show("🤖 रुक गया। फिर से: 🤖 दबाएँ") } else show("🎤 बंद")
+            if (live) { liveStopped = true; endLive("रुको"); show("⏸ रुका। फिर से: 🤖 दबाएँ") } else show("🎤 बंद")
             return
         }
         speaking = false
@@ -463,7 +482,8 @@ class CensusService : AccessibilityService() {
                 if (Commands.needsConfirm(t) || Commands.needsOwnerYes(t)) { out.put("error", "\"$t\" moves the form on: use app_press"); return out }
                 val opt = options().filter { it.label == t }
                 val box = boxes().filter { it.label == t }
-                val txt = texts().filter { it.label == t }
+                // a text that is a box's label (the label drawn above a dropdown): tap the box under it, not the words
+                val txt = texts().filter { it.label == t }.map { lb -> boxUnder(lb.node)?.let { Box(t, it) } ?: lb }
                 val pick = when { opt.size == 1 -> opt[0]; opt.size > 1 -> null; box.size == 1 -> box[0]; box.size > 1 -> null; txt.size == 1 -> txt[0]; else -> null }
                 if (pick == null) {
                     val n = maxOf(opt.size, box.size, txt.size)
@@ -570,7 +590,7 @@ class CensusService : AccessibilityService() {
     private fun again() {
         if (handsFree && System.currentTimeMillis() - lastHeardAt > 3 * 60_000) { handsFree = false; show("🎤 3 मिनट कुछ नहीं सुना: बंद (battery बचाने को)"); return }
         // C went away (chat closed, limit, no internet): stop the mic, the fixed commands still work
-        if (live && waiter == null && System.currentTimeMillis() - lastListenAt > 120_000) { endLive("C is gone"); show("🤖 C का जवाब नहीं आ रहा: chat देखें। 🎤 से पुराना तरीका चलेगा"); return }
+        if (live && waiter == null && System.currentTimeMillis() - lastListenAt > 120_000) { endLive("C is gone"); show("⚠ जुड़ाव नहीं: internet देखें। 🎤 से पुराना तरीका चलेगा"); return }
         if ((handsFree || live) && !speaking) main.postDelayed({ if ((handsFree || live) && !listening && !speaking) listen() }, 500)
     }
 
