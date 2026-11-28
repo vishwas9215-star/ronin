@@ -51,4 +51,9 @@ class CommandsTest {
     }
 
     @Test fun undo() { assertEquals(Command.Undo, Commands.parse("गलत", labels, options)) }
+
+    @Test fun yesWithTheAction() {
+        assertEquals(Command.Confirm, Commands.parse("हाँ आगे बढ़ो", labels, options))
+        assertEquals(Command.Confirm, Commands.parse("हां सबमिट", labels, options))
+    }
 }

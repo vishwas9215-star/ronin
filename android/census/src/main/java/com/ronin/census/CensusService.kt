@@ -145,7 +145,7 @@ class CensusService : AccessibilityService() {
             Command.Undo -> undo()
             is Command.Press -> o.firstOrNull { Commands.norm(it.label).contains(Commands.norm(c.text)) }?.let { press(it, it.label) }
                 ?: "\"${c.text}\" बटन screen पर नहीं दिखा"
-            Command.Confirm -> confirm()
+            Command.Confirm -> confirm(heard = heard)
             Command.Cancel -> { clearPending(); "ठीक है, नहीं दबाया" }
             Command.Scan -> scan()
             is Command.Unknown -> "समझ नहीं आया: \"${c.heard}\" — खाने का नाम पहले बोलें, जैसे \"मोहल्ला पूरब टोला\""
@@ -166,6 +166,7 @@ class CensusService : AccessibilityService() {
     private fun fill(box: Box, said: String): String {
         val value = if (numeric(box)) Commands.digits(said) else said
         var n = box.node
+        if (!n.refresh() || !n.isVisibleToUser || !n.isEditable) return "⚠ screen बदल गई: फिर से बोलें"
         lastBefore = n.text?.toString()?.takeIf { it != (if (Build.VERSION.SDK_INT >= 26) n.hintText?.toString() else null) }.orEmpty()
         n.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         n.performAction(AccessibilityNodeInfo.ACTION_CLICK)
@@ -219,6 +220,11 @@ class CensusService : AccessibilityService() {
                     override fun onDone(id: String?) { main.post { if (handsFree) listen() } }
                     @Deprecated("old") override fun onError(id: String?) { main.post { if (handsFree) listen() } }
                 })
+                // only a voice that works without internet (some voices are on the network)
+                if (ttsReady) {
+                    val v = tts?.voices?.filter { it.locale.language == "hi" && !it.isNetworkConnectionRequired }?.minByOrNull { it.latency }
+                    if (v != null) tts?.voice = v else { ttsReady = false; Log.i(TAG, "census tts: no offline Hindi voice") }
+                }
                 if (ttsReady) speak(t) }
             return
         }
@@ -228,7 +234,7 @@ class CensusService : AccessibilityService() {
 
     private fun press(o: Box, text: String): String {
         if (Commands.needsConfirm(text)) {
-            pending = o.node; pendingText = text
+            pending = o.node; pendingText = text; pendingAt = System.currentTimeMillis()
             showConfirm(true)
             return "\"$text\" दबाऊँ? \"हाँ\" बोलें या ✓ दबाएँ"
         }
@@ -243,8 +249,19 @@ class CensusService : AccessibilityService() {
         return false
     }
 
-    private fun confirm(): String {
+    @Volatile private var pendingAt = 0L
+    /** ✓ tapped by hand: always a real yes */
+    fun confirmByHand(): String { lastMessage = confirm(byHand = true); show(lastMessage); return lastMessage }
+
+    private fun confirm(byHand: Boolean = false, heard: String = ""): String {
         val p = pending ?: return "अभी कुछ दबाने के लिए नहीं पूछा था"
+        // a "हाँ" in the room (the family answering a question) must never move the form on: a spoken yes counts only
+        // within 15 s of the question AND, while listening hands-free, only together with the action ("हाँ आगे बढ़ो")
+        if (!byHand) {
+            if (System.currentTimeMillis() - pendingAt > 15_000) { clearPending(); return "समय निकल गया: फिर से \"आगे बढ़ो\" बोलें" }
+            val firstWord = Commands.norm(pendingText).split(' ').first()
+            if (handsFree && !Commands.norm(heard).contains(firstWord)) return "पक्का करने के लिए \"हाँ $pendingText\" बोलें या ✓ दबाएँ"
+        }
         val t = pendingText
         clearPending()
         val ok = clickUp(p)
@@ -263,9 +280,9 @@ class CensusService : AccessibilityService() {
         val p = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.argb(200, 13, 118, 128)); setPadding((4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt()) }
         said = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; maxLines = 4; maxWidth = (160 * d).toInt(); visibility = android.view.View.GONE }
         // 🎤: hands-free — after each sentence it listens again by itself; tap again (or say "बस") to stop
-        p.addView(btn("🎤") { handsFree = !handsFree; if (handsFree) listen() else { recognizer?.cancel(); show("🎤 बंद") } }.apply { tag = "census-mic" })
+        p.addView(btn("🎤") { handsFree = !handsFree; lastHeardAt = System.currentTimeMillis(); if (handsFree) listen() else { recognizer?.cancel(); show("🎤 बंद") } }.apply { tag = "census-mic" })
         p.addView(btn("📋") { handle("स्क्रीन पढ़ो") }.apply { tag = "census-scan" })
-        yes = btn("✓") { handle("हाँ") }.apply { visibility = android.view.View.GONE; setBackgroundColor(Color.rgb(27, 127, 58)); setTextColor(Color.WHITE) }
+        yes = btn("✓") { confirmByHand() }.apply { visibility = android.view.View.GONE; setBackgroundColor(Color.rgb(27, 127, 58)); setTextColor(Color.WHITE) }
         no = btn("✕") { handle("नहीं") }.apply { visibility = android.view.View.GONE }
         p.addView(yes); p.addView(no); p.addView(said)
         val lp = WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
@@ -291,7 +308,11 @@ class CensusService : AccessibilityService() {
 
     @Volatile var handsFree = false
     private val STOP = setOf("बस", "रुको", "बंद करो", "बंद", "स्टॉप")
-    private fun again() { if (handsFree && !speaking) main.postDelayed({ if (handsFree) listen() }, 500) }
+    @Volatile private var lastHeardAt = 0L
+    private fun again() {
+        if (handsFree && System.currentTimeMillis() - lastHeardAt > 3 * 60_000) { handsFree = false; show("🎤 3 मिनट कुछ नहीं सुना: बंद (battery बचाने को)"); return }
+        if (handsFree && !speaking) main.postDelayed({ if (handsFree) listen() }, 500)
+    }
 
     private fun listen() {
         speaking = false
@@ -308,7 +329,7 @@ class CensusService : AccessibilityService() {
                 val t = b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
                 if (t.isNotEmpty() && Commands.norm(t) in STOP.map(Commands::norm)) { handsFree = false; show("🎤 बंद"); return }
                 speaking = false
-                if (t.isNotEmpty()) handle(t) else show("कुछ सुनाई नहीं दिया")
+                if (t.isNotEmpty()) { lastHeardAt = System.currentTimeMillis(); handle(t) } else show("कुछ सुनाई नहीं दिया")
                 if (tts == null || !ttsReady || lastMessage.startsWith("✅").not()) again() // after a read-back, TTS restarts listening
             }
             override fun onError(error: Int) {

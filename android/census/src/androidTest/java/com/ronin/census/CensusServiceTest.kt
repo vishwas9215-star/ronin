@@ -85,4 +85,17 @@ class CensusServiceTest {
         sc.onActivity { v = it.members.text.toString() }
         assertEquals("undone", "", v)
     }
+
+    // the family saying "हाँ" to a question must never move the form on while the helper listens hands-free
+    @Test fun aYesInTheRoomDoesNotMoveOn() {
+        onMain { CensusService.instance!!.handsFree = true }
+        try {
+            say("आगे बढ़ो"); say("हाँ")
+            var n = -1; sc.onActivity { n = it.nextPressed }
+            assertEquals("plain yes ignored hands-free", 0, n)
+            say("हाँ आगे बढ़ो")
+            sc.onActivity { n = it.nextPressed }
+            assertEquals("yes with the action presses once", 1, n)
+        } finally { onMain { CensusService.instance!!.handsFree = false } }
+    }
 }

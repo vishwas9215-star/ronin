@@ -45,6 +45,7 @@ object Commands {
         val h = norm(heard)
         if (h.isEmpty()) return Command.Unknown(heard)
         if (h in YES.map(::norm)) return Command.Confirm
+        YES.map(::norm).firstOrNull { h.startsWith("$it ") }?.let { y -> if (PRESS_WORDS.keys.any { norm(it) == h.removePrefix("$y ").trim() } || CONFIRM_FIRST.any { h.contains(norm(it).split(' ').first()) }) return Command.Confirm }
         if (h in NO.map(::norm)) return Command.Cancel
         if (h in SCAN.map(::norm)) return Command.Scan
         if (h in UNDO.map(::norm)) return Command.Undo
