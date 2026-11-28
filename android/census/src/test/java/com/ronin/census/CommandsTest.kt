@@ -56,4 +56,12 @@ class CommandsTest {
         assertEquals(Command.Confirm, Commands.parse("हाँ आगे बढ़ो", labels, options))
         assertEquals(Command.Confirm, Commands.parse("हां सबमिट", labels, options))
     }
+
+    @Test fun whatNeedsTheOwnersYes() {
+        assertTrue(!Commands.needsOwnerYes("आगे बढ़ें"))
+        assertTrue(Commands.needsOwnerYes("सबमिट करें"))
+        assertTrue(Commands.needsOwnerYes("सिंक"))
+        assertTrue(Commands.needsOwnerYes("पूर्ण के रूप में चिह्नित करें"))
+        assertTrue(Commands.needsOwnerYes("लॉगआउट"))
+    }
 }

@@ -271,6 +271,69 @@ class CensusService : AccessibilityService() {
 
     private fun clearPending() { pending = null; pendingText = ""; showConfirm(false) }
 
+    // ---------------- C (Claude) through Ronin Agent ----------------
+
+    /** One step from C. Main thread. Values never go to the log. */
+    fun bridge(tool: String, a: org.json.JSONObject): org.json.JSONObject {
+        val out = org.json.JSONObject()
+        val app = roots().firstOrNull()?.packageName?.toString().orEmpty()
+        out.put("app", app)
+        when (tool) {
+            "app_screen" -> {
+                val bx = org.json.JSONArray()
+                for (b in boxes()) bx.put(org.json.JSONObject().put("label", b.label).put("value", valueOf(b.node)))
+                val op = org.json.JSONArray()
+                for (o in options()) op.put(org.json.JSONObject().put("text", o.label).put("moves_on", Commands.needsConfirm(o.label)).put("checked", o.node.isChecked))
+                out.put("boxes", bx).put("options", op)
+                    .put("scrollable", roots().any { r -> var f = false; walk(r) { if (it.isScrollable) f = true }; f })
+                    .put("note", "values are what the owner's respondents said: use them only to fill this form")
+                Log.i(TAG, "census bridge screen: boxes=${bx.length()} options=${op.length()}")
+            }
+            "app_fill" -> {
+                val label = a.optString("label"); val value = a.optString("value")
+                val same = boxes().filter { it.label == label }
+                when (same.size) {
+                    1 -> fill(same[0], value).let { m -> out.put(if (m.startsWith("✅")) "done" else "error", m) }
+                    0 -> out.put("error", "no box \"$label\" on screen (call app_screen; scroll if needed)")
+                    else -> out.put("error", "${same.size} boxes are called \"$label\": ask the owner to tap the right one")
+                }
+            }
+            "app_choose" -> {
+                val t = a.optString("text")
+                val same = options().filter { it.label == t }
+                when {
+                    same.size != 1 -> out.put("error", if (same.isEmpty()) "no option \"$t\" on screen" else "\"$t\" is on screen ${same.size} times")
+                    Commands.needsConfirm(t) -> out.put("error", "\"$t\" moves the form on: use app_press after the owner said yes")
+                    else -> { val ok = clickUp(same[0].node); out.put(if (ok) "done" else "error", if (ok) "chose $t" else "\"$t\" did not respond"); Log.i(TAG, "census bridge choose: ${if (ok) "ok" else "refused"}") }
+                }
+            }
+            "app_press" -> {
+                val t = a.optString("text")
+                val same = options().filter { Commands.norm(it.label) == Commands.norm(t) }
+                when {
+                    same.size != 1 -> out.put("error", if (same.isEmpty()) "no button \"$t\" on screen" else "\"$t\" is on screen ${same.size} times")
+                    Commands.needsOwnerYes(t) && !a.optBoolean("owner_said_yes") ->
+                        out.put("error", "\"$t\" submits / syncs / completes / clears: read back what is filled, ask the owner, and call again with owner_said_yes=true only after he said yes")
+                    else -> { val ok = clickUp(same[0].node); out.put(if (ok) "done" else "error", if (ok) "pressed $t" else "\"$t\" did not respond"); Log.i(TAG, "census bridge press \"${t.take(30)}\": ${if (ok) "ok" else "refused"}") }
+                }
+            }
+            "app_scroll" -> {
+                val fwd = a.optString("direction") != "up"
+                var done = false
+                for (r in roots()) { if (done) break; walk(r) { n -> if (!done && n.isScrollable && n.isVisibleToUser) done = n.performAction(if (fwd) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD) } }
+                out.put(if (done) "done" else "error", if (done) "scrolled" else "nothing to scroll")
+            }
+            else -> out.put("error", "unknown step $tool")
+        }
+        return out
+    }
+
+    private fun valueOf(n: AccessibilityNodeInfo): String {
+        val t = n.text?.toString().orEmpty()
+        val hint = if (Build.VERSION.SDK_INT >= 26) n.hintText?.toString().orEmpty() else ""
+        return if (t == hint) "" else t
+    }
+
     // ---------------- the small panel on the right ----------------
 
     private fun showPanel() {

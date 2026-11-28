@@ -113,5 +113,13 @@ object Commands {
         return (total + cur).toString()
     }
 
+    /**
+     * For C (Claude live): "आगे बढ़ें" may be pressed after C read a one-line summary to the owner (his choice,
+     * 28 Nov: "रुको" stops it). Submitting the block, syncing, marking complete, clearing, resetting, logging out:
+     * only with the owner's spoken yes.
+     */
+    val OWNER_YES = listOf("सबमिट", "सिंक", "पूर्ण", "लॉगआउट", "साफ़ करें", "पुनः स्थापित", "बंद", "डिलीट", "हटाएँ")
+    fun needsOwnerYes(buttonText: String) = OWNER_YES.any { norm(buttonText).contains(norm(it)) }
+
     fun needsConfirm(buttonText: String) = CONFIRM_FIRST.any { norm(buttonText).contains(norm(it)) }
 }

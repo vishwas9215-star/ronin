@@ -824,6 +824,12 @@ var tools = []map[string]any{
 	tool("downloads", "List downloads on a device.", nil),
 	tool("ask_owner", "Hand the screen to the owner (login, password, OTP, human check, money step). Returns at once; call it again to wait (up to 15 s per call) until he taps DONE.", []string{"reason"}),
 	tool("set_pace", "Work slowly or normally on a device, as the owner asks in chat (\"slow\" / \"normal\").", []string{"pace"}),
+	// the Census 2027 enumerator app on the owner's phone (through the census helper; owner, 28 Nov)
+	tool("app_screen", "Census app on the phone: the boxes (label + what is filled), the options / buttons and whether the screen scrolls. Use it before every step. Fill ONLY what the family said (a family-wide answer may go to every member; age may be worked out from events they name); never invent: mark anything unclear and ask the owner once at the end of each member. The data is used only to fill the form: never repeat it elsewhere.", nil),
+	tool("app_fill", "Census app: write a value into the box with this exact label (from app_screen). Refused when two boxes share the label.", []string{"label", "value"}),
+	tool("app_choose", "Census app: tap an option / list entry / dropdown item by its exact text. Buttons that move on are refused here: use app_press.", []string{"text"}),
+	tool("app_press", "Census app: press a button by its exact text. आगे बढ़ें: first say a one-line summary of what you filled (the owner can say रुको). सबमिट / सिंक / पूर्ण / लॉगआउट / साफ़ करें need owner_said_yes=true, only after he said yes in chat.", []string{"text"}),
+	tool("app_scroll", "Census app: scroll the screen down or up (direction \"down\" / \"up\") to reach more boxes.", []string{"direction"}),
 }
 
 func tool(name, desc string, req []string) map[string]any {
@@ -840,11 +846,14 @@ func tool(name, desc string, req []string) map[string]any {
 	if name == "wait_for" {
 		props["seconds"] = map[string]string{"type": "number"}
 	}
-	if name != "devices" && name != "set_pace" { // which Claude tab ("t2"); missing = the main Claude tab
+	if name != "devices" && name != "set_pace" && !strings.HasPrefix(name, "app_") { // which Claude tab ("t2"); missing = the main Claude tab
 		props["tab"] = map[string]string{"type": "string"}
 	}
 	if name == "open" {
 		props["new_tab"] = map[string]string{"type": "boolean"}
+	}
+	if name == "app_press" {
+		props["owner_said_yes"] = map[string]string{"type": "boolean"}
 	}
 	if name == "tabs" {
 		props["close"] = map[string]string{"type": "string"}

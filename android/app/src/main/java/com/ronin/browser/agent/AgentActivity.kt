@@ -173,7 +173,8 @@ class AgentActivity : Activity() {
         val dr = setUpPage(web, getSharedPreferences("agent-journal", MODE_PRIVATE))
         driver = dr
         startProxy()
-        val ts = AgentTabs(makeTab = { claude -> onUi { newPage(claude) } }, first = dr)
+        val ts = AgentTabs(makeTab = { claude -> onUi { newPage(claude) } }, first = dr,
+            census = if (intent.getBooleanExtra("noLink", false)) null else CensusBridge(this))
         ts.onChanged = { runOnUiThread { showTabs() } }
         tabs = ts
         showStartPage()

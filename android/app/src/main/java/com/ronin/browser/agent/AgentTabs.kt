@@ -21,6 +21,8 @@ interface AgentRunner {
 class AgentTabs(
     private val makeTab: (claude: Boolean) -> AgentDriver?,
     private val first: AgentDriver,
+    /** the Census app helper on this phone (null in tests / on devices without it) */
+    private val census: CensusBridge? = null,
     val maxClaude: Int = 4,
     val maxAll: Int = 8,
 ) : AgentRunner {
@@ -28,6 +30,7 @@ class AgentTabs(
 
     val tabs = CopyOnWriteArrayList(listOf(Tab("t1", first, true)))
     @Volatile var shown = "t1"
+    private val doneApp = object : LinkedHashMap<String, JSONObject>() { override fun removeEldestEntry(e: MutableMap.MutableEntry<String, JSONObject>?) = size > 100 }
     private val newTabFor = object : LinkedHashMap<String, String>() { override fun removeEldestEntry(e: MutableMap.MutableEntry<String, String>?) = size > 50 }
     @Volatile private var seq = 1
     /** the tabs or the shown tab changed (UI) */
@@ -81,6 +84,14 @@ class AgentTabs(
     fun show(id: String) { if (tab(id) != null) { shown = id; onChanged?.invoke() } }
 
     override fun run(id: String, tool: String, args: JSONObject): JSONObject {
+        if (tool in CensusBridge.TOOLS) {
+            // PAUSE / STOP of the owner hold here too
+            if (main.driver.stopped) return JSONObject().put("error", "the owner pressed STOP on this device. Claude must wait until he turns Claude on again.")
+            if (main.driver.paused) return JSONObject().put("error", "the owner pressed PAUSE. Claude waits until he taps RESUME.")
+            val c = census ?: return JSONObject().put("error", "no census helper on this device")
+            synchronized(doneApp) { doneApp[id] }?.let { return it } // the same command again: never a second fill / press
+            return c.run(tool, args).also { r -> synchronized(doneApp) { doneApp[id] = r } }
+        }
         if (tool == "tabs") {
             args.optString("close").takeIf { it.isNotEmpty() }?.let { c ->
                 val t = tab(c)

@@ -100,4 +100,26 @@ class CensusServiceTest {
             assertEquals("yes with the action presses once", 1, n)
         } finally { onMain { CensusService.instance!!.handsFree = false } }
     }
+
+    // C (Claude) through Ronin Agent: read the screen, fill, choose, move on; submit / sync only with the owner's yes
+    @Test fun bridgeForClaude() {
+        fun b(tool: String, vararg kv: Pair<String, Any>): org.json.JSONObject {
+            val a = org.json.JSONObject(); kv.forEach { (k, v) -> a.put(k, v) }
+            var r = org.json.JSONObject(); onMain { r = CensusService.instance!!.bridge(tool, a) }; Thread.sleep(300)
+            Log.i("RoninAgent", "BRIDGE $tool -> ${r.toString().take(160)}"); return r
+        }
+        val s = b("app_screen")
+        val labels = (0 until s.getJSONArray("boxes").length()).map { s.getJSONArray("boxes").getJSONObject(it).getString("label") }
+        assertTrue("sees the boxes: $labels", "मुहल्ला/बस्ती" in labels)
+        assertTrue(b("app_fill", "label" to "मुहल्ला/बस्ती", "value" to "दक्षिण टोला").has("done"))
+        var m = ""; sc.onActivity { m = it.mohalla.text.toString() }
+        assertEquals("दक्षिण टोला", m)
+        val after = b("app_screen").getJSONArray("boxes")
+        assertTrue("the filled value shows", (0 until after.length()).any { after.getJSONObject(it).optString("value") == "दक्षिण टोला" })
+        assertTrue(b("app_fill", "label" to "कोई और", "value" to "x").has("error"))
+        assertTrue(b("app_choose", "text" to "खाली").has("done"))
+        assertTrue("moving on via choose refused", b("app_choose", "text" to "आगे बढ़ें").has("error"))
+        assertTrue("आगे बढ़ें after the summary", b("app_press", "text" to "आगे बढ़ें").has("done"))
+        var n = -1; sc.onActivity { n = it.nextPressed }; assertEquals(1, n)
+    }
 }

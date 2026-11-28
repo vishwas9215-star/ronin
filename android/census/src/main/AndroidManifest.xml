@@ -2,6 +2,8 @@
 <!-- NO android.permission.INTERNET, on purpose: nothing the enumerator dictates can leave the phone through this app -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- only an app signed with the SAME key (Ronin Agent on this phone) may ask the helper to read / fill -->
+    <permission android:name="com.ronin.census.permission.DRIVE" android:protectionLevel="signature" />
     <queries>
         <intent><action android:name="android.speech.RecognitionService" /></intent>
     </queries>
@@ -12,6 +14,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- C (Claude) through Ronin Agent: read the screen / fill / tap. This app itself still has no internet. -->
+        <service android:name=".CensusBridgeService" android:exported="true"
+            android:permission="com.ronin.census.permission.DRIVE" />
         <service android:name=".CensusService" android:exported="false"
             android:label="जनगणना सहायक"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">

@@ -4,6 +4,9 @@
          (com.ronin.agentlab), so tests on the real phone / tablet never touch Ronin Browser or its data. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- the census helper on this phone (same signing key): C reads / fills the Census app through it -->
+    <uses-permission android:name="com.ronin.census.permission.DRIVE" />
+    <queries><package android:name="com.ronin.census" /></queries>
     <application>
         <!-- keeps the Claude tab and its link alive while the owner uses other apps (a small notification) -->
         <service
