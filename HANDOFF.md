@@ -777,3 +777,16 @@ confirmed - owner's decision. Android developer verification: not in India yet (
 - CI: unit tests + device tests (TestFormActivity in src/debug) green on both emulators.
 - Install job r30 queued for the phone (helper said phone NOT connected at 16:27). Owner then enables mic,
   Accessibility, Hindi offline pack himself; tests the training app TODAY with 📋 on each of the ~40-question screens.
+
+### 28 Nov 2026 (16:35–17:15) — Claude live for the Census app + other phones
+- Owner chose online: census helper falls back to Google speech when no Hindi pack; 🎤 tap = one sentence, long press = hands-free.
+- Claude live: lab app tools app_screen / app_fill / app_choose / app_press / app_scroll → CensusBridge (Messenger,
+  signature permission com.ronin.census.permission.DRIVE) → CensusService.bridge. आगे बढ़ें after a one-line summary
+  (owner's choice), submit / sync / complete / clear / logout need owner_said_yes. Fill only what the family said;
+  family-wide answers to all members; unclear → mark, ask once per member. Nothing stored; relay logs tool names only.
+  Owner deletes the Claude chat after each day's work.
+- Other phones: relay names phone2…phone9; a new phone picks which phone it is, waits with a 6-digit code, owner
+  allows on a paired device (approveRepair with empty old key). Relay page /get links the two APKs (public release assets).
+- Laptop is OFF (owner 17:06): no helper installs. Install on the Motorola by the release links: census FIRST, then
+  Ronin Agent Lab (so the signature permission is granted). Relay update (server chat, install.sh) needed for app_*,
+  tabs, re-pair, phone2…9 and /get.
